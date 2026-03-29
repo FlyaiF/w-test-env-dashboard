@@ -1,0 +1,156 @@
+name: Build Desktop App
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-sidecar:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+            artifact: go_sidecar-darwin-arm64
+          - os: macos-13
+            goos: darwin
+            goarch: amd64
+            artifact: go_sidecar-darwin-amd64
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            artifact: go_sidecar-windows-amd64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build Go sidecar
+        working-directory: go_sidecar
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          EXT=""
+          if [ "$GOOS" = "windows" ]; then EXT=".exe"; fi
+          go build -ldflags="-s -w" -o go_sidecar${EXT} .
+        shell: bash
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: go_sidecar/go_sidecar*
+
+  build-flutter:
+    needs: build-sidecar
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            platform: macos
+            sidecar-artifact: go_sidecar-darwin-arm64
+            sidecar-binary: go_sidecar
+            bundle-path: flutter_app/build/macos/Build/Products/Release/test_env_dashboard.app
+            bundle-dest: Contents/Resources/go_sidecar
+            package-name: test-env-dashboard-macos-arm64
+          - os: macos-13
+            platform: macos
+            sidecar-artifact: go_sidecar-darwin-amd64
+            sidecar-binary: go_sidecar
+            bundle-path: flutter_app/build/macos/Build/Products/Release/test_env_dashboard.app
+            bundle-dest: Contents/Resources/go_sidecar
+            package-name: test-env-dashboard-macos-amd64
+          - os: windows-latest
+            platform: windows
+            sidecar-artifact: go_sidecar-windows-amd64
+            sidecar-binary: go_sidecar.exe
+            bundle-path: flutter_app/build/windows/x64/runner/Release
+            bundle-dest: data/go_sidecar.exe
+            package-name: test-env-dashboard-windows-amd64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Download sidecar binary
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.sidecar-artifact }}
+          path: sidecar-bin
+
+      - name: Install dependencies
+        working-directory: flutter_app
+        run: flutter pub get
+
+      - name: Build Flutter app
+        working-directory: flutter_app
+        run: flutter build ${{ matrix.platform }} --release
+
+      - name: Bundle sidecar into app (macOS)
+        if: matrix.platform == 'macos'
+        run: |
+          cp sidecar-bin/${{ matrix.sidecar-binary }} "${{ matrix.bundle-path }}/${{ matrix.bundle-dest }}"
+          chmod +x "${{ matrix.bundle-path }}/${{ matrix.bundle-dest }}"
+
+      - name: Bundle sidecar into app (Windows)
+        if: matrix.platform == 'windows'
+        shell: bash
+        run: |
+          mkdir -p "${{ matrix.bundle-path }}/${{ matrix.bundle-dest }}/.."
+          cp sidecar-bin/${{ matrix.sidecar-binary }} "${{ matrix.bundle-path }}/${{ matrix.bundle-dest }}"
+
+      - name: Package macOS app
+        if: matrix.platform == 'macos'
+        run: |
+          cd flutter_app/build/macos/Build/Products/Release
+          zip -r -y ${{ matrix.package-name }}.zip test_env_dashboard.app
+
+      - name: Package Windows app
+        if: matrix.platform == 'windows'
+        shell: bash
+        run: |
+          cd flutter_app/build/windows/x64/runner/Release
+          7z a -tzip ${{ matrix.package-name }}.zip ./*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.package-name }}
+          path: |
+            flutter_app/build/macos/Build/Products/Release/*.zip
+            flutter_app/build/windows/x64/runner/Release/*.zip
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build-flutter
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: false
+
+      - name: Collect zip files
+        run: |
+          mkdir -p release
+          find artifacts -name "*.zip" -exec cp {} release/ \;
+          ls -la release/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: release/*.zip
