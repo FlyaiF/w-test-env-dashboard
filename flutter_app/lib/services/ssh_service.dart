@@ -1,0 +1,107 @@
+import 'dart:async';
+import 'dart:convert';
+import 'package:dartssh2/dartssh2.dart';
+
+class SshLogSession {
+  SSHClient? _client;
+  SSHSession? _session;
+  final _logController = StreamController<String>.broadcast();
+  final _statusController = StreamController<SshSessionStatus>.broadcast();
+  bool _disposed = false;
+  final List<String> _buffer = [];
+  static const int maxLines = 10000;
+
+  Stream<String> get logStream => _logController.stream;
+  Stream<SshSessionStatus> get statusStream => _statusController.stream;
+  List<String> get buffer => List.unmodifiable(_buffer);
+
+  final String host;
+  final int port;
+  final String logPath;
+
+  SshLogSession({
+    required this.host,
+    required this.port,
+    required this.logPath,
+  });
+
+  Future<void> connect({
+    required String username,
+    required String password,
+  }) async {
+    _statusController.add(SshSessionStatus.connecting);
+    try {
+      final socket = await SSHSocket.connect(host, port,
+          timeout: const Duration(seconds: 10));
+
+      _client = SSHClient(
+        socket,
+        username: username,
+        onPasswordRequest: () => password,
+      );
+
+      _session = await _client!.execute('tail -f $logPath');
+
+      _statusController.add(SshSessionStatus.connected);
+
+      _session!.stdout.listen(
+        (data) {
+          if (_disposed) return;
+          final text = utf8.decode(data, allowMalformed: true);
+          _addLines(text);
+        },
+        onDone: () {
+          if (!_disposed) {
+            _statusController.add(SshSessionStatus.disconnected);
+          }
+        },
+        onError: (e) {
+          if (!_disposed) {
+            _logController.add('[ERROR] $e');
+            _statusController.add(SshSessionStatus.error);
+          }
+        },
+      );
+
+      _session!.stderr.listen((data) {
+        if (_disposed) return;
+        final text = utf8.decode(data, allowMalformed: true);
+        _addLines('[STDERR] $text');
+      });
+    } catch (e) {
+      _statusController.add(SshSessionStatus.error);
+      _logController.add('[连接失败] $e');
+      rethrow;
+    }
+  }
+
+  void _addLines(String text) {
+    final lines = text.split('\n');
+    for (final line in lines) {
+      if (line.isEmpty) continue;
+      _buffer.add(line);
+      if (_buffer.length > maxLines) {
+        _buffer.removeAt(0);
+      }
+      _logController.add(line);
+    }
+  }
+
+  Future<void> disconnect() async {
+    _disposed = true;
+    try {
+      _session?.kill(SSHSignal.TERM);
+    } catch (_) {}
+    _client?.close();
+    _statusController.add(SshSessionStatus.disconnected);
+    await _logController.close();
+    await _statusController.close();
+  }
+}
+
+enum SshSessionStatus {
+  connecting,
+  connected,
+  disconnected,
+  error,
+}

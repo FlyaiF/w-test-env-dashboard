@@ -1,0 +1,28 @@
+# Build output
+build/
+*.log
+
+# Flutter
+flutter_app/.dart_tool/
+flutter_app/build/
+flutter_app/.flutter-plugins
+flutter_app/.flutter-plugins-dependencies
+flutter_app/.packages
+
+# Go binary
+go_sidecar/go_sidecar
+
+# IDE / tools
+.idea/
+.vscode/
+.claude/
+*.iml
+.DS_Store
+
+# Config (contains credentials)
+.test-env-dashboard/
+config.json
+
+# OS
+Thumbs.db
+*.swp
