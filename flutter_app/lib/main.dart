@@ -10,9 +10,11 @@ import 'pages/dashboard/dashboard_page.dart';
 import 'pages/log_viewer/log_viewer_page.dart';
 import 'pages/management/management_page.dart';
 import 'pages/settings/settings_page.dart';
+import 'services/log_file_store.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await LogFileStore.cleanOrphans();
 
   await windowManager.ensureInitialized();
   const windowOptions = WindowOptions(
@@ -46,6 +48,7 @@ class MyApp extends StatelessWidget {
         theme: ThemeData(
           colorSchemeSeed: Colors.blue,
           useMaterial3: true,
+          fontFamily: 'Sarasa Gothic SC',
         ),
         home: const HomePage(),
       ),

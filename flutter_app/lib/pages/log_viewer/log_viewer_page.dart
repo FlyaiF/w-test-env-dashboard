@@ -300,18 +300,34 @@ class _LogPanel extends StatefulWidget {
 
 class _LogPanelState extends State<_LogPanel> {
   final ScrollController _scrollController = ScrollController();
-  final List<String> _lines = [];
+  int _totalLineCount = 0;
+  final Map<int, String> _lineCache = {};
+  int _displayOffset = 0;
+  bool _loadingChunk = false;
   bool _autoScroll = true;
   StreamSubscription? _logSub;
   StreamSubscription? _statusSub;
   SshSessionStatus _status = SshSessionStatus.connecting;
 
+  static const int _chunkSize = 200;
+
+  int get _visibleCount => _totalLineCount - _displayOffset;
+
   @override
   void initState() {
     super.initState();
-    _lines.addAll(widget.session.buffer);
+    _totalLineCount = widget.session.totalLineCount;
+    final tail = widget.session.buffer;
+    final tailStart = _totalLineCount - tail.length;
+    for (var i = 0; i < tail.length; i++) {
+      _lineCache[tailStart + i] = tail[i];
+    }
+
     _logSub = widget.session.logStream.listen((line) {
-      setState(() => _lines.add(line));
+      setState(() {
+        _lineCache[_totalLineCount] = line;
+        _totalLineCount++;
+      });
       if (_autoScroll) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (_scrollController.hasClients) {
@@ -323,6 +339,37 @@ class _LogPanelState extends State<_LogPanel> {
     _statusSub = widget.session.statusStream.listen((s) {
       setState(() => _status = s);
     });
+  }
+
+  void _requestChunkLoad(int lineIndex) {
+    if (_loadingChunk) return;
+    _loadingChunk = true;
+
+    final chunkStart = (lineIndex ~/ _chunkSize) * _chunkSize;
+    final chunkEnd = (chunkStart + _chunkSize).clamp(0, _totalLineCount);
+
+    widget.session.readLineRange(chunkStart, chunkEnd).then((lines) {
+      if (!mounted) return;
+      setState(() {
+        for (var i = 0; i < lines.length; i++) {
+          _lineCache[chunkStart + i] = lines[i];
+        }
+        _loadingChunk = false;
+      });
+      _evictDistantCache(lineIndex);
+    }).catchError((e) {
+      _loadingChunk = false;
+    });
+  }
+
+  void _evictDistantCache(int currentIndex) {
+    if (_lineCache.length < 2000) return;
+    final keysToRemove = _lineCache.keys
+        .where((k) => (k - currentIndex).abs() > 1000)
+        .toList();
+    for (final k in keysToRemove) {
+      _lineCache.remove(k);
+    }
   }
 
   @override
@@ -351,7 +398,7 @@ class _LogPanelState extends State<_LogPanel> {
               Text(widget.session.logPath,
                   style: const TextStyle(fontSize: 12, color: Colors.grey)),
               const Spacer(),
-              Text('${_lines.length} 行', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              Text('$_visibleCount 行', style: const TextStyle(fontSize: 12, color: Colors.grey)),
               const SizedBox(width: 8),
               IconButton(
                 icon: Icon(_autoScroll ? Icons.vertical_align_bottom : Icons.pause, size: 18),
@@ -363,10 +410,13 @@ class _LogPanelState extends State<_LogPanel> {
               IconButton(
                 icon: const Icon(Icons.copy, size: 18),
                 tooltip: '复制全部',
-                onPressed: () {
-                  Clipboard.setData(ClipboardData(text: _lines.join('\n')));
-                  ScaffoldMessenger.of(context)
-                      .showSnackBar(const SnackBar(content: Text('已复制到剪贴板')));
+                onPressed: () async {
+                  final text = await widget.session.readAllText();
+                  await Clipboard.setData(ClipboardData(text: text));
+                  if (mounted) {
+                    ScaffoldMessenger.of(context)
+                        .showSnackBar(const SnackBar(content: Text('已复制到剪贴板')));
+                  }
                 },
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
@@ -374,7 +424,10 @@ class _LogPanelState extends State<_LogPanel> {
               IconButton(
                 icon: const Icon(Icons.delete_outline, size: 18),
                 tooltip: '清空',
-                onPressed: () => setState(() => _lines.clear()),
+                onPressed: () => setState(() {
+                  _displayOffset = _totalLineCount;
+                  _lineCache.clear();
+                }),
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               ),
@@ -388,15 +441,23 @@ class _LogPanelState extends State<_LogPanel> {
             child: ListView.builder(
               controller: _scrollController,
               padding: const EdgeInsets.all(8),
-              itemCount: _lines.length,
+              itemCount: _visibleCount,
+              itemExtent: 16.8,
               itemBuilder: (ctx, i) {
-                final line = _lines[i];
+                final actualIndex = i + _displayOffset;
+                final line = _lineCache[actualIndex];
+                if (line == null) {
+                  _requestChunkLoad(actualIndex);
+                  return const SizedBox.shrink();
+                }
                 final isError = line.contains('ERROR') || line.contains('STDERR');
                 final isWarn = line.contains('WARN');
                 return Text(
                   line,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontFamily: 'Menlo, Consolas, monospace',
+                    fontFamily: 'Sarasa Mono SC',
                     fontSize: 12,
                     color: isError
                         ? Colors.red.shade300

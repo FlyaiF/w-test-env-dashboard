@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:dartssh2/dartssh2.dart';
+import 'log_file_store.dart';
 
 class SshLogSession {
   SSHClient? _client;
@@ -8,12 +9,22 @@ class SshLogSession {
   final _logController = StreamController<String>.broadcast();
   final _statusController = StreamController<SshSessionStatus>.broadcast();
   bool _disposed = false;
-  final List<String> _buffer = [];
-  static const int maxLines = 10000;
+  LogFileStore? _logStore;
+  final List<String> _tailWindow = [];
+  static const int tailWindowSize = 500;
 
   Stream<String> get logStream => _logController.stream;
   Stream<SshSessionStatus> get statusStream => _statusController.stream;
-  List<String> get buffer => List.unmodifiable(_buffer);
+  List<String> get buffer => List.unmodifiable(_tailWindow);
+  int get totalLineCount => _logStore?.totalLines ?? 0;
+
+  Future<List<String>> readLineRange(int start, int end) async {
+    return await _logStore?.readLines(start, end) ?? [];
+  }
+
+  Future<String> readAllText() async {
+    return await _logStore?.readAllText() ?? '';
+  }
 
   final String host;
   final int port;
@@ -31,6 +42,7 @@ class SshLogSession {
   }) async {
     _statusController.add(SshSessionStatus.connecting);
     try {
+      _logStore = await LogFileStore.create();
       final socket = await SSHSocket.connect(host, port,
           timeout: const Duration(seconds: 10));
 
@@ -79,9 +91,10 @@ class SshLogSession {
     final lines = text.split('\n');
     for (final line in lines) {
       if (line.isEmpty) continue;
-      _buffer.add(line);
-      if (_buffer.length > maxLines) {
-        _buffer.removeAt(0);
+      _logStore?.appendLine(line);
+      _tailWindow.add(line);
+      if (_tailWindow.length > tailWindowSize) {
+        _tailWindow.removeAt(0);
       }
       _logController.add(line);
     }
@@ -93,6 +106,9 @@ class SshLogSession {
       _session?.kill(SSHSignal.TERM);
     } catch (_) {}
     _client?.close();
+    await _logStore?.dispose();
+    _logStore = null;
+    _tailWindow.clear();
     _statusController.add(SshSessionStatus.disconnected);
     await _logController.close();
     await _statusController.close();
