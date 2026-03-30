@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
@@ -6,7 +8,7 @@ import '../../models/env_info.dart';
 import '../../services/env_service.dart';
 
 class DashboardPage extends StatefulWidget {
-  final VoidCallback? onViewLog;
+  final void Function(EnvInfo env)? onViewLog;
 
   const DashboardPage({super.key, this.onViewLog});
 
@@ -17,6 +19,7 @@ class DashboardPage extends StatefulWidget {
 class _DashboardPageState extends State<DashboardPage> {
   final _searchController = TextEditingController();
   final _dateFmt = DateFormat('yyyy-MM-dd HH:mm');
+  Timer? _debounce;
 
   @override
   void initState() {
@@ -28,6 +31,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -69,8 +73,11 @@ class _DashboardPageState extends State<DashboardPage> {
                         : null,
                   ),
                   onChanged: (v) {
-                    service.setSearch(v);
                     setState(() {});
+                    _debounce?.cancel();
+                    _debounce = Timer(const Duration(milliseconds: 300), () {
+                      service.setSearch(v);
+                    });
                   },
                 ),
               ),
@@ -100,28 +107,14 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
         // Loading
         if (service.loading) const LinearProgressIndicator(),
-        // Table
+        // Card list
         Expanded(
           child: service.envs.isEmpty && !service.loading
               ? const Center(child: Text('暂无数据', style: TextStyle(color: Colors.grey)))
-              : SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: SingleChildScrollView(
-                    child: DataTable(
-                      columnSpacing: 24,
-                      headingRowColor: WidgetStateProperty.all(Colors.grey.shade100),
-                      columns: const [
-                        DataColumn(label: Text('编号')),
-                        DataColumn(label: Text('环境别名')),
-                        DataColumn(label: Text('访问地址')),
-                        DataColumn(label: Text('版本号')),
-                        DataColumn(label: Text('更新时间')),
-                        DataColumn(label: Text('备注')),
-                        DataColumn(label: Text('操作')),
-                      ],
-                      rows: service.envs.map((e) => _buildRow(e)).toList(),
-                    ),
-                  ),
+              : ListView.builder(
+                  padding: const EdgeInsets.only(top: 4, bottom: 8),
+                  itemCount: service.envs.length,
+                  itemBuilder: (context, index) => _buildCard(service.envs[index]),
                 ),
         ),
         // Pagination
@@ -149,51 +142,148 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  DataRow _buildRow(EnvInfo e) {
-    return DataRow(
-      cells: [
-        DataCell(Text('${e.eNo}')),
-        DataCell(Text(e.eName ?? '-')),
-        DataCell(
-          e.eUrl != null
-              ? InkWell(
-                  onTap: () => _launchUrl(e.eUrl!),
-                  child: Text(e.eUrl!, style: const TextStyle(color: Colors.blue, decoration: TextDecoration.underline)),
-                )
-              : const Text('-'),
-        ),
-        DataCell(Text(e.eVersion ?? '-')),
-        DataCell(Text(e.eUpdatetime != null ? _dateFmt.format(e.eUpdatetime!) : '-')),
-        DataCell(Text(e.eMemo ?? '-', overflow: TextOverflow.ellipsis)),
-        DataCell(Row(
-          mainAxisSize: MainAxisSize.min,
+  Widget _buildCard(EnvInfo e) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (e.eWeblogpath != null && e.eWebserveraddr != null)
-              IconButton(
-                icon: const Icon(Icons.article, size: 18),
-                tooltip: '查看日志',
-                onPressed: widget.onViewLog,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-              ),
-            if (e.eSeeurl != null)
-              IconButton(
-                icon: const Icon(Icons.open_in_new, size: 18),
-                tooltip: 'SEE平台',
-                onPressed: () => _launchUrl(e.eSeeurl!),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-              ),
-            IconButton(
-              icon: const Icon(Icons.info_outline, size: 18),
-              tooltip: '详情',
-              onPressed: () => _showDetail(e),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            // Title row: number badge + name + actions
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    '#${e.eNo}',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: colorScheme.onPrimaryContainer),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    e.eName ?? '-',
+                    style: Theme.of(context).textTheme.titleMedium,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (e.eWeblogpath != null && e.eWebserveraddr != null)
+                  IconButton(
+                    icon: const Icon(Icons.article, size: 18),
+                    tooltip: '查看日志',
+                    onPressed: () => widget.onViewLog?.call(e),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  ),
+                if (e.eSeeurl != null)
+                  IconButton(
+                    icon: const Icon(Icons.open_in_new, size: 18),
+                    tooltip: 'SEE平台',
+                    onPressed: () => _launchUrl(e.eSeeurl!),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  ),
+                IconButton(
+                  icon: const Icon(Icons.info_outline, size: 18),
+                  tooltip: '详情',
+                  onPressed: () => _showDetail(e),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                ),
+              ],
             ),
+            const Divider(height: 16),
+            // URL row
+            if (e.eUrl != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  children: [
+                    Icon(Icons.link, size: 16, color: Colors.grey.shade600),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => _launchUrl(e.eUrl!),
+                        child: Text(
+                          e.eUrl!,
+                          style: const TextStyle(color: Colors.blue, decoration: TextDecoration.underline),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.copy, size: 14, color: Colors.grey.shade600),
+                      tooltip: '复制地址',
+                      onPressed: () => _copyToClipboard(e.eUrl!, '访问地址'),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                    ),
+                  ],
+                ),
+              ),
+            // Version + time row
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(
+                children: [
+                  Icon(Icons.label_outline, size: 16, color: Colors.grey.shade600),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(e.eVersion ?? '-', style: Theme.of(context).textTheme.bodyMedium),
+                  ),
+                  if (e.eVersion != null)
+                    IconButton(
+                      icon: Icon(Icons.copy, size: 14, color: Colors.grey.shade600),
+                      tooltip: '复制版本号',
+                      onPressed: () => _copyToClipboard(e.eVersion!, '版本号'),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                    ),
+                  const SizedBox(width: 16),
+                  Icon(Icons.schedule, size: 16, color: Colors.grey.shade600),
+                  const SizedBox(width: 6),
+                  Text(
+                    e.eUpdatetime != null ? _dateFmt.format(e.eUpdatetime!) : '-',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey.shade600),
+                  ),
+                ],
+              ),
+            ),
+            // Memo row
+            if (e.eMemo != null && e.eMemo!.isNotEmpty)
+              Row(
+                children: [
+                  Icon(Icons.notes, size: 16, color: Colors.grey.shade600),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      e.eMemo!,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey.shade600),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 2,
+                    ),
+                  ),
+                ],
+              ),
           ],
-        )),
-      ],
+        ),
+      ),
+    );
+  }
+
+  void _copyToClipboard(String text, String label) {
+    Clipboard.setData(ClipboardData(text: text));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('已复制$label'),
+        duration: const Duration(seconds: 1),
+      ),
     );
   }
 

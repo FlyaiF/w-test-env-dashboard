@@ -40,10 +40,10 @@ class LogViewerPage extends StatefulWidget {
   const LogViewerPage({super.key});
 
   @override
-  State<LogViewerPage> createState() => _LogViewerPageState();
+  State<LogViewerPage> createState() => LogViewerPageState();
 }
 
-class _LogViewerPageState extends State<LogViewerPage> with TickerProviderStateMixin {
+class LogViewerPageState extends State<LogViewerPage> with TickerProviderStateMixin {
   final List<_LogTab> _tabs = [];
   TabController? _tabController;
 
@@ -71,6 +71,14 @@ class _LogViewerPageState extends State<LogViewerPage> with TickerProviderStateM
     session.connect(username: username, password: password).catchError((e) {
       // Error is handled via the stream
     });
+  }
+
+  Future<void> connectToEnv(EnvInfo env) async {
+    final config = await ConfigService.load();
+    final parsed = parseServerAddr(env.eWebserveraddr ?? '');
+    final username = parsed.username ?? config.ssh.defaultUsername;
+    final password = parsed.password ?? config.ssh.defaultPassword;
+    _addTab(env, username, password);
   }
 
   void _closeTab(int index) {

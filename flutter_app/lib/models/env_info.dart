@@ -27,22 +27,28 @@ class EnvInfo {
     this.eDbtype,
   });
 
+  static String? _trimField(String? value) {
+    if (value == null) return null;
+    final trimmed = value.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+
   factory EnvInfo.fromJson(Map<String, dynamic> json) {
     return EnvInfo(
       eNo: json['e_no'] as int,
-      eName: json['e_name'] as String?,
-      eYwdb: json['e_ywdb'] as String?,
-      eZjdb: json['e_zjdb'] as String?,
-      eUrl: json['e_url'] as String?,
-      eVersion: json['e_version'] as String?,
+      eName: _trimField(json['e_name'] as String?),
+      eYwdb: _trimField(json['e_ywdb'] as String?),
+      eZjdb: _trimField(json['e_zjdb'] as String?),
+      eUrl: _trimField(json['e_url'] as String?),
+      eVersion: _trimField(json['e_version'] as String?),
       eUpdatetime: json['e_updatetime'] != null
           ? DateTime.tryParse(json['e_updatetime'] as String)
           : null,
-      eSeeurl: json['e_seeurl'] as String?,
-      eWebserveraddr: json['e_webserveraddr'] as String?,
-      eWeblogpath: json['e_weblogpath'] as String?,
-      eMemo: json['e_memo'] as String?,
-      eDbtype: json['e_dbtype'] as String?,
+      eSeeurl: _trimField(json['e_seeurl'] as String?),
+      eWebserveraddr: _trimField(json['e_webserveraddr'] as String?),
+      eWeblogpath: _trimField(json['e_weblogpath'] as String?),
+      eMemo: _trimField(json['e_memo'] as String?),
+      eDbtype: _trimField(json['e_dbtype'] as String?),
     );
   }
 

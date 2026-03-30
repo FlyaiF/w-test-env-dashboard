@@ -63,6 +63,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> with WindowListener {
   int _selectedIndex = 0;
   bool _initialized = false;
+  final _logViewerKey = GlobalKey<LogViewerPageState>();
 
   @override
   void initState() {
@@ -134,8 +135,11 @@ class _HomePageState extends State<HomePage> with WindowListener {
       child: IndexedStack(
         index: _selectedIndex,
         children: [
-          DashboardPage(onViewLog: () => setState(() => _selectedIndex = 1)),
-          const LogViewerPage(),
+          DashboardPage(onViewLog: (env) {
+            setState(() => _selectedIndex = 1);
+            _logViewerKey.currentState?.connectToEnv(env);
+          }),
+          LogViewerPage(key: _logViewerKey),
           const ManagementPage(),
           const SettingsPage(),
         ],
