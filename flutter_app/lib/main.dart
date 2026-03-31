@@ -5,15 +5,19 @@ import 'config/config_service.dart';
 import 'sidecar/sidecar_manager.dart';
 import 'sidecar/sidecar_client.dart';
 import 'services/env_service.dart';
+import 'services/zipr_service.dart';
 import 'widgets/app_scaffold.dart';
 import 'pages/dashboard/dashboard_page.dart';
 import 'pages/log_viewer/log_viewer_page.dart';
 import 'pages/management/management_page.dart';
 import 'pages/settings/settings_page.dart';
+import 'pages/archive_tool/archive_tool_page.dart';
 import 'services/log_file_store.dart';
+import 'src/rust/frb_generated.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await RustLib.init();
   await LogFileStore.cleanOrphans();
 
   await windowManager.ensureInitialized();
@@ -41,6 +45,7 @@ class MyApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => SidecarManager()),
         ChangeNotifierProvider(create: (_) => EnvService()),
+        ChangeNotifierProvider(create: (_) => ZiprService()),
       ],
       child: MaterialApp(
         title: '测试环境速查工具',
@@ -145,6 +150,7 @@ class _HomePageState extends State<HomePage> with WindowListener {
           LogViewerPage(key: _logViewerKey),
           const ManagementPage(),
           const SettingsPage(),
+          const ArchiveToolPage(),
         ],
       ),
     );

@@ -13,10 +13,16 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22'
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
 
       - uses: subosito/flutter-action@v2
         with:
@@ -30,17 +36,29 @@ jobs:
           lipo -create -output go_sidecar go_sidecar_arm64 go_sidecar_amd64
           file go_sidecar
 
+      - name: Build zipr CLI (universal binary)
+        working-directory: zipr
+        run: |
+          cargo build --release --target aarch64-apple-darwin
+          cargo build --release --target x86_64-apple-darwin
+          lipo -create -output zipr \
+            target/aarch64-apple-darwin/release/zipr \
+            target/x86_64-apple-darwin/release/zipr
+          file zipr
+
       - name: Build Flutter macOS app
         working-directory: flutter_app
         run: |
           flutter pub get
           flutter build macos --release
 
-      - name: Bundle sidecar and package
+      - name: Bundle sidecar, zipr and package
         run: |
           APP="flutter_app/build/macos/Build/Products/Release/test_env_dashboard.app"
           cp go_sidecar/go_sidecar "$APP/Contents/Resources/go_sidecar"
           chmod +x "$APP/Contents/Resources/go_sidecar"
+          cp zipr/zipr "$APP/Contents/Resources/zipr"
+          chmod +x "$APP/Contents/Resources/zipr"
           cd flutter_app/build/macos/Build/Products/Release
           zip -r -y test-env-dashboard-macos.zip test_env_dashboard.app
 
@@ -53,10 +71,14 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22'
+
+      - uses: dtolnay/rust-toolchain@stable
 
       - uses: subosito/flutter-action@v2
         with:
@@ -68,18 +90,23 @@ jobs:
         run: |
           GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o go_sidecar.exe .
 
+      - name: Build zipr CLI
+        working-directory: zipr
+        run: cargo build --release
+
       - name: Build Flutter Windows app
         working-directory: flutter_app
         run: |
           flutter pub get
           flutter build windows --release
 
-      - name: Bundle sidecar and package
+      - name: Bundle sidecar, zipr and package
         shell: bash
         run: |
           RELEASE_DIR="flutter_app/build/windows/x64/runner/Release"
           mkdir -p "$RELEASE_DIR/data"
           cp go_sidecar/go_sidecar.exe "$RELEASE_DIR/data/go_sidecar.exe"
+          cp zipr/target/release/zipr.exe "$RELEASE_DIR/data/zipr.exe"
           cd "$RELEASE_DIR"
           7z a -tzip test-env-dashboard-windows.zip ./*
 

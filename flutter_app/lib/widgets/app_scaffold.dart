@@ -60,6 +60,11 @@ class _AppScaffoldState extends State<AppScaffold> {
                 selectedIcon: Icon(Icons.settings),
                 label: Text('设置'),
               ),
+              NavigationRailDestination(
+                icon: Icon(Icons.inventory_2_outlined),
+                selectedIcon: Icon(Icons.inventory_2),
+                label: Text('归档'),
+              ),
             ],
           ),
           const VerticalDivider(thickness: 1, width: 1),

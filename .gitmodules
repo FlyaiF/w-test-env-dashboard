@@ -1,0 +1,3 @@
+[submodule "zipr"]
+	path = zipr
+	url = git@github.com:FlyaiF/zipr.git
