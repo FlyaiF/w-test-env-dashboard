@@ -44,7 +44,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: '3.22.0'
+          flutter-version: '3.29.3'
 
       - name: Build Go sidecar (universal binary)
         working-directory: go_sidecar
@@ -114,7 +114,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: '3.22.0'
+          flutter-version: '3.29.3'
 
       - name: Build Go sidecar
         working-directory: go_sidecar
