@@ -15,7 +15,8 @@ class LogFileStore {
   static Future<LogFileStore> create() async {
     final dir = Directory.systemTemp;
     final file = File(
-        '${dir.path}/ssh_log_${DateTime.now().millisecondsSinceEpoch}_${_counter++}.tmp');
+      '${dir.path}/ssh_log_${DateTime.now().millisecondsSinceEpoch}_${_counter++}.tmp',
+    );
     await file.create();
     final store = LogFileStore._(file);
     store._sink = file.openWrite(mode: FileMode.writeOnly);
@@ -42,8 +43,9 @@ class LogFileStore {
       await _sink?.flush();
 
       final startOffset = _lineOffsets[start];
-      final endOffset =
-          end < _lineOffsets.length ? _lineOffsets[end] : _currentOffset;
+      final endOffset = end < _lineOffsets.length
+          ? _lineOffsets[end]
+          : _currentOffset;
       final length = endOffset - startOffset;
 
       final raf = await _file.open(mode: FileMode.read);
@@ -51,10 +53,7 @@ class LogFileStore {
         await raf.setPosition(startOffset);
         final bytes = await raf.read(length);
         final text = utf8.decode(bytes, allowMalformed: true);
-        return text
-            .split('\n')
-            .where((l) => l.isNotEmpty)
-            .toList();
+        return text.split('\n').where((l) => l.isNotEmpty).toList();
       } finally {
         await raf.close();
       }

@@ -9,7 +9,9 @@ import '../../services/ssh_service.dart';
 
 /// Parse E_WEBSERVERADDR format: "server_addr&username/password"
 /// Returns (host, port, username, password)
-({String host, int port, String? username, String? password}) parseServerAddr(String addr) {
+({String host, int port, String? username, String? password}) parseServerAddr(
+  String addr,
+) {
   String serverPart = addr;
   String? username;
   String? password;
@@ -43,7 +45,8 @@ class LogViewerPage extends StatefulWidget {
   State<LogViewerPage> createState() => LogViewerPageState();
 }
 
-class LogViewerPageState extends State<LogViewerPage> with TickerProviderStateMixin {
+class LogViewerPageState extends State<LogViewerPage>
+    with TickerProviderStateMixin {
   final List<_LogTab> _tabs = [];
   TabController? _tabController;
 
@@ -65,7 +68,11 @@ class LogViewerPageState extends State<LogViewerPage> with TickerProviderStateMi
     setState(() {
       _tabs.add(tab);
       _tabController?.dispose();
-      _tabController = TabController(length: _tabs.length, vsync: this, initialIndex: _tabs.length - 1);
+      _tabController = TabController(
+        length: _tabs.length,
+        vsync: this,
+        initialIndex: _tabs.length - 1,
+      );
     });
 
     session.connect(username: username, password: password).catchError((e) {
@@ -109,9 +116,9 @@ class LogViewerPageState extends State<LogViewerPage> with TickerProviderStateMi
         .toList();
 
     if (envs.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('没有配置了Web服务地址和日志路径的环境')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('没有配置了Web服务地址和日志路径的环境')));
       return;
     }
 
@@ -150,13 +157,18 @@ class LogViewerPageState extends State<LogViewerPage> with TickerProviderStateMi
                 children: [
                   DropdownButtonFormField<EnvInfo>(
                     initialValue: selectedEnv,
-                    decoration: const InputDecoration(labelText: '选择环境', border: OutlineInputBorder()),
+                    decoration: const InputDecoration(
+                      labelText: '选择环境',
+                      border: OutlineInputBorder(),
+                    ),
                     isExpanded: true,
                     items: envs.map((e) {
                       final p = parseServerAddr(e.eWebserveraddr!);
                       return DropdownMenuItem(
                         value: e,
-                        child: Text('${e.eName ?? "#${e.eNo}"} (${p.host}:${p.port})'),
+                        child: Text(
+                          '${e.eName ?? "#${e.eNo}"} (${p.host}:${p.port})',
+                        ),
                       );
                     }).toList(),
                     onChanged: (v) {
@@ -167,29 +179,45 @@ class LogViewerPageState extends State<LogViewerPage> with TickerProviderStateMi
                     },
                   ),
                   const SizedBox(height: 12),
-                  Text('服务器: $displayAddr',
-                      style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
-                  Text('日志路径: ${selectedEnv?.eWeblogpath ?? "-"}',
-                      style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                  Text(
+                    '服务器: $displayAddr',
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                  ),
+                  Text(
+                    '日志路径: ${selectedEnv?.eWeblogpath ?? "-"}',
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                  ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: usernameCtrl,
-                    decoration: const InputDecoration(labelText: '用户名', border: OutlineInputBorder()),
+                    decoration: const InputDecoration(
+                      labelText: '用户名',
+                      border: OutlineInputBorder(),
+                    ),
                   ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: passwordCtrl,
                     obscureText: true,
-                    decoration: const InputDecoration(labelText: '密码', border: OutlineInputBorder()),
+                    decoration: const InputDecoration(
+                      labelText: '密码',
+                      border: OutlineInputBorder(),
+                    ),
                   ),
-              ],
+                ],
+              ),
             ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('连接')),
-          ],
-        );
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('连接'),
+              ),
+            ],
+          );
         },
       ),
     );
@@ -273,7 +301,9 @@ class LogViewerPageState extends State<LogViewerPage> with TickerProviderStateMi
           Expanded(
             child: TabBarView(
               controller: _tabController,
-              children: _tabs.map((tab) => _LogPanel(session: tab.session)).toList(),
+              children: _tabs
+                  .map((tab) => _LogPanel(session: tab.session))
+                  .toList(),
             ),
           ),
         ],
@@ -331,7 +361,9 @@ class _LogPanelState extends State<_LogPanel> {
       if (_autoScroll) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (_scrollController.hasClients) {
-            _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+            _scrollController.jumpTo(
+              _scrollController.position.maxScrollExtent,
+            );
           }
         });
       }
@@ -348,18 +380,21 @@ class _LogPanelState extends State<_LogPanel> {
     final chunkStart = (lineIndex ~/ _chunkSize) * _chunkSize;
     final chunkEnd = (chunkStart + _chunkSize).clamp(0, _totalLineCount);
 
-    widget.session.readLineRange(chunkStart, chunkEnd).then((lines) {
-      if (!mounted) return;
-      setState(() {
-        for (var i = 0; i < lines.length; i++) {
-          _lineCache[chunkStart + i] = lines[i];
-        }
-        _loadingChunk = false;
-      });
-      _evictDistantCache(lineIndex);
-    }).catchError((e) {
-      _loadingChunk = false;
-    });
+    widget.session
+        .readLineRange(chunkStart, chunkEnd)
+        .then((lines) {
+          if (!mounted) return;
+          setState(() {
+            for (var i = 0; i < lines.length; i++) {
+              _lineCache[chunkStart + i] = lines[i];
+            }
+            _loadingChunk = false;
+          });
+          _evictDistantCache(lineIndex);
+        })
+        .catchError((e) {
+          _loadingChunk = false;
+        });
   }
 
   void _evictDistantCache(int currentIndex) {
@@ -392,16 +427,26 @@ class _LogPanelState extends State<_LogPanel> {
             children: [
               _statusBadge(),
               const SizedBox(width: 8),
-              Text('${widget.session.host}:${widget.session.port}',
-                  style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              Text(
+                '${widget.session.host}:${widget.session.port}',
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              ),
               const SizedBox(width: 8),
-              Text(widget.session.logPath,
-                  style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              Text(
+                widget.session.logPath,
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              ),
               const Spacer(),
-              Text('$_visibleCount 行', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              Text(
+                '$_visibleCount 行',
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              ),
               const SizedBox(width: 8),
               IconButton(
-                icon: Icon(_autoScroll ? Icons.vertical_align_bottom : Icons.pause, size: 18),
+                icon: Icon(
+                  _autoScroll ? Icons.vertical_align_bottom : Icons.pause,
+                  size: 18,
+                ),
                 tooltip: _autoScroll ? '自动滚动: 开' : '自动滚动: 关',
                 onPressed: () => setState(() => _autoScroll = !_autoScroll),
                 padding: EdgeInsets.zero,
@@ -414,8 +459,9 @@ class _LogPanelState extends State<_LogPanel> {
                   final text = await widget.session.readAllText();
                   await Clipboard.setData(ClipboardData(text: text));
                   if (mounted) {
-                    ScaffoldMessenger.of(context)
-                        .showSnackBar(const SnackBar(content: Text('已复制到剪贴板')));
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(const SnackBar(content: Text('已复制到剪贴板')));
                   }
                 },
                 padding: EdgeInsets.zero,
@@ -450,7 +496,8 @@ class _LogPanelState extends State<_LogPanel> {
                   _requestChunkLoad(actualIndex);
                   return const SizedBox.shrink();
                 }
-                final isError = line.contains('ERROR') || line.contains('STDERR');
+                final isError =
+                    line.contains('ERROR') || line.contains('STDERR');
                 final isWarn = line.contains('WARN');
                 return Text(
                   line,
@@ -462,8 +509,8 @@ class _LogPanelState extends State<_LogPanel> {
                     color: isError
                         ? Colors.red.shade300
                         : isWarn
-                            ? Colors.orange.shade300
-                            : Colors.green.shade200,
+                        ? Colors.orange.shade300
+                        : Colors.green.shade200,
                     height: 1.4,
                   ),
                 );
@@ -494,8 +541,18 @@ class _LogPanelState extends State<_LogPanel> {
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
-      child: Text(text, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600)),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 11,
+          color: color,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
     );
   }
 }

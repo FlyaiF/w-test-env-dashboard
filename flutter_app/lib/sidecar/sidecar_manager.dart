@@ -48,13 +48,16 @@ class SidecarManager extends ChangeNotifier {
 
       // Read stdout line by line, waiting for PORT=<n>
       final completer = Completer<int>();
-      _process!.stdout.transform(utf8.decoder).transform(const LineSplitter()).listen((line) {
-        debugPrint('[sidecar] $line');
-        if (!completer.isCompleted && line.startsWith('PORT=')) {
-          final p = int.tryParse(line.substring(5));
-          if (p != null) completer.complete(p);
-        }
-      });
+      _process!.stdout
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .listen((line) {
+            debugPrint('[sidecar] $line');
+            if (!completer.isCompleted && line.startsWith('PORT=')) {
+              final p = int.tryParse(line.substring(5));
+              if (p != null) completer.complete(p);
+            }
+          });
 
       _port = await completer.future.timeout(
         const Duration(seconds: 15),

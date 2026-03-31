@@ -43,8 +43,11 @@ class SshLogSession {
     _statusController.add(SshSessionStatus.connecting);
     try {
       _logStore = await LogFileStore.create();
-      final socket = await SSHSocket.connect(host, port,
-          timeout: const Duration(seconds: 10));
+      final socket = await SSHSocket.connect(
+        host,
+        port,
+        timeout: const Duration(seconds: 10),
+      );
 
       _client = SSHClient(
         socket,
@@ -115,9 +118,4 @@ class SshLogSession {
   }
 }
 
-enum SshSessionStatus {
-  connecting,
-  connected,
-  disconnected,
-  error,
-}
+enum SshSessionStatus { connecting, connected, disconnected, error }

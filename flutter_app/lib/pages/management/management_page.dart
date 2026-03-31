@@ -34,17 +34,23 @@ class _ManagementPageState extends State<ManagementPage> {
       if (env == null) {
         await service.createEnv(result);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('创建成功')));
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('创建成功')));
         }
       } else {
         await service.updateEnv(env.eNo, result.toJson());
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('更新成功')));
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('更新成功')));
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('操作失败: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('操作失败: $e')));
       }
     }
   }
@@ -56,7 +62,10 @@ class _ManagementPageState extends State<ManagementPage> {
         title: const Text('确认删除'),
         content: Text('确定要删除环境 "${env.eName ?? ""}" (编号: ${env.eNo}) 吗?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () => Navigator.pop(ctx, true),
@@ -70,11 +79,15 @@ class _ManagementPageState extends State<ManagementPage> {
     try {
       await context.read<EnvService>().deleteEnv(env.eNo);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已删除')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('已删除')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('删除失败: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('删除失败: $e')));
       }
     }
   }
@@ -97,7 +110,11 @@ class _ManagementPageState extends State<ManagementPage> {
                 label: const Text('新增环境'),
               ),
               const SizedBox(width: 8),
-              IconButton(icon: const Icon(Icons.refresh), onPressed: service.load, tooltip: '刷新'),
+              IconButton(
+                icon: const Icon(Icons.refresh),
+                onPressed: service.load,
+                tooltip: '刷新',
+              ),
             ],
           ),
         ),
@@ -122,42 +139,85 @@ class _ManagementPageState extends State<ManagementPage> {
                   DataColumn(label: Text('备注')),
                   DataColumn(label: Text('操作')),
                 ],
-                rows: service.envs.map((e) => DataRow(cells: [
-                  DataCell(Text('${e.eNo}')),
-                  DataCell(Text(e.eName ?? '-')),
-                  DataCell(Text(e.eYwdb ?? '-', overflow: TextOverflow.ellipsis)),
-                  DataCell(Text(e.eZjdb ?? '-', overflow: TextOverflow.ellipsis)),
-                  DataCell(ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 200),
-                    child: Text(e.eUrl ?? '-', overflow: TextOverflow.ellipsis),
-                  )),
-                  DataCell(Text(e.eVersion ?? '-')),
-                  DataCell(Text(e.eUpdatetime != null ? _dateFmt.format(e.eUpdatetime!) : '-')),
-                  DataCell(Text(e.eWebserveraddr ?? '-')),
-                  DataCell(ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 180),
-                    child: Text(e.eWeblogpath ?? '-', overflow: TextOverflow.ellipsis),
-                  )),
-                  DataCell(ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 120),
-                    child: Text(e.eMemo ?? '-', overflow: TextOverflow.ellipsis),
-                  )),
-                  DataCell(Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.edit, size: 18),
-                        tooltip: '编辑',
-                        onPressed: () => _showForm(env: e),
+                rows: service.envs
+                    .map(
+                      (e) => DataRow(
+                        cells: [
+                          DataCell(Text('${e.eNo}')),
+                          DataCell(Text(e.eName ?? '-')),
+                          DataCell(
+                            Text(
+                              e.eYwdb ?? '-',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          DataCell(
+                            Text(
+                              e.eZjdb ?? '-',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          DataCell(
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 200),
+                              child: Text(
+                                e.eUrl ?? '-',
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ),
+                          DataCell(Text(e.eVersion ?? '-')),
+                          DataCell(
+                            Text(
+                              e.eUpdatetime != null
+                                  ? _dateFmt.format(e.eUpdatetime!)
+                                  : '-',
+                            ),
+                          ),
+                          DataCell(Text(e.eWebserveraddr ?? '-')),
+                          DataCell(
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 180),
+                              child: Text(
+                                e.eWeblogpath ?? '-',
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ),
+                          DataCell(
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 120),
+                              child: Text(
+                                e.eMemo ?? '-',
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ),
+                          DataCell(
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.edit, size: 18),
+                                  tooltip: '编辑',
+                                  onPressed: () => _showForm(env: e),
+                                ),
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.delete,
+                                    size: 18,
+                                    color: Colors.red,
+                                  ),
+                                  tooltip: '删除',
+                                  onPressed: () => _deleteEnv(e),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.delete, size: 18, color: Colors.red),
-                        tooltip: '删除',
-                        onPressed: () => _deleteEnv(e),
-                      ),
-                    ],
-                  )),
-                ])).toList(),
+                    )
+                    .toList(),
               ),
             ),
           ),
@@ -255,8 +315,13 @@ class _EnvFormDialogState extends State<_EnvFormDialog> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _field('编号 *', _noCtrl, enabled: !isEdit,
-                    validator: (v) => (v == null || int.tryParse(v) == null) ? '请输入有效编号' : null),
+                _field(
+                  '编号 *',
+                  _noCtrl,
+                  enabled: !isEdit,
+                  validator: (v) =>
+                      (v == null || int.tryParse(v) == null) ? '请输入有效编号' : null,
+                ),
                 _field('环境别名', _nameCtrl),
                 _field('业务库', _ywdbCtrl),
                 _field('中间库', _zjdbCtrl),
@@ -273,21 +338,32 @@ class _EnvFormDialogState extends State<_EnvFormDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
         FilledButton(onPressed: _submit, child: const Text('保存')),
       ],
     );
   }
 
-  Widget _field(String label, TextEditingController ctrl,
-      {bool enabled = true, String? Function(String?)? validator}) {
+  Widget _field(
+    String label,
+    TextEditingController ctrl, {
+    bool enabled = true,
+    String? Function(String?)? validator,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: TextFormField(
         controller: ctrl,
         enabled: enabled,
         validator: validator,
-        decoration: InputDecoration(labelText: label, border: const OutlineInputBorder(), isDense: true),
+        decoration: InputDecoration(
+          labelText: label,
+          border: const OutlineInputBorder(),
+          isDense: true,
+        ),
       ),
     );
   }

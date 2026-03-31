@@ -16,7 +16,10 @@ class SidecarClient {
     return body;
   }
 
-  Future<Map<String, dynamic>> _post(String path, Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>> _post(
+    String path,
+    Map<String, dynamic> data,
+  ) async {
     final resp = await http.post(
       Uri.parse('$baseUrl$path'),
       headers: {'Content-Type': 'application/json'},
@@ -29,7 +32,10 @@ class SidecarClient {
     return body;
   }
 
-  Future<Map<String, dynamic>> _put(String path, Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>> _put(
+    String path,
+    Map<String, dynamic> data,
+  ) async {
     final resp = await http.put(
       Uri.parse('$baseUrl$path'),
       headers: {'Content-Type': 'application/json'},
@@ -70,7 +76,9 @@ class SidecarClient {
     var path = '/api/envs?page=$page&page_size=$pageSize';
     if (search.isNotEmpty) path += '&search=${Uri.encodeComponent(search)}';
     final body = await _get(path);
-    final list = (body['data'] as List).map((e) => EnvInfo.fromJson(e)).toList();
+    final list = (body['data'] as List)
+        .map((e) => EnvInfo.fromJson(e))
+        .toList();
     return (data: list, total: body['total'] as int);
   }
 
