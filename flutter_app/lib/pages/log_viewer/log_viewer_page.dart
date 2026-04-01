@@ -456,13 +456,12 @@ class _LogPanelState extends State<_LogPanel> {
                 icon: const Icon(Icons.copy, size: 18),
                 tooltip: '复制全部',
                 onPressed: () async {
+                  final messenger = ScaffoldMessenger.of(context);
                   final text = await widget.session.readAllText();
                   await Clipboard.setData(ClipboardData(text: text));
-                  if (mounted) {
-                    ScaffoldMessenger.of(
-                      context,
-                    ).showSnackBar(const SnackBar(content: Text('已复制到剪贴板')));
-                  }
+                  messenger.showSnackBar(
+                    const SnackBar(content: Text('已复制到剪贴板')),
+                  );
                 },
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 32, minHeight: 32),

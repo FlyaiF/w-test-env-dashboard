@@ -1,3 +1,4 @@
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -19,16 +20,16 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
   DetailMode _detailMode = DetailMode.entry;
   String? _patchSpecToml;
   String? _patchSpecPath;
+  bool _isDragging = false;
 
-  Future<void> _openArchive() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['zip', 'jar', 'war', 'ear'],
-    );
-    if (result == null || result.files.isEmpty) return;
-    final path = result.files.single.path;
-    if (path == null) return;
+  static const _archiveExtensions = ['.zip', '.jar', '.war', '.ear'];
 
+  bool _isValidArchiveFile(String path) {
+    final lower = path.toLowerCase();
+    return _archiveExtensions.any((ext) => lower.endsWith(ext));
+  }
+
+  Future<void> _openArchiveFromPath(String path) async {
     if (!mounted) return;
     final service = context.read<ZiprService>();
     await service.listArchive(path);
@@ -38,6 +39,17 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
       _patchSpecToml = null;
       _patchSpecPath = null;
     });
+  }
+
+  Future<void> _openArchive() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['zip', 'jar', 'war', 'ear'],
+    );
+    if (result == null || result.files.isEmpty) return;
+    final path = result.files.single.path;
+    if (path == null) return;
+    await _openArchiveFromPath(path);
   }
 
   Future<void> _diffArchives() async {
@@ -274,61 +286,130 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
         const Divider(height: 1),
         // Content
         Expanded(
-          child: service.loading
-              ? const Center(child: CircularProgressIndicator())
-              : service.currentArchivePath == null &&
-                      service.diffEntries.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.inventory_2_outlined,
-                            size: 64,
-                            color: Theme.of(context).colorScheme.outline,
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            '选择归档文件开始操作',
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.outline,
+          child: DropTarget(
+            onDragEntered: (_) => setState(() => _isDragging = true),
+            onDragExited: (_) => setState(() => _isDragging = false),
+            onDragDone: (details) {
+              setState(() => _isDragging = false);
+              if (details.files.isEmpty) return;
+              final path = details.files.first.path;
+              if (_isValidArchiveFile(path)) {
+                _openArchiveFromPath(path);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('不支持的文件格式，请拖入 zip/jar/war/ear 文件'),
+                  ),
+                );
+              }
+            },
+            child: service.loading
+                ? const Center(child: CircularProgressIndicator())
+                : service.currentArchivePath == null &&
+                        service.diffEntries.isEmpty
+                    ? Center(
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: _isDragging
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Colors.transparent,
+                              width: 2,
                             ),
+                            color: _isDragging
+                                ? Theme.of(context)
+                                    .colorScheme
+                                    .primary
+                                    .withValues(alpha: 0.05)
+                                : null,
                           ),
+                          padding: const EdgeInsets.all(48),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                _isDragging
+                                    ? Icons.file_download
+                                    : Icons.inventory_2_outlined,
+                                size: 64,
+                                color: _isDragging
+                                    ? Theme.of(context).colorScheme.primary
+                                    : Theme.of(context).colorScheme.outline,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                _isDragging
+                                    ? '松开以打开归档文件'
+                                    : '选择或拖入归档文件开始操作',
+                                style: TextStyle(
+                                  color: _isDragging
+                                      ? Theme.of(context).colorScheme.primary
+                                      : Theme.of(context).colorScheme.outline,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    : Stack(
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                flex: 3,
+                                child: ArchiveTreePanel(
+                                  entries: service.entries,
+                                  onEntrySelected: (entry) {
+                                    setState(() {
+                                      _selectedEntry = entry;
+                                      _detailMode = DetailMode.entry;
+                                    });
+                                  },
+                                  onExtract: _extractEntry,
+                                  onReplace: _replaceEntry,
+                                  onDelete: _deleteEntry,
+                                ),
+                              ),
+                              const VerticalDivider(width: 1),
+                              Expanded(
+                                flex: 2,
+                                child: DetailPanel(
+                                  mode: _detailMode,
+                                  selectedEntry: _selectedEntry,
+                                  diffEntries: service.diffEntries,
+                                  patchSpecToml: _patchSpecToml,
+                                  onPatchDraft: _patchDraft,
+                                  onPatchDryRun: _patchDryRun,
+                                  onPatchApply: _patchApply,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (_isDragging)
+                            Positioned.fill(
+                              child: Container(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .primary
+                                    .withValues(alpha: 0.08),
+                                child: Center(
+                                  child: Text(
+                                    '松开以切换归档文件',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      color:
+                                          Theme.of(context).colorScheme.primary,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
                         ],
                       ),
-                    )
-                  : Row(
-                      children: [
-                        Expanded(
-                          flex: 3,
-                          child: ArchiveTreePanel(
-                            entries: service.entries,
-                            onEntrySelected: (entry) {
-                              setState(() {
-                                _selectedEntry = entry;
-                                _detailMode = DetailMode.entry;
-                              });
-                            },
-                            onExtract: _extractEntry,
-                            onReplace: _replaceEntry,
-                            onDelete: _deleteEntry,
-                          ),
-                        ),
-                        const VerticalDivider(width: 1),
-                        Expanded(
-                          flex: 2,
-                          child: DetailPanel(
-                            mode: _detailMode,
-                            selectedEntry: _selectedEntry,
-                            diffEntries: service.diffEntries,
-                            patchSpecToml: _patchSpecToml,
-                            onPatchDraft: _patchDraft,
-                            onPatchDryRun: _patchDryRun,
-                            onPatchApply: _patchApply,
-                          ),
-                        ),
-                      ],
-                    ),
+          ),
         ),
         // Error bar
         if (service.error != null)

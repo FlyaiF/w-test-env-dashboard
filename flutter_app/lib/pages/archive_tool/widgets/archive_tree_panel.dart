@@ -27,11 +27,24 @@ class _ArchiveTreePanelState extends State<ArchiveTreePanel> {
   late List<TreeNode> _tree;
   final Set<String> _expanded = {};
   String? _selectedExpr;
+  final TextEditingController _filterController = TextEditingController();
+  String _filterText = '';
+  final Set<String> _filterCollapsed = {};
+  Set<String> _effectiveExpanded = {};
 
   @override
   void initState() {
     super.initState();
     _tree = buildTree(widget.entries);
+    _filterController.addListener(() {
+      final newFilter = _filterController.text.toLowerCase();
+      if (newFilter != _filterText) {
+        setState(() {
+          _filterText = newFilter;
+          _filterCollapsed.clear();
+        });
+      }
+    });
   }
 
   @override
@@ -39,27 +52,100 @@ class _ArchiveTreePanelState extends State<ArchiveTreePanel> {
     super.didUpdateWidget(oldWidget);
     if (widget.entries != oldWidget.entries) {
       _tree = buildTree(widget.entries);
+      _filterController.clear();
     }
   }
 
   @override
-  Widget build(BuildContext context) {
-    final flatNodes = <_FlatNode>[];
-    _flatten(_tree, 0, flatNodes);
+  void dispose() {
+    _filterController.dispose();
+    super.dispose();
+  }
 
-    return ListView.builder(
-      itemCount: flatNodes.length,
-      itemBuilder: (context, index) {
-        final flat = flatNodes[index];
-        return _buildRow(flat);
-      },
+  List<TreeNode> _filterNodes(
+    List<TreeNode> nodes,
+    String filter,
+    Set<String> autoExpand,
+  ) {
+    final result = <TreeNode>[];
+    for (final node in nodes) {
+      final nameMatches = node.name.toLowerCase().contains(filter);
+      final filteredChildren = _filterNodes(node.children, filter, autoExpand);
+      if (nameMatches || filteredChildren.isNotEmpty) {
+        result.add(TreeNode(
+          name: node.name,
+          fullExpr: node.fullExpr,
+          isArchive: node.isArchive,
+          children: nameMatches ? node.children : filteredChildren,
+          entry: node.entry,
+        ));
+        if (filteredChildren.isNotEmpty) {
+          autoExpand.add(node.fullExpr);
+        }
+      }
+    }
+    return result;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    List<TreeNode> displayTree;
+    Set<String> effectiveExpanded;
+
+    if (_filterText.isEmpty) {
+      displayTree = _tree;
+      effectiveExpanded = _expanded;
+    } else {
+      final autoExpand = <String>{};
+      displayTree = _filterNodes(_tree, _filterText, autoExpand);
+      effectiveExpanded = {
+        ..._expanded,
+        ...autoExpand,
+      }..removeAll(_filterCollapsed);
+    }
+
+    _effectiveExpanded = effectiveExpanded;
+    final flatNodes = <_FlatNode>[];
+    _flattenWith(displayTree, 0, flatNodes, effectiveExpanded);
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+          child: TextField(
+            controller: _filterController,
+            decoration: InputDecoration(
+              hintText: '搜索文件...',
+              prefixIcon: const Icon(Icons.search, size: 18),
+              suffixIcon: _filterText.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear, size: 18),
+                      onPressed: () => _filterController.clear(),
+                    )
+                  : null,
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(vertical: 8),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            style: const TextStyle(fontSize: 13),
+          ),
+        ),
+        Expanded(
+          child: ListView.builder(
+            itemCount: flatNodes.length,
+            itemBuilder: (context, index) => _buildRow(flatNodes[index]),
+          ),
+        ),
+      ],
     );
   }
 
   Widget _buildRow(_FlatNode flat) {
     final node = flat.node;
     final hasChildren = node.children.isNotEmpty;
-    final isExpanded = _expanded.contains(node.fullExpr);
+    final isExpanded = _effectiveExpanded.contains(node.fullExpr);
     final isSelected = _selectedExpr == node.fullExpr;
 
     return GestureDetector(
@@ -73,8 +159,12 @@ class _ArchiveTreePanelState extends State<ArchiveTreePanel> {
             if (hasChildren) {
               if (isExpanded) {
                 _expanded.remove(node.fullExpr);
+                if (_filterText.isNotEmpty) {
+                  _filterCollapsed.add(node.fullExpr);
+                }
               } else {
                 _expanded.add(node.fullExpr);
+                _filterCollapsed.remove(node.fullExpr);
               }
             }
           });
@@ -187,11 +277,16 @@ class _ArchiveTreePanelState extends State<ArchiveTreePanel> {
     return Icons.insert_drive_file_outlined;
   }
 
-  void _flatten(List<TreeNode> nodes, int depth, List<_FlatNode> out) {
+  void _flattenWith(
+    List<TreeNode> nodes,
+    int depth,
+    List<_FlatNode> out,
+    Set<String> expanded,
+  ) {
     for (final node in nodes) {
       out.add(_FlatNode(node: node, depth: depth));
-      if (_expanded.contains(node.fullExpr) && node.children.isNotEmpty) {
-        _flatten(node.children, depth + 1, out);
+      if (expanded.contains(node.fullExpr) && node.children.isNotEmpty) {
+        _flattenWith(node.children, depth + 1, out, expanded);
       }
     }
   }
