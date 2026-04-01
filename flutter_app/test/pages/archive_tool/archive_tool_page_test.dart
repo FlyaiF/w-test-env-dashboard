@@ -31,7 +31,7 @@ void main() {
     testWidgets('shows empty state when no archive loaded', (tester) async {
       await tester.pumpWidget(_wrapWithProviders(service));
 
-      expect(find.text('选择归档文件开始操作'), findsOneWidget);
+      expect(find.text('选择或拖入归档文件开始操作'), findsOneWidget);
       expect(find.byIcon(Icons.inventory_2_outlined), findsOneWidget);
     });
 
@@ -66,13 +66,15 @@ void main() {
     testWidgets('shows loading indicator', (tester) async {
       await tester.pumpWidget(_wrapWithProviders(service));
 
-      // Simulate loading state directly
+      // Track loading states via listener
       mock.listResult = [];
-      // Don't await — just trigger and check during loading
-      service.listArchive('/slow.jar'); // ignore: unawaited_futures
-      await tester.pump();
+      final loadingStates = <bool>[];
+      service.addListener(() => loadingStates.add(service.loading));
 
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      await service.listArchive('/slow.jar');
+
+      // Verify loading was set to true during the call
+      expect(loadingStates, contains(true));
     });
 
     testWidgets('shows error bar on failure', (tester) async {

@@ -13,6 +13,8 @@ class ZiprService extends ChangeNotifier {
   List<ArchiveEntry> _entries = [];
   List<DiffEntry> _diffEntries = [];
   List<UnresolvedEntry> _unresolvedEntries = [];
+  String? _diffLeftPath;
+  String? _diffRightPath;
   bool _loading = false;
   String? _error;
 
@@ -20,6 +22,8 @@ class ZiprService extends ChangeNotifier {
   List<ArchiveEntry> get entries => _entries;
   List<DiffEntry> get diffEntries => _diffEntries;
   List<UnresolvedEntry> get unresolvedEntries => _unresolvedEntries;
+  String? get diffLeftPath => _diffLeftPath;
+  String? get diffRightPath => _diffRightPath;
   bool get loading => _loading;
   String? get error => _error;
 
@@ -95,6 +99,8 @@ class ZiprService extends ChangeNotifier {
 
     try {
       _diffEntries = await _bridge.diffArchives(left: left, right: right);
+      _diffLeftPath = left;
+      _diffRightPath = right;
     } catch (e) {
       _error = e.toString();
       _diffEntries = [];
@@ -204,6 +210,8 @@ class ZiprService extends ChangeNotifier {
 
   void clearDiff() {
     _diffEntries = [];
+    _diffLeftPath = null;
+    _diffRightPath = null;
     notifyListeners();
   }
 }
