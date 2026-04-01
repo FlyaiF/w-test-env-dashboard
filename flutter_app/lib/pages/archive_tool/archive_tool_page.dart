@@ -10,6 +10,7 @@ import '../../services/zipr_service.dart';
 import '../../src/rust/api/zipr_api.dart';
 import 'widgets/archive_tree_panel.dart';
 import 'widgets/detail_panel.dart';
+import 'widgets/diff_tree_panel.dart';
 
 class ArchiveToolPage extends StatefulWidget {
   const ArchiveToolPage({super.key});
@@ -91,26 +92,34 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
   }
 
   Future<void> _diffArchives() async {
-    final left = await FilePicker.platform.pickFiles(
-      dialogTitle: '选择左侧归档文件',
+    final result = await FilePicker.platform.pickFiles(
+      dialogTitle: '选择要对比的两个归档文件（按住 Ctrl/Cmd 多选）',
       type: FileType.custom,
       allowedExtensions: ['zip', 'jar', 'war', 'ear'],
+      allowMultiple: true,
     );
-    if (left == null || left.files.single.path == null) return;
+    if (result == null || result.files.isEmpty) return;
 
-    final right = await FilePicker.platform.pickFiles(
-      dialogTitle: '选择右侧归档文件',
-      type: FileType.custom,
-      allowedExtensions: ['zip', 'jar', 'war', 'ear'],
-    );
-    if (right == null || right.files.single.path == null) return;
+    String leftPath;
+    String rightPath;
+
+    if (result.files.length >= 2) {
+      leftPath = result.files[0].path!;
+      rightPath = result.files[1].path!;
+    } else {
+      leftPath = result.files.first.path!;
+      final second = await FilePicker.platform.pickFiles(
+        dialogTitle: '已选择左侧文件，请选择右侧归档文件',
+        type: FileType.custom,
+        allowedExtensions: ['zip', 'jar', 'war', 'ear'],
+      );
+      if (second == null || second.files.single.path == null) return;
+      rightPath = second.files.single.path!;
+    }
 
     if (!mounted) return;
     final service = context.read<ZiprService>();
-    await service.diffArchives(
-      left.files.single.path!,
-      right.files.single.path!,
-    );
+    await service.diffArchives(leftPath, rightPath);
     setState(() => _detailMode = DetailMode.diff);
   }
 
@@ -193,7 +202,14 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
     );
     if (fromDir == null) return;
 
+    await _patchDraftFromDir(fromDir);
+  }
+
+  Future<void> _patchDraftFromDir(String fromDir) async {
     if (!mounted) return;
+    final service = context.read<ZiprService>();
+    if (service.currentArchivePath == null) return;
+
     try {
       final specPath = '$fromDir/patch.draft.toml';
       final summary = await service.patchDraft(
@@ -360,12 +376,23 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
               setState(() => _isDragging = false);
               if (details.files.isEmpty) return;
               final path = details.files.first.path;
-              if (_isValidArchiveFile(path)) {
+              if (Directory(path).existsSync()) {
+                final service = context.read<ZiprService>();
+                if (service.currentArchivePath != null) {
+                  _patchDraftFromDir(path);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('请先打开归档文件，再拖入目录进行批量替换'),
+                    ),
+                  );
+                }
+              } else if (_isValidArchiveFile(path)) {
                 _openArchiveFromPath(path);
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('不支持的文件格式，请拖入 zip/jar/war/ear 文件'),
+                    content: Text('不支持的文件格式，请拖入 zip/jar/war/ear 文件或目录'),
                   ),
                 );
               }
@@ -417,65 +444,102 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
                       ),
                     ),
                   )
-                : Stack(
-                    children: [
-                      Row(
+                : _detailMode == DetailMode.diff &&
+                      service.diffEntries.isNotEmpty
+                    ? Stack(
                         children: [
-                          Expanded(
-                            flex: 3,
-                            child: ArchiveTreePanel(
-                              entries: service.entries,
-                              onEntrySelected: (entry) {
-                                setState(() {
-                                  _selectedEntry = entry;
-                                  _detailMode = DetailMode.entry;
-                                });
-                              },
-                              onExtract: _extractEntry,
-                              onReplace: _replaceEntry,
-                              onDelete: _deleteEntry,
-                            ),
+                          DiffTreePanel(
+                            diffEntries: service.diffEntries,
+                            leftPath: service.diffLeftPath ?? '',
+                            rightPath: service.diffRightPath ?? '',
+                            onClose: () {
+                              service.clearDiff();
+                              setState(() => _detailMode = DetailMode.entry);
+                            },
                           ),
-                          const VerticalDivider(width: 1),
-                          Expanded(
-                            flex: 2,
-                            child: DetailPanel(
-                              mode: _detailMode,
-                              selectedEntry: _selectedEntry,
-                              diffEntries: service.diffEntries,
-                              patchSpecToml: _patchSpecToml,
-                              unresolvedEntries: _unresolvedEntries,
-                              onPatchDraft: _patchDraft,
-                              onPatchDryRun: _patchDryRun,
-                              onPatchApply: _patchApply,
-                              onOpenInEditor: _openInEditor,
-                              onReload: _reloadSpec,
-                              onRestoreOriginal: _restoreOriginal,
-                              onResolve: _patchResolve,
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (_isDragging)
-                        Positioned.fill(
-                          child: Container(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.primary.withValues(alpha: 0.08),
-                            child: Center(
-                              child: Text(
-                                '松开以切换归档文件',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  color: Theme.of(context).colorScheme.primary,
-                                  fontWeight: FontWeight.w500,
+                          if (_isDragging)
+                            Positioned.fill(
+                              child: Container(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .primary
+                                    .withValues(alpha: 0.08),
+                                child: Center(
+                                  child: Text(
+                                    '松开以切换归档文件',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      color:
+                                          Theme.of(context).colorScheme.primary,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
+                        ],
+                      )
+                    : Stack(
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                flex: 3,
+                                child: ArchiveTreePanel(
+                                  entries: service.entries,
+                                  onEntrySelected: (entry) {
+                                    setState(() {
+                                      _selectedEntry = entry;
+                                      _detailMode = DetailMode.entry;
+                                    });
+                                  },
+                                  onExtract: _extractEntry,
+                                  onReplace: _replaceEntry,
+                                  onDelete: _deleteEntry,
+                                ),
+                              ),
+                              const VerticalDivider(width: 1),
+                              Expanded(
+                                flex: 2,
+                                child: DetailPanel(
+                                  mode: _detailMode,
+                                  selectedEntry: _selectedEntry,
+                                  diffEntries: service.diffEntries,
+                                  patchSpecToml: _patchSpecToml,
+                                  unresolvedEntries: _unresolvedEntries,
+                                  onPatchDraft: _patchDraft,
+                                  onPatchDryRun: _patchDryRun,
+                                  onPatchApply: _patchApply,
+                                  onOpenInEditor: _openInEditor,
+                                  onReload: _reloadSpec,
+                                  onRestoreOriginal: _restoreOriginal,
+                                  onResolve: _patchResolve,
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                    ],
-                  ),
+                          if (_isDragging)
+                            Positioned.fill(
+                              child: Container(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .primary
+                                    .withValues(alpha: 0.08),
+                                child: Center(
+                                  child: Text(
+                                    '松开以切换归档文件',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      color:
+                                          Theme.of(context).colorScheme.primary,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
           ),
         ),
         // Error bar
