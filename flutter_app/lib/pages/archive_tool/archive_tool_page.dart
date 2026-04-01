@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -20,7 +23,9 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
   DetailMode _detailMode = DetailMode.entry;
   String? _patchSpecToml;
   String? _patchSpecPath;
+  List<UnresolvedEntry> _unresolvedEntries = [];
   bool _isDragging = false;
+  StreamSubscription<FileSystemEvent>? _fileWatcher;
 
   static const _archiveExtensions = ['.zip', '.jar', '.war', '.ear'];
 
@@ -29,15 +34,48 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
     return _archiveExtensions.any((ext) => lower.endsWith(ext));
   }
 
+  @override
+  void dispose() {
+    _disposeFileWatcher();
+    super.dispose();
+  }
+
+  void _disposeFileWatcher() {
+    _fileWatcher?.cancel();
+    _fileWatcher = null;
+  }
+
+  void _setupFileWatcher(String specPath) {
+    _disposeFileWatcher();
+    final file = File(specPath);
+    _fileWatcher = file.watch(events: FileSystemEvent.modify).listen((_) {
+      _reloadSpec();
+    });
+  }
+
+  Future<void> _reloadSpec() async {
+    if (_patchSpecPath == null || !mounted) return;
+    final service = context.read<ZiprService>();
+    final summary = await service.readPatchSpec(_patchSpecPath!);
+    if (summary != null && mounted) {
+      setState(() {
+        _patchSpecToml = summary.specToml;
+        _unresolvedEntries = summary.unresolvedEntries;
+      });
+    }
+  }
+
   Future<void> _openArchiveFromPath(String path) async {
     if (!mounted) return;
     final service = context.read<ZiprService>();
     await service.listArchive(path);
+    _disposeFileWatcher();
     setState(() {
       _selectedEntry = null;
       _detailMode = DetailMode.entry;
       _patchSpecToml = null;
       _patchSpecPath = null;
+      _unresolvedEntries = [];
     });
   }
 
@@ -89,15 +127,15 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
     try {
       await service.extractEntry(zipExpr, outputPath);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('已提取到: $outputPath')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('已提取到: $outputPath')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('提取失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('提取失败: $e')));
       }
     }
   }
@@ -110,9 +148,9 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
     final service = context.read<ZiprService>();
     await service.replaceEntry(zipExpr, result.files.single.path!);
     if (mounted && service.error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('替换失败: ${service.error}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('替换失败: ${service.error}')));
     }
   }
 
@@ -140,9 +178,9 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
     final service = context.read<ZiprService>();
     await service.deleteEntry(zipExpr);
     if (mounted && service.error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('删除失败: ${service.error}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('删除失败: ${service.error}')));
     }
   }
 
@@ -157,21 +195,28 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
 
     if (!mounted) return;
     try {
+      final specPath = '$fromDir/patch.draft.toml';
       final summary = await service.patchDraft(
         service.currentArchivePath!,
         fromDir,
-        '$fromDir/patch.draft.toml',
+        specPath,
       );
+      // Backup original spec
+      final origPath = '$fromDir/patch.draft.orig.toml';
+      await File(specPath).copy(origPath);
+
+      _setupFileWatcher(specPath);
       setState(() {
         _detailMode = DetailMode.patch;
         _patchSpecToml = summary.specToml;
-        _patchSpecPath = '$fromDir/patch.draft.toml';
+        _patchSpecPath = specPath;
+        _unresolvedEntries = summary.unresolvedEntries;
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('生成清单失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('生成清单失败: $e')));
       }
     }
   }
@@ -181,27 +226,17 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
     final service = context.read<ZiprService>();
     if (service.currentArchivePath == null) return;
 
-    try {
-      final summary = await service.patchApply(
-        service.currentArchivePath!,
-        _patchSpecPath!,
-        dryRun: true,
+    final summary = await service.patchApply(
+      service.currentArchivePath!,
+      _patchSpecPath!,
+      dryRun: true,
+    );
+    if (mounted && summary != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('预演结果: 替换=${summary.replaced}, 删除=${summary.deleted}'),
+        ),
       );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '预演结果: 替换=${summary.replaced}, 删除=${summary.deleted}',
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('预演失败: $e')),
-        );
-      }
     }
   }
 
@@ -210,27 +245,59 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
     final service = context.read<ZiprService>();
     if (service.currentArchivePath == null) return;
 
-    try {
-      final summary = await service.patchApply(
-        service.currentArchivePath!,
-        _patchSpecPath!,
+    final summary = await service.patchApply(
+      service.currentArchivePath!,
+      _patchSpecPath!,
+    );
+    if (mounted && summary != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('已应用: 替换=${summary.replaced}, 删除=${summary.deleted}'),
+        ),
       );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '已应用: 替换=${summary.replaced}, 删除=${summary.deleted}',
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('应用失败: $e')),
-        );
-      }
     }
+  }
+
+  Future<void> _patchResolve(List<Resolution> resolutions) async {
+    if (_patchSpecPath == null) return;
+    final service = context.read<ZiprService>();
+    final summary = await service.patchResolve(_patchSpecPath!, resolutions);
+    if (summary != null && mounted) {
+      setState(() {
+        _patchSpecToml = summary.specToml;
+        _unresolvedEntries = summary.unresolvedEntries;
+      });
+    }
+  }
+
+  Future<void> _openInEditor() async {
+    if (_patchSpecPath == null) return;
+    if (Platform.isMacOS) {
+      await Process.run('open', [_patchSpecPath!]);
+    } else if (Platform.isWindows) {
+      await Process.run('cmd', ['/c', 'start', '', _patchSpecPath!]);
+    } else {
+      await Process.run('xdg-open', [_patchSpecPath!]);
+    }
+  }
+
+  Future<void> _restoreOriginal() async {
+    if (_patchSpecPath == null) return;
+    final origPath = _patchSpecPath!.replaceAll(
+      '.draft.toml',
+      '.draft.orig.toml',
+    );
+    final origFile = File(origPath);
+    if (!await origFile.exists()) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('未找到原始清单备份')));
+      }
+      return;
+    }
+    await origFile.copy(_patchSpecPath!);
+    await _reloadSpec();
   }
 
   @override
@@ -306,109 +373,109 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
             child: service.loading
                 ? const Center(child: CircularProgressIndicator())
                 : service.currentArchivePath == null &&
-                        service.diffEntries.isEmpty
-                    ? Center(
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
+                      service.diffEntries.isEmpty
+                ? Center(
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: _isDragging
+                              ? Theme.of(context).colorScheme.primary
+                              : Colors.transparent,
+                          width: 2,
+                        ),
+                        color: _isDragging
+                            ? Theme.of(
+                                context,
+                              ).colorScheme.primary.withValues(alpha: 0.05)
+                            : null,
+                      ),
+                      padding: const EdgeInsets.all(48),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            _isDragging
+                                ? Icons.file_download
+                                : Icons.inventory_2_outlined,
+                            size: 64,
+                            color: _isDragging
+                                ? Theme.of(context).colorScheme.primary
+                                : Theme.of(context).colorScheme.outline,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            _isDragging ? '松开以打开归档文件' : '选择或拖入归档文件开始操作',
+                            style: TextStyle(
                               color: _isDragging
                                   ? Theme.of(context).colorScheme.primary
-                                  : Colors.transparent,
-                              width: 2,
+                                  : Theme.of(context).colorScheme.outline,
                             ),
-                            color: _isDragging
-                                ? Theme.of(context)
-                                    .colorScheme
-                                    .primary
-                                    .withValues(alpha: 0.05)
-                                : null,
                           ),
-                          padding: const EdgeInsets.all(48),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                _isDragging
-                                    ? Icons.file_download
-                                    : Icons.inventory_2_outlined,
-                                size: 64,
-                                color: _isDragging
-                                    ? Theme.of(context).colorScheme.primary
-                                    : Theme.of(context).colorScheme.outline,
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                _isDragging
-                                    ? '松开以打开归档文件'
-                                    : '选择或拖入归档文件开始操作',
-                                style: TextStyle(
-                                  color: _isDragging
-                                      ? Theme.of(context).colorScheme.primary
-                                      : Theme.of(context).colorScheme.outline,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                    : Stack(
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                flex: 3,
-                                child: ArchiveTreePanel(
-                                  entries: service.entries,
-                                  onEntrySelected: (entry) {
-                                    setState(() {
-                                      _selectedEntry = entry;
-                                      _detailMode = DetailMode.entry;
-                                    });
-                                  },
-                                  onExtract: _extractEntry,
-                                  onReplace: _replaceEntry,
-                                  onDelete: _deleteEntry,
-                                ),
-                              ),
-                              const VerticalDivider(width: 1),
-                              Expanded(
-                                flex: 2,
-                                child: DetailPanel(
-                                  mode: _detailMode,
-                                  selectedEntry: _selectedEntry,
-                                  diffEntries: service.diffEntries,
-                                  patchSpecToml: _patchSpecToml,
-                                  onPatchDraft: _patchDraft,
-                                  onPatchDryRun: _patchDryRun,
-                                  onPatchApply: _patchApply,
-                                ),
-                              ),
-                            ],
-                          ),
-                          if (_isDragging)
-                            Positioned.fill(
-                              child: Container(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .primary
-                                    .withValues(alpha: 0.08),
-                                child: Center(
-                                  child: Text(
-                                    '松开以切换归档文件',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      color:
-                                          Theme.of(context).colorScheme.primary,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
                         ],
                       ),
+                    ),
+                  )
+                : Stack(
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: ArchiveTreePanel(
+                              entries: service.entries,
+                              onEntrySelected: (entry) {
+                                setState(() {
+                                  _selectedEntry = entry;
+                                  _detailMode = DetailMode.entry;
+                                });
+                              },
+                              onExtract: _extractEntry,
+                              onReplace: _replaceEntry,
+                              onDelete: _deleteEntry,
+                            ),
+                          ),
+                          const VerticalDivider(width: 1),
+                          Expanded(
+                            flex: 2,
+                            child: DetailPanel(
+                              mode: _detailMode,
+                              selectedEntry: _selectedEntry,
+                              diffEntries: service.diffEntries,
+                              patchSpecToml: _patchSpecToml,
+                              unresolvedEntries: _unresolvedEntries,
+                              onPatchDraft: _patchDraft,
+                              onPatchDryRun: _patchDryRun,
+                              onPatchApply: _patchApply,
+                              onOpenInEditor: _openInEditor,
+                              onReload: _reloadSpec,
+                              onRestoreOriginal: _restoreOriginal,
+                              onResolve: _patchResolve,
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (_isDragging)
+                        Positioned.fill(
+                          child: Container(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.primary.withValues(alpha: 0.08),
+                            child: Center(
+                              child: Text(
+                                '松开以切换归档文件',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: Theme.of(context).colorScheme.primary,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
           ),
         ),
         // Error bar
@@ -419,9 +486,11 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
             color: Theme.of(context).colorScheme.errorContainer,
             child: Row(
               children: [
-                Icon(Icons.error_outline,
-                    size: 16,
-                    color: Theme.of(context).colorScheme.error),
+                Icon(
+                  Icons.error_outline,
+                  size: 16,
+                  color: Theme.of(context).colorScheme.error,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(

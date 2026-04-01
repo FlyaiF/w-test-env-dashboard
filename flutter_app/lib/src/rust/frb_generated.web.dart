@@ -54,6 +54,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
 
   @protected
+  List<Resolution> dco_decode_list_resolution(dynamic raw);
+
+  @protected
+  List<UnresolvedEntry> dco_decode_list_unresolved_entry(dynamic raw);
+
+  @protected
+  Resolution dco_decode_resolution(dynamic raw);
+
+  @protected
   BigInt dco_decode_u_64(dynamic raw);
 
   @protected
@@ -61,6 +70,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void dco_decode_unit(dynamic raw);
+
+  @protected
+  UnresolvedEntry dco_decode_unresolved_entry(dynamic raw);
 
   @protected
   BigInt dco_decode_usize(dynamic raw);
@@ -101,6 +113,17 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
+  List<Resolution> sse_decode_list_resolution(SseDeserializer deserializer);
+
+  @protected
+  List<UnresolvedEntry> sse_decode_list_unresolved_entry(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  Resolution sse_decode_resolution(SseDeserializer deserializer);
+
+  @protected
   BigInt sse_decode_u_64(SseDeserializer deserializer);
 
   @protected
@@ -108,6 +131,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_decode_unit(SseDeserializer deserializer);
+
+  @protected
+  UnresolvedEntry sse_decode_unresolved_entry(SseDeserializer deserializer);
 
   @protected
   BigInt sse_decode_usize(SseDeserializer deserializer);
@@ -161,6 +187,21 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_resolution(
+    List<Resolution> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_unresolved_entry(
+    List<UnresolvedEntry> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_resolution(Resolution self, SseSerializer serializer);
+
+  @protected
   void sse_encode_u_64(BigInt self, SseSerializer serializer);
 
   @protected
@@ -168,6 +209,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_unit(void self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_unresolved_entry(
+    UnresolvedEntry self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_usize(BigInt self, SseSerializer serializer);

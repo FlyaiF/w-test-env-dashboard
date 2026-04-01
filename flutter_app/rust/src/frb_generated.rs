@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 2100231553;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 332792714;
 
 // Section: executor
 
@@ -268,6 +268,79 @@ fn wire__crate__api__zipr_api__patch_draft_impl(
         },
     )
 }
+fn wire__crate__api__zipr_api__patch_resolve_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "patch_resolve",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_spec_path = <String>::sse_decode(&mut deserializer);
+            let api_resolutions =
+                <Vec<crate::api::zipr_api::Resolution>>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || {
+                        let output_ok =
+                            crate::api::zipr_api::patch_resolve(api_spec_path, api_resolutions)?;
+                        Ok(output_ok)
+                    })(),
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__zipr_api__read_patch_spec_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "read_patch_spec",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_spec_path = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || {
+                        let output_ok = crate::api::zipr_api::read_patch_spec(api_spec_path)?;
+                        Ok(output_ok)
+                    })(),
+                )
+            }
+        },
+    )
+}
 fn wire__crate__api__zipr_api__replace_entry_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -379,10 +452,13 @@ impl SseDecode for crate::api::zipr_api::DraftSummary {
         let mut var_matched = <usize>::sse_decode(deserializer);
         let mut var_unresolved = <usize>::sse_decode(deserializer);
         let mut var_specToml = <String>::sse_decode(deserializer);
+        let mut var_unresolvedEntries =
+            <Vec<crate::api::zipr_api::UnresolvedEntry>>::sse_decode(deserializer);
         return crate::api::zipr_api::DraftSummary {
             matched: var_matched,
             unresolved: var_unresolved,
             spec_toml: var_specToml,
+            unresolved_entries: var_unresolvedEntries,
         };
     }
 }
@@ -437,6 +513,46 @@ impl SseDecode for Vec<u8> {
     }
 }
 
+impl SseDecode for Vec<crate::api::zipr_api::Resolution> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::zipr_api::Resolution>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::api::zipr_api::UnresolvedEntry> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::zipr_api::UnresolvedEntry>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for crate::api::zipr_api::Resolution {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_source = <String>::sse_decode(deserializer);
+        let mut var_action = <String>::sse_decode(deserializer);
+        let mut var_chosenTarget = <String>::sse_decode(deserializer);
+        return crate::api::zipr_api::Resolution {
+            source: var_source,
+            action: var_action,
+            chosen_target: var_chosenTarget,
+        };
+    }
+}
+
 impl SseDecode for u64 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -454,6 +570,20 @@ impl SseDecode for u8 {
 impl SseDecode for () {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {}
+}
+
+impl SseDecode for crate::api::zipr_api::UnresolvedEntry {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_source = <String>::sse_decode(deserializer);
+        let mut var_reason = <String>::sse_decode(deserializer);
+        let mut var_candidates = <Vec<String>>::sse_decode(deserializer);
+        return crate::api::zipr_api::UnresolvedEntry {
+            source: var_source,
+            reason: var_reason,
+            candidates: var_candidates,
+        };
+    }
 }
 
 impl SseDecode for usize {
@@ -485,7 +615,9 @@ fn pde_ffi_dispatcher_primary_impl(
         4 => wire__crate__api__zipr_api__list_archive_impl(port, ptr, rust_vec_len, data_len),
         5 => wire__crate__api__zipr_api__patch_apply_impl(port, ptr, rust_vec_len, data_len),
         6 => wire__crate__api__zipr_api__patch_draft_impl(port, ptr, rust_vec_len, data_len),
-        7 => wire__crate__api__zipr_api__replace_entry_impl(port, ptr, rust_vec_len, data_len),
+        7 => wire__crate__api__zipr_api__patch_resolve_impl(port, ptr, rust_vec_len, data_len),
+        8 => wire__crate__api__zipr_api__read_patch_spec_impl(port, ptr, rust_vec_len, data_len),
+        9 => wire__crate__api__zipr_api__replace_entry_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -577,6 +709,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::zipr_api::DraftSummary {
             self.matched.into_into_dart().into_dart(),
             self.unresolved.into_into_dart().into_dart(),
             self.spec_toml.into_into_dart().into_dart(),
+            self.unresolved_entries.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -589,6 +722,50 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::zipr_api::DraftSummary>
     for crate::api::zipr_api::DraftSummary
 {
     fn into_into_dart(self) -> crate::api::zipr_api::DraftSummary {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::zipr_api::Resolution {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.source.into_into_dart().into_dart(),
+            self.action.into_into_dart().into_dart(),
+            self.chosen_target.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::zipr_api::Resolution
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::zipr_api::Resolution>
+    for crate::api::zipr_api::Resolution
+{
+    fn into_into_dart(self) -> crate::api::zipr_api::Resolution {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::zipr_api::UnresolvedEntry {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.source.into_into_dart().into_dart(),
+            self.reason.into_into_dart().into_dart(),
+            self.candidates.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::zipr_api::UnresolvedEntry
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::zipr_api::UnresolvedEntry>
+    for crate::api::zipr_api::UnresolvedEntry
+{
+    fn into_into_dart(self) -> crate::api::zipr_api::UnresolvedEntry {
         self
     }
 }
@@ -647,6 +824,10 @@ impl SseEncode for crate::api::zipr_api::DraftSummary {
         <usize>::sse_encode(self.matched, serializer);
         <usize>::sse_encode(self.unresolved, serializer);
         <String>::sse_encode(self.spec_toml, serializer);
+        <Vec<crate::api::zipr_api::UnresolvedEntry>>::sse_encode(
+            self.unresolved_entries,
+            serializer,
+        );
     }
 }
 
@@ -690,6 +871,35 @@ impl SseEncode for Vec<u8> {
     }
 }
 
+impl SseEncode for Vec<crate::api::zipr_api::Resolution> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::zipr_api::Resolution>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::api::zipr_api::UnresolvedEntry> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::zipr_api::UnresolvedEntry>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for crate::api::zipr_api::Resolution {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.source, serializer);
+        <String>::sse_encode(self.action, serializer);
+        <String>::sse_encode(self.chosen_target, serializer);
+    }
+}
+
 impl SseEncode for u64 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -707,6 +917,15 @@ impl SseEncode for u8 {
 impl SseEncode for () {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {}
+}
+
+impl SseEncode for crate::api::zipr_api::UnresolvedEntry {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.source, serializer);
+        <String>::sse_encode(self.reason, serializer);
+        <Vec<String>>::sse_encode(self.candidates, serializer);
+    }
 }
 
 impl SseEncode for usize {

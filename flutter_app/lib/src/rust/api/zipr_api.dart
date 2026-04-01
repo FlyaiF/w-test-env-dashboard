@@ -66,6 +66,22 @@ Future<ApplySummary> patchApply({
   dryRun: dryRun,
 );
 
+/// Read a patch spec file leniently (no validation) and return its summary.
+/// Used for reloading after external edits.
+Future<DraftSummary> readPatchSpec({required String specPath}) =>
+    RustLib.instance.api.crateApiZiprApiReadPatchSpec(specPath: specPath);
+
+/// Apply resolutions to unresolved entries in a patch spec.
+/// Each resolution either picks a target ("pick") or ignores the entry ("ignore").
+/// Returns the updated summary after writing the modified spec back to disk.
+Future<DraftSummary> patchResolve({
+  required String specPath,
+  required List<Resolution> resolutions,
+}) => RustLib.instance.api.crateApiZiprApiPatchResolve(
+  specPath: specPath,
+  resolutions: resolutions,
+);
+
 class ApplySummary {
   final BigInt replaced;
   final BigInt deleted;
@@ -148,15 +164,22 @@ class DraftSummary {
   /// The generated TOML spec content
   final String specToml;
 
+  /// Structured unresolved entries for UI resolution
+  final List<UnresolvedEntry> unresolvedEntries;
+
   const DraftSummary({
     required this.matched,
     required this.unresolved,
     required this.specToml,
+    required this.unresolvedEntries,
   });
 
   @override
   int get hashCode =>
-      matched.hashCode ^ unresolved.hashCode ^ specToml.hashCode;
+      matched.hashCode ^
+      unresolved.hashCode ^
+      specToml.hashCode ^
+      unresolvedEntries.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -165,5 +188,58 @@ class DraftSummary {
           runtimeType == other.runtimeType &&
           matched == other.matched &&
           unresolved == other.unresolved &&
-          specToml == other.specToml;
+          specToml == other.specToml &&
+          unresolvedEntries == other.unresolvedEntries;
+}
+
+class Resolution {
+  final String source;
+
+  /// "pick" or "ignore"
+  final String action;
+
+  /// The chosen target path; only used when action == "pick"
+  final String chosenTarget;
+
+  const Resolution({
+    required this.source,
+    required this.action,
+    required this.chosenTarget,
+  });
+
+  @override
+  int get hashCode => source.hashCode ^ action.hashCode ^ chosenTarget.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Resolution &&
+          runtimeType == other.runtimeType &&
+          source == other.source &&
+          action == other.action &&
+          chosenTarget == other.chosenTarget;
+}
+
+class UnresolvedEntry {
+  final String source;
+  final String reason;
+  final List<String> candidates;
+
+  const UnresolvedEntry({
+    required this.source,
+    required this.reason,
+    required this.candidates,
+  });
+
+  @override
+  int get hashCode => source.hashCode ^ reason.hashCode ^ candidates.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is UnresolvedEntry &&
+          runtimeType == other.runtimeType &&
+          source == other.source &&
+          reason == other.reason &&
+          candidates == other.candidates;
 }

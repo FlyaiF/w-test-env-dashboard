@@ -36,6 +36,13 @@ abstract class ZiprBridgeInterface {
     required String spec,
     required bool dryRun,
   });
+
+  Future<DraftSummary> readPatchSpec({required String specPath});
+
+  Future<DraftSummary> patchResolve({
+    required String specPath,
+    required List<Resolution> resolutions,
+  });
 }
 
 /// Production implementation backed by flutter_rust_bridge.
@@ -48,8 +55,7 @@ class RealZiprBridge implements ZiprBridgeInterface {
   Future<Uint8List> extractEntry({
     required String zipExpr,
     required String outputPath,
-  }) =>
-      zipr_api.extractEntry(zipExpr: zipExpr, outputPath: outputPath);
+  }) => zipr_api.extractEntry(zipExpr: zipExpr, outputPath: outputPath);
 
   @override
   Future<void> deleteEntry({required String zipExpr}) =>
@@ -59,29 +65,35 @@ class RealZiprBridge implements ZiprBridgeInterface {
   Future<void> replaceEntry({
     required String zipExpr,
     required String sourcePath,
-  }) =>
-      zipr_api.replaceEntry(zipExpr: zipExpr, sourcePath: sourcePath);
+  }) => zipr_api.replaceEntry(zipExpr: zipExpr, sourcePath: sourcePath);
 
   @override
   Future<List<DiffEntry>> diffArchives({
     required String left,
     required String right,
-  }) =>
-      zipr_api.diffArchives(left: left, right: right);
+  }) => zipr_api.diffArchives(left: left, right: right);
 
   @override
   Future<DraftSummary> patchDraft({
     required String archive,
     required String fromDir,
     required String output,
-  }) =>
-      zipr_api.patchDraft(archive: archive, fromDir: fromDir, output: output);
+  }) => zipr_api.patchDraft(archive: archive, fromDir: fromDir, output: output);
 
   @override
   Future<ApplySummary> patchApply({
     required String archive,
     required String spec,
     required bool dryRun,
-  }) =>
-      zipr_api.patchApply(archive: archive, spec: spec, dryRun: dryRun);
+  }) => zipr_api.patchApply(archive: archive, spec: spec, dryRun: dryRun);
+
+  @override
+  Future<DraftSummary> readPatchSpec({required String specPath}) =>
+      zipr_api.readPatchSpec(specPath: specPath);
+
+  @override
+  Future<DraftSummary> patchResolve({
+    required String specPath,
+    required List<Resolution> resolutions,
+  }) => zipr_api.patchResolve(specPath: specPath, resolutions: resolutions);
 }

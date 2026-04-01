@@ -64,7 +64,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => 2100231553;
+  int get rustContentHash => 332792714;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -101,6 +101,13 @@ abstract class RustLibApi extends BaseApi {
     required String fromDir,
     required String output,
   });
+
+  Future<DraftSummary> crateApiZiprApiPatchResolve({
+    required String specPath,
+    required List<Resolution> resolutions,
+  });
+
+  Future<DraftSummary> crateApiZiprApiReadPatchSpec({required String specPath});
 
   Future<void> crateApiZiprApiReplaceEntry({
     required String zipExpr,
@@ -317,6 +324,71 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   );
 
   @override
+  Future<DraftSummary> crateApiZiprApiPatchResolve({
+    required String specPath,
+    required List<Resolution> resolutions,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(specPath, serializer);
+          sse_encode_list_resolution(resolutions, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 7,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_draft_summary,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiZiprApiPatchResolveConstMeta,
+        argValues: [specPath, resolutions],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiZiprApiPatchResolveConstMeta =>
+      const TaskConstMeta(
+        debugName: "patch_resolve",
+        argNames: ["specPath", "resolutions"],
+      );
+
+  @override
+  Future<DraftSummary> crateApiZiprApiReadPatchSpec({
+    required String specPath,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(specPath, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 8,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_draft_summary,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiZiprApiReadPatchSpecConstMeta,
+        argValues: [specPath],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiZiprApiReadPatchSpecConstMeta =>
+      const TaskConstMeta(debugName: "read_patch_spec", argNames: ["specPath"]);
+
+  @override
   Future<void> crateApiZiprApiReplaceEntry({
     required String zipExpr,
     required String sourcePath,
@@ -330,7 +402,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 7,
+            funcId: 9,
             port: port_,
           );
         },
@@ -412,12 +484,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   DraftSummary dco_decode_draft_summary(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 3)
-      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
     return DraftSummary(
       matched: dco_decode_usize(arr[0]),
       unresolved: dco_decode_usize(arr[1]),
       specToml: dco_decode_String(arr[2]),
+      unresolvedEntries: dco_decode_list_unresolved_entry(arr[3]),
     );
   }
 
@@ -446,6 +519,31 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<Resolution> dco_decode_list_resolution(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_resolution).toList();
+  }
+
+  @protected
+  List<UnresolvedEntry> dco_decode_list_unresolved_entry(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_unresolved_entry).toList();
+  }
+
+  @protected
+  Resolution dco_decode_resolution(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return Resolution(
+      source: dco_decode_String(arr[0]),
+      action: dco_decode_String(arr[1]),
+      chosenTarget: dco_decode_String(arr[2]),
+    );
+  }
+
+  @protected
   BigInt dco_decode_u_64(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dcoDecodeU64(raw);
@@ -461,6 +559,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void dco_decode_unit(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return;
+  }
+
+  @protected
+  UnresolvedEntry dco_decode_unresolved_entry(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return UnresolvedEntry(
+      source: dco_decode_String(arr[0]),
+      reason: dco_decode_String(arr[1]),
+      candidates: dco_decode_list_String(arr[2]),
+    );
   }
 
   @protected
@@ -531,10 +642,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_matched = sse_decode_usize(deserializer);
     var var_unresolved = sse_decode_usize(deserializer);
     var var_specToml = sse_decode_String(deserializer);
+    var var_unresolvedEntries = sse_decode_list_unresolved_entry(deserializer);
     return DraftSummary(
       matched: var_matched,
       unresolved: var_unresolved,
       specToml: var_specToml,
+      unresolvedEntries: var_unresolvedEntries,
     );
   }
 
@@ -584,6 +697,45 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<Resolution> sse_decode_list_resolution(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <Resolution>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_resolution(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<UnresolvedEntry> sse_decode_list_unresolved_entry(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <UnresolvedEntry>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_unresolved_entry(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  Resolution sse_decode_resolution(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_source = sse_decode_String(deserializer);
+    var var_action = sse_decode_String(deserializer);
+    var var_chosenTarget = sse_decode_String(deserializer);
+    return Resolution(
+      source: var_source,
+      action: var_action,
+      chosenTarget: var_chosenTarget,
+    );
+  }
+
+  @protected
   BigInt sse_decode_u_64(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getBigUint64();
@@ -598,6 +750,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @protected
   void sse_decode_unit(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
+  }
+
+  @protected
+  UnresolvedEntry sse_decode_unresolved_entry(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_source = sse_decode_String(deserializer);
+    var var_reason = sse_decode_String(deserializer);
+    var var_candidates = sse_decode_list_String(deserializer);
+    return UnresolvedEntry(
+      source: var_source,
+      reason: var_reason,
+      candidates: var_candidates,
+    );
   }
 
   @protected
@@ -663,6 +828,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_usize(self.matched, serializer);
     sse_encode_usize(self.unresolved, serializer);
     sse_encode_String(self.specToml, serializer);
+    sse_encode_list_unresolved_entry(self.unresolvedEntries, serializer);
   }
 
   @protected
@@ -709,6 +875,38 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_resolution(
+    List<Resolution> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_resolution(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_unresolved_entry(
+    List<UnresolvedEntry> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_unresolved_entry(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_resolution(Resolution self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.source, serializer);
+    sse_encode_String(self.action, serializer);
+    sse_encode_String(self.chosenTarget, serializer);
+  }
+
+  @protected
   void sse_encode_u_64(BigInt self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putBigUint64(self);
@@ -723,6 +921,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @protected
   void sse_encode_unit(void self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
+  }
+
+  @protected
+  void sse_encode_unresolved_entry(
+    UnresolvedEntry self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.source, serializer);
+    sse_encode_String(self.reason, serializer);
+    sse_encode_list_String(self.candidates, serializer);
   }
 
   @protected

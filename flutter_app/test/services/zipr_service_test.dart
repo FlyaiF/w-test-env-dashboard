@@ -84,6 +84,23 @@ class MockZiprBridge implements ZiprBridgeInterface {
     if (errorToThrow != null) throw errorToThrow!;
     return applyResult!;
   }
+
+  @override
+  Future<DraftSummary> readPatchSpec({required String specPath}) async {
+    calls.add('readPatchSpec:$specPath');
+    if (errorToThrow != null) throw errorToThrow!;
+    return draftResult!;
+  }
+
+  @override
+  Future<DraftSummary> patchResolve({
+    required String specPath,
+    required List<Resolution> resolutions,
+  }) async {
+    calls.add('patchResolve:$specPath');
+    if (errorToThrow != null) throw errorToThrow!;
+    return draftResult!;
+  }
 }
 
 void main() {
@@ -153,10 +170,7 @@ void main() {
     });
 
     test('extractEntry calls bridge with correct arguments', () async {
-      await service.extractEntry(
-        'app.jar!/Main.class',
-        '/tmp/Main.class',
-      );
+      await service.extractEntry('app.jar!/Main.class', '/tmp/Main.class');
 
       expect(mock.calls, ['extractEntry:app.jar!/Main.class:/tmp/Main.class']);
     });
@@ -230,10 +244,14 @@ void main() {
         matched: BigInt.from(3),
         unresolved: BigInt.from(1),
         specToml: 'version = 1\n',
+        unresolvedEntries: [],
       );
 
-      final summary =
-          await service.patchDraft('/app.jar', '/patches', '/out.toml');
+      final summary = await service.patchDraft(
+        '/app.jar',
+        '/patches',
+        '/out.toml',
+      );
 
       expect(summary.matched, BigInt.from(3));
       expect(summary.unresolved, BigInt.from(1));
@@ -252,7 +270,7 @@ void main() {
 
       final summary = await service.patchApply('/app.jar', '/spec.toml');
 
-      expect(summary.replaced, BigInt.from(5));
+      expect(summary!.replaced, BigInt.from(5));
       expect(summary.deleted, BigInt.from(2));
     });
 

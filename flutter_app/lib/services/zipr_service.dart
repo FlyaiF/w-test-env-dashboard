@@ -7,17 +7,19 @@ class ZiprService extends ChangeNotifier {
   final ZiprBridgeInterface _bridge;
 
   ZiprService({ZiprBridgeInterface? bridge})
-      : _bridge = bridge ?? RealZiprBridge();
+    : _bridge = bridge ?? RealZiprBridge();
 
   String? _currentArchivePath;
   List<ArchiveEntry> _entries = [];
   List<DiffEntry> _diffEntries = [];
+  List<UnresolvedEntry> _unresolvedEntries = [];
   bool _loading = false;
   String? _error;
 
   String? get currentArchivePath => _currentArchivePath;
   List<ArchiveEntry> get entries => _entries;
   List<DiffEntry> get diffEntries => _diffEntries;
+  List<UnresolvedEntry> get unresolvedEntries => _unresolvedEntries;
   bool get loading => _loading;
   String? get error => _error;
 
@@ -117,6 +119,7 @@ class ZiprService extends ChangeNotifier {
         fromDir: fromDir,
         output: output,
       );
+      _unresolvedEntries = summary.unresolvedEntries;
       return summary;
     } catch (e) {
       _error = e.toString();
@@ -128,7 +131,7 @@ class ZiprService extends ChangeNotifier {
     }
   }
 
-  Future<ApplySummary> patchApply(
+  Future<ApplySummary?> patchApply(
     String archive,
     String spec, {
     bool dryRun = false,
@@ -150,11 +153,47 @@ class ZiprService extends ChangeNotifier {
       return summary;
     } catch (e) {
       _error = e.toString();
-      notifyListeners();
-      rethrow;
+      return null;
     } finally {
       _loading = false;
       notifyListeners();
+    }
+  }
+
+  Future<DraftSummary?> patchResolve(
+    String specPath,
+    List<Resolution> resolutions,
+  ) async {
+    _loading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final summary = await _bridge.patchResolve(
+        specPath: specPath,
+        resolutions: resolutions,
+      );
+      _unresolvedEntries = summary.unresolvedEntries;
+      return summary;
+    } catch (e) {
+      _error = e.toString();
+      return null;
+    } finally {
+      _loading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<DraftSummary?> readPatchSpec(String specPath) async {
+    _error = null;
+    try {
+      final summary = await _bridge.readPatchSpec(specPath: specPath);
+      _unresolvedEntries = summary.unresolvedEntries;
+      return summary;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      return null;
     }
   }
 
