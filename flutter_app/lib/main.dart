@@ -5,6 +5,7 @@ import 'config/config_service.dart';
 import 'sidecar/sidecar_manager.dart';
 import 'sidecar/sidecar_client.dart';
 import 'services/env_service.dart';
+import 'services/local_store.dart';
 import 'services/zipr_service.dart';
 import 'widgets/app_scaffold.dart';
 import 'pages/dashboard/dashboard_page.dart';
@@ -44,6 +45,7 @@ class MyApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => SidecarManager()),
+        ChangeNotifierProvider(create: (_) => LocalStore()),
         ChangeNotifierProvider(create: (_) => EnvService()),
         ChangeNotifierProvider(create: (_) => ZiprService()),
       ],
@@ -86,17 +88,27 @@ class _HomePageState extends State<HomePage> with WindowListener {
 
     final sidecar = context.read<SidecarManager>();
     final envService = context.read<EnvService>();
+    final localStore = context.read<LocalStore>();
+
+    // Load local data first (local-first).
+    await localStore.load();
+    envService.setLocalStore(localStore);
+    await envService.load();
 
     if (config.isOracleConfigured) {
       await sidecar.start(config.dsn);
       if (sidecar.connected) {
         envService.setClient(SidecarClient(sidecar.baseUrl));
+        // Auto-sync from remote on connect.
+        envService.sync();
       }
     }
 
     sidecar.addListener(() {
       if (sidecar.connected && sidecar.port != null) {
         envService.setClient(SidecarClient(sidecar.baseUrl));
+        // Auto-sync when sidecar reconnects.
+        envService.sync();
       }
     });
 
