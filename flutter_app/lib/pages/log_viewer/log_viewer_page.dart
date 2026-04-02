@@ -307,7 +307,7 @@ class _LogPanelState extends State<_LogPanel> {
   bool _autoScroll = true;
   StreamSubscription? _logSub;
   StreamSubscription? _statusSub;
-  SshSessionStatus _status = SshSessionStatus.connecting;
+  late SshSessionStatus _status;
 
   static const int _chunkSize = 200;
 
@@ -316,6 +316,7 @@ class _LogPanelState extends State<_LogPanel> {
   @override
   void initState() {
     super.initState();
+    _status = widget.session.status;
     _totalLineCount = widget.session.totalLineCount;
     final tail = widget.session.buffer;
     final tailStart = _totalLineCount - tail.length;

@@ -9,6 +9,7 @@ class SshLogSession {
   final _logController = StreamController<String>.broadcast();
   final _statusController = StreamController<SshSessionStatus>.broadcast();
   bool _disposed = false;
+  SshSessionStatus status = SshSessionStatus.connecting;
   LogFileStore? _logStore;
   final List<String> _tailWindow = [];
   static const int tailWindowSize = 500;
@@ -40,6 +41,7 @@ class SshLogSession {
     required String username,
     required String password,
   }) async {
+    status = SshSessionStatus.connecting;
     _statusController.add(SshSessionStatus.connecting);
     try {
       _logStore = await LogFileStore.create();
@@ -57,6 +59,7 @@ class SshLogSession {
 
       _session = await _client!.execute('tail -f $logPath');
 
+      status = SshSessionStatus.connected;
       _statusController.add(SshSessionStatus.connected);
 
       _session!.stdout.listen(
@@ -67,12 +70,14 @@ class SshLogSession {
         },
         onDone: () {
           if (!_disposed) {
+            status = SshSessionStatus.disconnected;
             _statusController.add(SshSessionStatus.disconnected);
           }
         },
         onError: (e) {
           if (!_disposed) {
             _logController.add('[ERROR] $e');
+            status = SshSessionStatus.error;
             _statusController.add(SshSessionStatus.error);
           }
         },
@@ -84,6 +89,7 @@ class SshLogSession {
         _addLines('[STDERR] $text');
       });
     } catch (e) {
+      status = SshSessionStatus.error;
       _statusController.add(SshSessionStatus.error);
       _logController.add('[连接失败] $e');
       rethrow;
@@ -112,6 +118,7 @@ class SshLogSession {
     await _logStore?.dispose();
     _logStore = null;
     _tailWindow.clear();
+    status = SshSessionStatus.disconnected;
     _statusController.add(SshSessionStatus.disconnected);
     await _logController.close();
     await _statusController.close();
