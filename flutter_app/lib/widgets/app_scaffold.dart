@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../config/feature_profile.dart';
 import '../sidecar/sidecar_manager.dart';
 
 class _NavGroup {
@@ -19,16 +20,18 @@ class _NavItem {
   final String label;
   final IconData icon;
   final IconData selectedIcon;
+  final Feature? feature; // null = always visible (e.g. settings)
 
   const _NavItem({
     required this.index,
     required this.label,
     required this.icon,
     required this.selectedIcon,
+    this.feature,
   });
 }
 
-const _groups = [
+const _allGroups = [
   _NavGroup(
     label: '环境',
     icon: Icons.dns_outlined,
@@ -38,18 +41,21 @@ const _groups = [
         label: '总览',
         icon: Icons.dashboard_outlined,
         selectedIcon: Icons.dashboard,
+        feature: Feature.dashboard,
       ),
       _NavItem(
         index: 1,
         label: '日志',
         icon: Icons.article_outlined,
         selectedIcon: Icons.article,
+        feature: Feature.logs,
       ),
       _NavItem(
         index: 2,
         label: '管理',
         icon: Icons.settings_applications_outlined,
         selectedIcon: Icons.settings_applications,
+        feature: Feature.management,
       ),
     ],
   ),
@@ -62,6 +68,7 @@ const _groups = [
         label: '归档',
         icon: Icons.inventory_2_outlined,
         selectedIcon: Icons.inventory_2,
+        feature: Feature.archive,
       ),
     ],
   ),
@@ -98,25 +105,44 @@ class _AppScaffoldState extends State<AppScaffold> {
   static const _collapsedWidth = 56.0;
   static const _animDuration = Duration(milliseconds: 200);
 
+  /// Filter nav groups to only include enabled features. Groups with no
+  /// remaining items are dropped entirely.
+  List<_NavGroup> _visibleGroups(FeatureProfile profile) {
+    final result = <_NavGroup>[];
+    for (final group in _allGroups) {
+      final items = group.items
+          .where((i) => i.feature == null || profile.isEnabled(i.feature!))
+          .toList();
+      if (items.isNotEmpty) {
+        result.add(_NavGroup(
+          label: group.label,
+          icon: group.icon,
+          items: items,
+        ));
+      }
+    }
+    return result;
+  }
+
   @override
   void initState() {
     super.initState();
-    _expandedGroups = {_activeGroupIndex()};
+    _expandedGroups = {_activeGroupIndex(_allGroups)};
   }
 
   @override
   void didUpdateWidget(AppScaffold oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.selectedIndex != widget.selectedIndex) {
-      _expandedGroups.add(_activeGroupIndex());
+      _expandedGroups.add(_activeGroupIndex(_allGroups));
       // Auto-collapse when a page is selected
       setState(() => _expanded = false);
     }
   }
 
-  int _activeGroupIndex() {
-    for (var gi = 0; gi < _groups.length; gi++) {
-      if (_groups[gi].items.any((item) => item.index == widget.selectedIndex)) {
+  int _activeGroupIndex(List<_NavGroup> groups) {
+    for (var gi = 0; gi < groups.length; gi++) {
+      if (groups[gi].items.any((item) => item.index == widget.selectedIndex)) {
         return gi;
       }
     }
@@ -130,8 +156,10 @@ class _AppScaffoldState extends State<AppScaffold> {
   @override
   Widget build(BuildContext context) {
     final sidecar = context.watch<SidecarManager>();
+    final profile = context.watch<FeatureProfile>();
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final groups = _visibleGroups(profile);
 
     return Scaffold(
       body: Row(
@@ -158,11 +186,11 @@ class _AppScaffoldState extends State<AppScaffold> {
                       child: ListView(
                         padding: const EdgeInsets.symmetric(horizontal: 6),
                         children: [
-                          for (var gi = 0; gi < _groups.length; gi++) ...[
+                          for (var gi = 0; gi < groups.length; gi++) ...[
                             if (gi > 0) const SizedBox(height: 4),
                             _buildGroup(
                               context,
-                              _groups[gi],
+                              groups[gi],
                               gi,
                               colorScheme,
                               showExpanded,

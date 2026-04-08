@@ -4,8 +4,13 @@ import 'dart:io';
 class AppConfig {
   OracleConfig oracle;
   SshConfig ssh;
+  bool showAllFeatures;
 
-  AppConfig({required this.oracle, required this.ssh});
+  AppConfig({
+    required this.oracle,
+    required this.ssh,
+    this.showAllFeatures = false,
+  });
 
   factory AppConfig.empty() => AppConfig(
     oracle: OracleConfig(
@@ -21,11 +26,13 @@ class AppConfig {
   factory AppConfig.fromJson(Map<String, dynamic> json) => AppConfig(
     oracle: OracleConfig.fromJson(json['oracle'] ?? {}),
     ssh: SshConfig.fromJson(json['ssh'] ?? {}),
+    showAllFeatures: json['show_all_features'] ?? false,
   );
 
   Map<String, dynamic> toJson() => {
     'oracle': oracle.toJson(),
     'ssh': ssh.toJson(),
+    'show_all_features': showAllFeatures,
   };
 
   String get dsn =>

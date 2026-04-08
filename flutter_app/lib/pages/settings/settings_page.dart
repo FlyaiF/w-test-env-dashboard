@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../config/config_service.dart';
+import '../../config/feature_profile.dart';
 import '../../sidecar/sidecar_client.dart';
 import '../../sidecar/sidecar_manager.dart';
 
@@ -299,6 +300,33 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ),
           ),
+          const SizedBox(height: 16),
+
+          // Feature profile section (only shown for named profiles)
+          Builder(builder: (context) {
+            final profile = context.watch<FeatureProfile>();
+            if (!profile.isNamedProfile) return const SizedBox.shrink();
+            return Card(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 8,
+                ),
+                child: SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('启用全部功能'),
+                  subtitle: const Text('显示所有功能模块，而非仅当前模式对应的功能'),
+                  value: profile.showAll,
+                  onChanged: (v) async {
+                    profile.showAll = v;
+                    final config = _buildConfig();
+                    config.showAllFeatures = v;
+                    await ConfigService.save(config);
+                  },
+                ),
+              ),
+            );
+          }),
           const SizedBox(height: 24),
 
           // Save button
