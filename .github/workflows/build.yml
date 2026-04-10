@@ -15,6 +15,13 @@ concurrency:
 jobs:
   build-macos:
     runs-on: macos-latest
+    strategy:
+      matrix:
+        profile:
+          - name: env_viewer
+            desc: Environment viewer
+          - name: zipr_tool
+            desc: Archive comparison tool
     steps:
       - uses: actions/checkout@v4
         with:
@@ -70,23 +77,37 @@ jobs:
           flutter pub get
           flutter build macos --release
 
-      - name: Bundle sidecar, zipr and package
+      - name: Bundle sidecar, zipr and package as ${{ matrix.profile.name }}
         run: |
-          APP="flutter_app/build/macos/Build/Products/Release/test_env_dashboard.app"
-          cp go_sidecar/go_sidecar "$APP/Contents/Resources/go_sidecar"
-          chmod +x "$APP/Contents/Resources/go_sidecar"
-          cp zipr/zipr "$APP/Contents/Resources/zipr"
-          chmod +x "$APP/Contents/Resources/zipr"
+          SRC_APP="flutter_app/build/macos/Build/Products/Release/test_env_dashboard.app"
+          PROFILE="${{ matrix.profile.name }}"
+          DEST_APP="flutter_app/build/macos/Build/Products/Release/${PROFILE}.app"
+
+          # Rename .app bundle so FeatureProfile resolves the correct profile
+          cp -R "$SRC_APP" "$DEST_APP"
+
+          cp go_sidecar/go_sidecar "$DEST_APP/Contents/Resources/go_sidecar"
+          chmod +x "$DEST_APP/Contents/Resources/go_sidecar"
+          cp zipr/zipr "$DEST_APP/Contents/Resources/zipr"
+          chmod +x "$DEST_APP/Contents/Resources/zipr"
+
           cd flutter_app/build/macos/Build/Products/Release
-          zip -r -y test-env-dashboard-macos.zip test_env_dashboard.app
+          zip -r -y "${PROFILE}-macos.zip" "${PROFILE}.app"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: test-env-dashboard-macos
-          path: flutter_app/build/macos/Build/Products/Release/test-env-dashboard-macos.zip
+          name: ${{ matrix.profile.name }}-macos
+          path: flutter_app/build/macos/Build/Products/Release/${{ matrix.profile.name }}-macos.zip
 
   build-windows:
     runs-on: windows-latest
+    strategy:
+      matrix:
+        profile:
+          - name: env_viewer
+            desc: Environment viewer
+          - name: zipr_tool
+            desc: Archive comparison tool
     steps:
       - uses: actions/checkout@v4
         with:
@@ -132,20 +153,26 @@ jobs:
           flutter pub get
           flutter build windows --release
 
-      - name: Bundle sidecar, zipr and package
+      - name: Bundle sidecar, zipr and package as ${{ matrix.profile.name }}
         shell: bash
         run: |
           RELEASE_DIR="flutter_app/build/windows/x64/runner/Release"
+          PROFILE="${{ matrix.profile.name }}"
+
           mkdir -p "$RELEASE_DIR/data"
           cp go_sidecar/go_sidecar.exe "$RELEASE_DIR/data/go_sidecar.exe"
           cp zipr/target/release/zipr.exe "$RELEASE_DIR/data/zipr.exe"
+
+          # Rename executable so FeatureProfile resolves the correct profile
+          mv "$RELEASE_DIR/test_env_dashboard.exe" "$RELEASE_DIR/${PROFILE}.exe"
+
           cd "$RELEASE_DIR"
-          7z a -tzip ../test-env-dashboard-windows.zip ./*
+          7z a -tzip "../${PROFILE}-windows.zip" ./*
 
       - uses: actions/upload-artifact@v4
         with:
-          name: test-env-dashboard-windows
-          path: flutter_app/build/windows/x64/runner/test-env-dashboard-windows.zip
+          name: ${{ matrix.profile.name }}-windows
+          path: flutter_app/build/windows/x64/runner/${{ matrix.profile.name }}-windows.zip
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')

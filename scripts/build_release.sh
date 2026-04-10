@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 BUILD_DIR="$PROJECT_DIR/build"
 PLATFORM=${1:-macos}
+PROFILES=("env_viewer" "zipr_tool")
 
 echo "=== Release build for $PLATFORM ==="
 
@@ -18,7 +19,7 @@ echo ""
 echo "--- Step 1b: Building zipr CLI ---"
 "$SCRIPT_DIR/build_zipr.sh"
 
-# Step 2: Bundle binaries into Flutter app
+# Step 2: Build Flutter app
 echo ""
 echo "--- Step 2: Building Flutter app ---"
 cd "$PROJECT_DIR/flutter_app"
@@ -27,13 +28,18 @@ case "$PLATFORM" in
     macos)
         flutter build macos --release
 
-        # Copy sidecar into .app bundle
-        APP_BUNDLE="$PROJECT_DIR/flutter_app/build/macos/Build/Products/Release/test_env_dashboard.app"
-        cp "$BUILD_DIR/sidecar/go_sidecar" "$APP_BUNDLE/Contents/Resources/go_sidecar"
-        chmod +x "$APP_BUNDLE/Contents/Resources/go_sidecar"
-        cp "$BUILD_DIR/zipr/zipr" "$APP_BUNDLE/Contents/Resources/zipr"
-        chmod +x "$APP_BUNDLE/Contents/Resources/zipr"
-        echo "Bundled sidecar + zipr into $APP_BUNDLE"
+        SRC_APP="$PROJECT_DIR/flutter_app/build/macos/Build/Products/Release/test_env_dashboard.app"
+        for PROFILE in "${PROFILES[@]}"; do
+            echo "--- Packaging profile: $PROFILE ---"
+            DEST_APP="$PROJECT_DIR/flutter_app/build/macos/Build/Products/Release/${PROFILE}.app"
+            rm -rf "$DEST_APP"
+            cp -R "$SRC_APP" "$DEST_APP"
+            cp "$BUILD_DIR/sidecar/go_sidecar" "$DEST_APP/Contents/Resources/go_sidecar"
+            chmod +x "$DEST_APP/Contents/Resources/go_sidecar"
+            cp "$BUILD_DIR/zipr/zipr" "$DEST_APP/Contents/Resources/zipr"
+            chmod +x "$DEST_APP/Contents/Resources/zipr"
+            echo "  Created $DEST_APP"
+        done
         ;;
     windows)
         flutter build windows --release
@@ -42,7 +48,12 @@ case "$PLATFORM" in
         mkdir -p "$WINDOWS_DIR/data"
         cp "$BUILD_DIR/sidecar/go_sidecar" "$WINDOWS_DIR/data/go_sidecar.exe"
         cp "$BUILD_DIR/zipr/zipr" "$WINDOWS_DIR/data/zipr.exe"
-        echo "Bundled sidecar + zipr into $WINDOWS_DIR/data/"
+
+        for PROFILE in "${PROFILES[@]}"; do
+            echo "--- Packaging profile: $PROFILE ---"
+            cp "$WINDOWS_DIR/test_env_dashboard.exe" "$WINDOWS_DIR/${PROFILE}.exe"
+            echo "  Created $WINDOWS_DIR/${PROFILE}.exe"
+        done
         ;;
     linux)
         flutter build linux --release
@@ -53,7 +64,13 @@ case "$PLATFORM" in
         chmod +x "$LINUX_DIR/data/go_sidecar"
         cp "$BUILD_DIR/zipr/zipr" "$LINUX_DIR/data/zipr"
         chmod +x "$LINUX_DIR/data/zipr"
-        echo "Bundled sidecar + zipr into $LINUX_DIR/data/"
+
+        for PROFILE in "${PROFILES[@]}"; do
+            echo "--- Packaging profile: $PROFILE ---"
+            cp "$LINUX_DIR/test_env_dashboard" "$LINUX_DIR/${PROFILE}"
+            chmod +x "$LINUX_DIR/${PROFILE}"
+            echo "  Created $LINUX_DIR/${PROFILE}"
+        done
         ;;
     *)
         echo "Unknown platform: $PLATFORM"
@@ -64,3 +81,4 @@ esac
 
 echo ""
 echo "=== Release build complete ==="
+echo "Profiles built: ${PROFILES[*]}"
