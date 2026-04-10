@@ -90,8 +90,8 @@ class _DashboardPageState extends State<DashboardPage> {
               const SizedBox(width: 8),
               IconButton(
                 icon: const Icon(Icons.refresh),
-                onPressed: service.load,
-                tooltip: '刷新',
+                onPressed: service.syncing ? null : service.sync,
+                tooltip: '从远程刷新',
               ),
             ],
           ),
@@ -117,7 +117,7 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
           ),
         // Loading
-        if (service.loading) const LinearProgressIndicator(),
+        if (service.loading || service.syncing) const LinearProgressIndicator(),
         // Card list
         Expanded(
           child: service.envs.isEmpty && !service.loading
@@ -309,7 +309,7 @@ class _DashboardPageState extends State<DashboardPage> {
                   const SizedBox(width: 6),
                   Text(
                     e.eUpdatetime != null
-                        ? _dateFmt.format(e.eUpdatetime!)
+                        ? _dateFmt.format(e.eUpdatetime!.toLocal())
                         : '-',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: Colors.grey.shade600,
@@ -376,7 +376,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 _detailRow(
                   '更新时间',
                   e.eUpdatetime != null
-                      ? _dateFmt.format(e.eUpdatetime!)
+                      ? _dateFmt.format(e.eUpdatetime!.toLocal())
                       : null,
                 ),
                 _detailRow('SEE平台', e.eSeeurl),

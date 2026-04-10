@@ -112,13 +112,13 @@ class _ManagementPageState extends State<ManagementPage> {
               const SizedBox(width: 8),
               IconButton(
                 icon: const Icon(Icons.refresh),
-                onPressed: service.load,
-                tooltip: '刷新',
+                onPressed: service.syncing ? null : service.sync,
+                tooltip: '从远程刷新',
               ),
             ],
           ),
         ),
-        if (service.loading) const LinearProgressIndicator(),
+        if (service.loading || service.syncing) const LinearProgressIndicator(),
         Expanded(
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -170,7 +170,7 @@ class _ManagementPageState extends State<ManagementPage> {
                           DataCell(
                             Text(
                               e.eUpdatetime != null
-                                  ? _dateFmt.format(e.eUpdatetime!)
+                                  ? _dateFmt.format(e.eUpdatetime!.toLocal())
                                   : '-',
                             ),
                           ),

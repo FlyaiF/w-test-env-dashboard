@@ -46,6 +46,14 @@ cd go_sidecar && go build -o ../build/sidecar/go_sidecar .
 - `go_sidecar/db/queries.go` — SQL for TENVINFO table
 - `go_sidecar/handler/env.go` — REST endpoint handlers
 
+## Gotchas
+
+- **Proxy breaks Flutter tests**: If HTTP proxy env vars are set, `flutter test` fails with "Invalid WebSocket upgrade request". Unset them first:
+  ```bash
+  unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
+  ```
+- **Oracle DATE timezone**: Oracle `DATE` columns have no timezone. `go-ora` reads them as Go local time, which gets serialized to UTC in JSON. Flutter must call `.toLocal()` before formatting with `DateFormat`, otherwise times will be off by the local UTC offset.
+
 ## Conventions
 
 - Go model uses `*string` for nullable fields; Dart uses `String?`
