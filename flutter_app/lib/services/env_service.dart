@@ -76,7 +76,8 @@ class EnvService extends ChangeNotifier {
           envs.where((e) {
             return (e.name?.toLowerCase().contains(q) ?? false) ||
                 (e.url?.toLowerCase().contains(q) ?? false) ||
-                (e.memo?.toLowerCase().contains(q) ?? false);
+                (e.memo?.toLowerCase().contains(q) ?? false) ||
+                (e.version?.toLowerCase().contains(q) ?? false);
           }).toList();
     }
 

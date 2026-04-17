@@ -61,7 +61,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 child: TextField(
                   controller: _searchController,
                   decoration: InputDecoration(
-                    hintText: '搜索环境名称、地址、备注...',
+                    hintText: '搜索环境名称、地址、备注、版本...',
                     prefixIcon: const Icon(Icons.search),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),

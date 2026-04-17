@@ -32,9 +32,9 @@ func ListEnvs(search string, page, pageSize int) ([]model.EnvInfo, int, error) {
 	where := ""
 	var args []any
 	if search != "" {
-		where = ` WHERE LOWER(E_NAME) LIKE :1 OR LOWER(E_URL) LIKE :2 OR LOWER(E_MEMO) LIKE :3`
+		where = ` WHERE LOWER(E_NAME) LIKE :1 OR LOWER(E_URL) LIKE :2 OR LOWER(E_MEMO) LIKE :3 OR LOWER(E_VERSION) LIKE :4`
 		pat := "%" + strings.ToLower(search) + "%"
-		args = append(args, pat, pat, pat)
+		args = append(args, pat, pat, pat, pat)
 	}
 
 	// Count total
