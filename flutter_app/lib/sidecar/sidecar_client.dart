@@ -67,6 +67,9 @@ class SidecarClient {
     }
   }
 
+  // Version / build info
+  Future<Map<String, dynamic>> getVersion() => _get('/version');
+
   // List environments
   Future<({List<EnvInfo> data, int total})> listEnvs({
     String search = '',

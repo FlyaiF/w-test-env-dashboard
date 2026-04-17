@@ -81,6 +81,14 @@ const _settingsItem = _NavItem(
   selectedIcon: Icons.settings,
 );
 
+const _aboutItem = _NavItem(
+  index: 5,
+  label: '关于',
+  icon: Icons.info_outline,
+  selectedIcon: Icons.info,
+  feature: Feature.about,
+);
+
 class AppScaffold extends StatefulWidget {
   final Widget child;
   final int selectedIndex;
@@ -205,8 +213,15 @@ class _AppScaffoldState extends State<AppScaffold> {
                         horizontal: 6,
                         vertical: 6,
                       ),
-                      child: _buildItem(
-                        context, _settingsItem, colorScheme, showExpanded),
+                      child: Column(
+                        children: [
+                          if (profile.isEnabled(Feature.about))
+                            _buildItem(context, _aboutItem, colorScheme,
+                                showExpanded),
+                          _buildItem(context, _settingsItem, colorScheme,
+                              showExpanded),
+                        ],
+                      ),
                     ),
                   ],
                 );

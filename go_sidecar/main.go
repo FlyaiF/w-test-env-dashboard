@@ -36,6 +36,7 @@ func main() {
 	// Setup routes
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", handler.Health)
+	mux.HandleFunc("/version", handler.Version)
 	mux.HandleFunc("/api/envs", handler.Envs)
 	mux.HandleFunc("/api/envs/", handler.EnvByID)
 	mux.HandleFunc("/api/db/test", handler.TestDB)

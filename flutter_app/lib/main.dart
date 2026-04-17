@@ -14,6 +14,7 @@ import 'pages/log_viewer/log_viewer_page.dart';
 import 'pages/management/management_page.dart';
 import 'pages/settings/settings_page.dart';
 import 'pages/archive_tool/archive_tool_page.dart';
+import 'pages/about/about_page.dart';
 import 'services/log_file_store.dart';
 import 'src/rust/frb_generated.dart';
 
@@ -89,6 +90,7 @@ const _pageEntries = [
   _PageEntry(2, Feature.management),
   // index 3 = settings, always visible
   _PageEntry(4, Feature.archive),
+  _PageEntry(5, Feature.about),
 ];
 
 class _HomePageState extends State<HomePage> with WindowListener {
@@ -197,6 +199,7 @@ class _HomePageState extends State<HomePage> with WindowListener {
           const ManagementPage(),
           const SettingsPage(),
           const ArchiveToolPage(),
+          const AboutPage(),
         ],
       ),
     );

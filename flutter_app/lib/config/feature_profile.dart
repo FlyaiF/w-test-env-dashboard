@@ -2,13 +2,13 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
-enum Feature { dashboard, logs, management, archive }
+enum Feature { dashboard, logs, management, archive, about }
 
 class FeatureProfile extends ChangeNotifier {
   /// Executable-name → enabled features. Unmatched names get all features.
   static const _profiles = <String, Set<Feature>>{
-    'env_viewer': {Feature.dashboard, Feature.logs, Feature.management},
-    'zipr_tool': {Feature.archive},
+    'env_viewer': {Feature.dashboard, Feature.logs, Feature.management, Feature.about},
+    'zipr_tool': {Feature.archive, Feature.about},
   };
 
   static final FeatureProfile _instance = FeatureProfile._();

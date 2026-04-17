@@ -41,3 +41,11 @@ type HealthResponse struct {
 	Status      string `json:"status"`
 	DbConnected bool   `json:"db_connected"`
 }
+
+type VersionResponse struct {
+	Version   string `json:"version"`
+	Commit    string `json:"commit"`
+	BuildTime string `json:"buildTime"`
+	GoVersion string `json:"goVersion"`
+	Platform  string `json:"platform"`
+}
