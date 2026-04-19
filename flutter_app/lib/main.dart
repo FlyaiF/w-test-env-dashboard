@@ -18,12 +18,19 @@ import 'pages/about/about_page.dart';
 import 'services/log_file_store.dart';
 import 'src/rust/frb_generated.dart';
 
+Future<void>? _rustInitFuture;
+Future<void> ensureRustInited() => _rustInitFuture ??= RustLib.init();
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Load saved config before feature gates so showAllFeatures applies at boot.
+  final config = await ConfigService.load();
   final profile = FeatureProfile();
+  profile.showAll = config.showAllFeatures;
+
   if (profile.isEnabled(Feature.archive)) {
-    await RustLib.init();
+    await ensureRustInited();
   }
   await LogFileStore.cleanOrphans();
 
@@ -96,7 +103,9 @@ const _pageEntries = [
 class _HomePageState extends State<HomePage> with WindowListener {
   int _selectedIndex = 0;
   bool _initialized = false;
+  bool _envReady = false;
   final _logViewerKey = GlobalKey<LogViewerPageState>();
+  FeatureProfile? _profile;
 
   @override
   void initState() {
@@ -111,47 +120,72 @@ class _HomePageState extends State<HomePage> with WindowListener {
 
     final profile = context.read<FeatureProfile>();
     profile.showAll = config.showAllFeatures;
+    _profile = profile;
+    profile.addListener(_onProfileChanged);
 
-    final hasEnv = profile.isEnabled(Feature.dashboard);
-
-    if (hasEnv) {
-      final sidecar = context.read<SidecarManager>();
-      final envService = context.read<EnvService>();
-      final localStore = context.read<LocalStore>();
-
-      // Load local data first (local-first).
-      await localStore.load();
-      envService.setLocalStore(localStore);
-      await envService.load();
-
-      if (config.isOracleConfigured) {
-        await sidecar.start(config.dsn);
-        if (sidecar.connected) {
-          envService.setClient(SidecarClient(sidecar.baseUrl));
-          // Auto-sync from remote on connect.
-          envService.sync();
-        }
-      }
-
-      sidecar.addListener(() {
-        if (sidecar.connected && sidecar.port != null) {
-          envService.setClient(SidecarClient(sidecar.baseUrl));
-          // Auto-sync when sidecar reconnects.
-          envService.sync();
-        }
-      });
+    await _ensureEnvReady(config: config);
+    if (profile.isEnabled(Feature.archive)) {
+      await ensureRustInited();
     }
 
+    if (!mounted) return;
     setState(() => _initialized = true);
 
     // Pick a valid default page for the active profile.
+    final hasEnv = profile.isEnabled(Feature.dashboard);
     if (hasEnv && !config.isOracleConfigured) {
       setState(() => _selectedIndex = 3); // settings
     } else if (!hasEnv) {
-      // First enabled page.
       setState(() => _selectedIndex = _pageEntries
           .firstWhere((e) => profile.isEnabled(e.feature))
           .index);
+    }
+  }
+
+  /// Starts sidecar/env services. Idempotent — safe to call again after the
+  /// user enables the dashboard feature at runtime via showAll.
+  Future<void> _ensureEnvReady({AppConfig? config}) async {
+    if (_envReady) return;
+    final profile = _profile ?? context.read<FeatureProfile>();
+    if (!profile.isEnabled(Feature.dashboard)) return;
+    _envReady = true;
+
+    final cfg = config ?? await ConfigService.load();
+    if (!mounted) return;
+
+    final sidecar = context.read<SidecarManager>();
+    final envService = context.read<EnvService>();
+    final localStore = context.read<LocalStore>();
+
+    // Load local data first (local-first).
+    await localStore.load();
+    envService.setLocalStore(localStore);
+    await envService.load();
+
+    if (cfg.isOracleConfigured) {
+      await sidecar.start(cfg.dsn);
+      if (sidecar.connected) {
+        envService.setClient(SidecarClient(sidecar.baseUrl));
+        envService.sync();
+      }
+    }
+
+    sidecar.addListener(() {
+      if (sidecar.connected && sidecar.port != null) {
+        envService.setClient(SidecarClient(sidecar.baseUrl));
+        envService.sync();
+      }
+    });
+  }
+
+  void _onProfileChanged() {
+    if (!mounted) return;
+    final profile = _profile!;
+    if (profile.isEnabled(Feature.dashboard) && !_envReady) {
+      _ensureEnvReady();
+    }
+    if (profile.isEnabled(Feature.archive)) {
+      ensureRustInited();
     }
   }
 
@@ -164,6 +198,7 @@ class _HomePageState extends State<HomePage> with WindowListener {
 
   @override
   void dispose() {
+    _profile?.removeListener(_onProfileChanged);
     windowManager.removeListener(this);
     super.dispose();
   }
