@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../src/rust/api/zipr_api.dart';
+import '../../../widgets/filter_history_text_field.dart';
 import '../diff_tree_builder.dart';
 
 class DiffTreePanel extends StatefulWidget {
@@ -78,8 +79,9 @@ class _DiffTreePanelState extends State<DiffTreePanel> {
 
     _addedCount = widget.diffEntries.where((e) => e.kind == 'added').length;
     _removedCount = widget.diffEntries.where((e) => e.kind == 'removed').length;
-    _modifiedCount =
-        widget.diffEntries.where((e) => e.kind == 'modified').length;
+    _modifiedCount = widget.diffEntries
+        .where((e) => e.kind == 'modified')
+        .length;
   }
 
   Set<String> _effectiveExpanded() {
@@ -100,16 +102,18 @@ class _DiffTreePanelState extends State<DiffTreePanel> {
       final nameMatches = node.name.toLowerCase().contains(filter);
       final filteredChildren = _filterNodes(node.children, filter, autoExpand);
       if (nameMatches || filteredChildren.isNotEmpty) {
-        result.add(DiffTreeNode(
-          name: node.name,
-          fullExpr: node.fullExpr,
-          isArchive: node.isArchive,
-          children: nameMatches ? node.children : filteredChildren,
-          diffEntry: node.diffEntry,
-        )
-          ..addedCount = node.addedCount
-          ..removedCount = node.removedCount
-          ..modifiedCount = node.modifiedCount);
+        result.add(
+          DiffTreeNode(
+              name: node.name,
+              fullExpr: node.fullExpr,
+              isArchive: node.isArchive,
+              children: nameMatches ? node.children : filteredChildren,
+              diffEntry: node.diffEntry,
+            )
+            ..addedCount = node.addedCount
+            ..removedCount = node.removedCount
+            ..modifiedCount = node.modifiedCount,
+        );
         if (filteredChildren.isNotEmpty) {
           autoExpand.add(node.fullExpr);
         }
@@ -190,7 +194,11 @@ class _DiffTreePanelState extends State<DiffTreePanel> {
       color: theme.colorScheme.surfaceContainerLow,
       child: Row(
         children: [
-          Icon(Icons.compare_arrows, size: 18, color: theme.colorScheme.primary),
+          Icon(
+            Icons.compare_arrows,
+            size: 18,
+            color: theme.colorScheme.primary,
+          ),
           const SizedBox(width: 8),
           Text('差异对比', style: theme.textTheme.titleSmall),
           const SizedBox(width: 16),
@@ -240,22 +248,10 @@ class _DiffTreePanelState extends State<DiffTreePanel> {
   Widget _buildFilterBar() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
-      child: TextField(
+      child: FilterHistoryTextField(
         controller: _filterController,
-        decoration: InputDecoration(
-          hintText: '搜索差异文件...',
-          prefixIcon: const Icon(Icons.search, size: 18),
-          suffixIcon: _filterText.isNotEmpty
-              ? IconButton(
-                  icon: const Icon(Icons.clear, size: 18),
-                  onPressed: () => _filterController.clear(),
-                )
-              : null,
-          isDense: true,
-          contentPadding: const EdgeInsets.symmetric(vertical: 8),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-        ),
-        style: const TextStyle(fontSize: 13),
+        filterText: _filterText,
+        hintText: '搜索差异文件...',
       ),
     );
   }
@@ -361,10 +357,7 @@ class _DiffTreePanelState extends State<DiffTreePanel> {
                 padding: const EdgeInsets.only(left: 46),
                 child: Text(
                   'content changed',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.grey.shade600,
-                  ),
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                 ),
               ),
             if (node.diffEntry != null)
@@ -373,10 +366,7 @@ class _DiffTreePanelState extends State<DiffTreePanel> {
                   padding: const EdgeInsets.only(left: 46),
                   child: Text(
                     meta,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.grey.shade600,
-                    ),
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                   ),
                 ),
           ],
@@ -410,36 +400,42 @@ class _DiffTreePanelState extends State<DiffTreePanel> {
   Widget _buildAggregBadges(DiffTreeNode node) {
     final parts = <Widget>[];
     if (node.addedCount > 0) {
-      parts.add(Text(
-        '+${node.addedCount}',
-        style: TextStyle(
-          fontSize: 11,
-          color: Colors.green.shade600,
-          fontFamily: 'Sarasa Mono SC',
+      parts.add(
+        Text(
+          '+${node.addedCount}',
+          style: TextStyle(
+            fontSize: 11,
+            color: Colors.green.shade600,
+            fontFamily: 'Sarasa Mono SC',
+          ),
         ),
-      ));
+      );
     }
     if (node.modifiedCount > 0) {
       if (parts.isNotEmpty) parts.add(const SizedBox(width: 4));
-      parts.add(Text(
-        '~${node.modifiedCount}',
-        style: TextStyle(
-          fontSize: 11,
-          color: Colors.blue.shade600,
-          fontFamily: 'Sarasa Mono SC',
+      parts.add(
+        Text(
+          '~${node.modifiedCount}',
+          style: TextStyle(
+            fontSize: 11,
+            color: Colors.blue.shade600,
+            fontFamily: 'Sarasa Mono SC',
+          ),
         ),
-      ));
+      );
     }
     if (node.removedCount > 0) {
       if (parts.isNotEmpty) parts.add(const SizedBox(width: 4));
-      parts.add(Text(
-        '-${node.removedCount}',
-        style: TextStyle(
-          fontSize: 11,
-          color: Colors.red.shade600,
-          fontFamily: 'Sarasa Mono SC',
+      parts.add(
+        Text(
+          '-${node.removedCount}',
+          style: TextStyle(
+            fontSize: 11,
+            color: Colors.red.shade600,
+            fontFamily: 'Sarasa Mono SC',
+          ),
         ),
-      ));
+      );
     }
     return Row(mainAxisSize: MainAxisSize.min, children: parts);
   }
@@ -454,13 +450,19 @@ class _DiffTreePanelState extends State<DiffTreePanel> {
       };
     }
     // Directory: use dominant child color
-    if (node.removedCount > 0 && node.addedCount == 0 && node.modifiedCount == 0) {
+    if (node.removedCount > 0 &&
+        node.addedCount == 0 &&
+        node.modifiedCount == 0) {
       return Colors.red.shade700;
     }
-    if (node.addedCount > 0 && node.removedCount == 0 && node.modifiedCount == 0) {
+    if (node.addedCount > 0 &&
+        node.removedCount == 0 &&
+        node.modifiedCount == 0) {
       return Colors.green.shade700;
     }
-    if (node.modifiedCount > 0 && node.removedCount == 0 && node.addedCount == 0) {
+    if (node.modifiedCount > 0 &&
+        node.removedCount == 0 &&
+        node.addedCount == 0) {
       return Colors.blue.shade700;
     }
     return null; // mixed changes, use default color

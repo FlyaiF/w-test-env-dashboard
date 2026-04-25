@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../src/rust/api/zipr_api.dart';
+import '../../../widgets/filter_history_text_field.dart';
 import '../archive_tree_builder.dart';
 
 class ArchiveTreePanel extends StatefulWidget {
@@ -72,13 +73,15 @@ class _ArchiveTreePanelState extends State<ArchiveTreePanel> {
       final nameMatches = node.name.toLowerCase().contains(filter);
       final filteredChildren = _filterNodes(node.children, filter, autoExpand);
       if (nameMatches || filteredChildren.isNotEmpty) {
-        result.add(TreeNode(
-          name: node.name,
-          fullExpr: node.fullExpr,
-          isArchive: node.isArchive,
-          children: nameMatches ? node.children : filteredChildren,
-          entry: node.entry,
-        ));
+        result.add(
+          TreeNode(
+            name: node.name,
+            fullExpr: node.fullExpr,
+            isArchive: node.isArchive,
+            children: nameMatches ? node.children : filteredChildren,
+            entry: node.entry,
+          ),
+        );
         if (filteredChildren.isNotEmpty) {
           autoExpand.add(node.fullExpr);
         }
@@ -98,10 +101,8 @@ class _ArchiveTreePanelState extends State<ArchiveTreePanel> {
     } else {
       final autoExpand = <String>{};
       displayTree = _filterNodes(_tree, _filterText, autoExpand);
-      effectiveExpanded = {
-        ..._expanded,
-        ...autoExpand,
-      }..removeAll(_filterCollapsed);
+      effectiveExpanded = {..._expanded, ...autoExpand}
+        ..removeAll(_filterCollapsed);
     }
 
     _effectiveExpanded = effectiveExpanded;
@@ -112,24 +113,10 @@ class _ArchiveTreePanelState extends State<ArchiveTreePanel> {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-          child: TextField(
+          child: FilterHistoryTextField(
             controller: _filterController,
-            decoration: InputDecoration(
-              hintText: '搜索文件...',
-              prefixIcon: const Icon(Icons.search, size: 18),
-              suffixIcon: _filterText.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.clear, size: 18),
-                      onPressed: () => _filterController.clear(),
-                    )
-                  : null,
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(vertical: 8),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            style: const TextStyle(fontSize: 13),
+            filterText: _filterText,
+            hintText: '搜索文件...',
           ),
         ),
         Expanded(
@@ -216,8 +203,7 @@ class _ArchiveTreePanelState extends State<ArchiveTreePanel> {
     );
   }
 
-  void _showContextMenu(
-      BuildContext context, Offset position, TreeNode node) {
+  void _showContextMenu(BuildContext context, Offset position, TreeNode node) {
     // Use the original entry expr (full path) for operations
     final expr = node.entry?.expr ?? node.fullExpr;
     showMenu(

@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
 import '../../models/env_info.dart';
 import '../../services/env_service.dart';
+import '../../widgets/filter_history_text_field.dart';
 
 class DashboardPage extends StatefulWidget {
   final void Function(EnvInfo env)? onViewLog;
@@ -58,26 +59,10 @@ class _DashboardPageState extends State<DashboardPage> {
               const Spacer(),
               SizedBox(
                 width: 300,
-                child: TextField(
+                child: FilterHistoryTextField(
                   controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: '搜索环境名称、地址、备注、版本...',
-                    prefixIcon: const Icon(Icons.search),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                    isDense: true,
-                    suffixIcon: _searchController.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              _searchController.clear();
-                              service.setSearch('');
-                            },
-                          )
-                        : null,
-                  ),
+                  filterText: _searchController.text,
+                  hintText: '搜索环境名称、地址、备注、版本...',
                   onChanged: (v) {
                     setState(() {});
                     _debounce?.cancel();
