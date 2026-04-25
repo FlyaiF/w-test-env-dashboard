@@ -37,6 +37,11 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", handler.Health)
 	mux.HandleFunc("/version", handler.Version)
+	mux.HandleFunc("/api/runtime-env/collect-preview", handler.CollectPreview)
+	mux.HandleFunc("/api/runtime-env/publish-collected", handler.PublishCollected)
+	// Backward-compatible aliases for clients built before the route was moved.
+	mux.HandleFunc("/api/envs/collect-preview", handler.CollectPreview)
+	mux.HandleFunc("/api/envs/publish-collected", handler.PublishCollected)
 	mux.HandleFunc("/api/envs", handler.Envs)
 	mux.HandleFunc("/api/envs/", handler.EnvByID)
 	mux.HandleFunc("/api/db/test", handler.TestDB)

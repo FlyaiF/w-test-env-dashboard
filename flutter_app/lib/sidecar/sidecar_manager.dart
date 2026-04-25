@@ -19,6 +19,7 @@ class SidecarManager extends ChangeNotifier {
     _error = null;
 
     final binaryPath = _resolveBinaryPath();
+    debugPrint('[sidecar] binary=$binaryPath');
     final file = File(binaryPath);
     if (!await file.exists()) {
       _error = '找不到后端服务: $binaryPath';
@@ -97,6 +98,9 @@ class SidecarManager extends ChangeNotifier {
     final exe = Platform.resolvedExecutable;
 
     if (Platform.isMacOS) {
+      if (kDebugMode) {
+        return _devBinaryPath();
+      }
       // In .app bundle: Contents/Resources/go_sidecar
       final contentsIdx = exe.indexOf('/Contents/');
       if (contentsIdx != -1) {

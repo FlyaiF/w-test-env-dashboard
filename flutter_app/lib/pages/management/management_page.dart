@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../models/env_info.dart';
+import '../../models/runtime_env_collection.dart';
 import '../../services/env_service.dart';
 
 class ManagementPage extends StatefulWidget {
@@ -92,6 +94,24 @@ class _ManagementPageState extends State<ManagementPage> {
     }
   }
 
+  void _collectRuntimeInfo() async {
+    final service = context.read<EnvService>();
+    try {
+      final results = await service.collectRuntimePreview();
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => _RuntimeDiffDialog(results: results),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('采集失败: $e')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final service = context.watch<EnvService>();
@@ -104,6 +124,12 @@ class _ManagementPageState extends State<ManagementPage> {
             children: [
               Text('环境管理', style: Theme.of(context).textTheme.headlineSmall),
               const Spacer(),
+              FilledButton.tonalIcon(
+                onPressed: service.collecting ? null : _collectRuntimeInfo,
+                icon: const Icon(Icons.compare_arrows),
+                label: const Text('采集运行库信息'),
+              ),
+              const SizedBox(width: 8),
               FilledButton.icon(
                 onPressed: () => _showForm(),
                 icon: const Icon(Icons.add),
@@ -118,7 +144,11 @@ class _ManagementPageState extends State<ManagementPage> {
             ],
           ),
         ),
-        if (service.loading || service.syncing) const LinearProgressIndicator(),
+        if (service.loading ||
+            service.syncing ||
+            service.collecting ||
+            service.publishingCollected)
+          const LinearProgressIndicator(),
         Expanded(
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -224,6 +254,228 @@ class _ManagementPageState extends State<ManagementPage> {
         ),
       ],
     );
+  }
+}
+
+class _RuntimeDiffDialog extends StatefulWidget {
+  final List<RuntimeEnvCollectionResult> results;
+
+  const _RuntimeDiffDialog({required this.results});
+
+  @override
+  State<_RuntimeDiffDialog> createState() => _RuntimeDiffDialogState();
+}
+
+class _RuntimeDiffDialogState extends State<_RuntimeDiffDialog> {
+  final _dateFmt = DateFormat('yyyy-MM-dd HH:mm:ss');
+  late final Set<int> _selected;
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = widget.results
+        .where((e) => e.isPublishable)
+        .map((e) => e.eNo)
+        .toSet();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final changed = widget.results.where((e) => e.status == 'changed').length;
+    final skipped = widget.results.where((e) => e.status == 'skipped').length;
+    final failed = widget.results.where((e) => e.status == 'failed').length;
+    final unchanged = widget.results
+        .where((e) => e.status == 'unchanged')
+        .length;
+    final selectedItems = widget.results
+        .where((e) => _selected.contains(e.eNo) && e.isPublishable)
+        .toList();
+
+    return AlertDialog(
+      title: const Text('运行库信息差异'),
+      content: SizedBox(
+        width: 980,
+        height: 620,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(
+              spacing: 8,
+              children: [
+                _chip('变更 $changed', Colors.orange),
+                _chip('无变化 $unchanged', Colors.green),
+                _chip('跳过 $skipped', Colors.grey),
+                _chip('失败 $failed', Colors.red),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SingleChildScrollView(
+                  child: DataTable(
+                    columnSpacing: 14,
+                    columns: const [
+                      DataColumn(label: Text('发布')),
+                      DataColumn(label: Text('编号')),
+                      DataColumn(label: Text('环境')),
+                      DataColumn(label: Text('状态')),
+                      DataColumn(label: Text('当前版本')),
+                      DataColumn(label: Text('采集版本')),
+                      DataColumn(label: Text('当前更新时间')),
+                      DataColumn(label: Text('采集更新时间')),
+                      DataColumn(label: Text('子系统版本')),
+                      DataColumn(label: Text('说明')),
+                    ],
+                    rows: widget.results.map(_row).toList(),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('关闭'),
+        ),
+        FilledButton.icon(
+          onPressed: selectedItems.isEmpty
+              ? null
+              : () => _publish(selectedItems),
+          icon: const Icon(Icons.publish),
+          label: Text('发布 ${selectedItems.length} 项变更'),
+        ),
+      ],
+    );
+  }
+
+  DataRow _row(RuntimeEnvCollectionResult result) {
+    final publishable = result.isPublishable;
+    return DataRow(
+      selected: _selected.contains(result.eNo),
+      cells: [
+        DataCell(
+          Checkbox(
+            value: _selected.contains(result.eNo),
+            onChanged: publishable
+                ? (value) {
+                    setState(() {
+                      if (value == true) {
+                        _selected.add(result.eNo);
+                      } else {
+                        _selected.remove(result.eNo);
+                      }
+                    });
+                  }
+                : null,
+          ),
+        ),
+        DataCell(Text('${result.eNo}')),
+        DataCell(Text(result.eName ?? '-')),
+        DataCell(_status(result.status)),
+        DataCell(
+          _diffText(result.current.eVersion, result.diff.versionChanged),
+        ),
+        DataCell(
+          _diffText(result.fresh?.systemVersion, result.diff.versionChanged),
+        ),
+        DataCell(
+          _diffText(
+            _formatDate(result.current.eUpdatetime),
+            result.diff.updateTimeChanged,
+          ),
+        ),
+        DataCell(
+          _diffText(
+            _formatDate(result.fresh?.beginTime),
+            result.diff.updateTimeChanged,
+          ),
+        ),
+        DataCell(Text(result.fresh?.subsystemVer ?? '-')),
+        DataCell(_messageCell(result)),
+      ],
+    );
+  }
+
+  Widget _messageCell(RuntimeEnvCollectionResult result) {
+    final message = result.error ?? (result.status == 'changed' ? '待发布' : '-');
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 360),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Tooltip(
+              message: message,
+              child: Text(message, overflow: TextOverflow.ellipsis),
+            ),
+          ),
+          if (result.error != null)
+            IconButton(
+              tooltip: '复制错误',
+              icon: const Icon(Icons.copy, size: 16),
+              onPressed: () => Clipboard.setData(ClipboardData(text: message)),
+              visualDensity: VisualDensity.compact,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _diffText(String? value, bool changed) {
+    return Text(
+      value ?? '-',
+      style: TextStyle(
+        color: changed ? Colors.orange.shade800 : null,
+        fontWeight: changed ? FontWeight.w700 : FontWeight.normal,
+      ),
+    );
+  }
+
+  Widget _status(String status) {
+    final (label, color) = switch (status) {
+      'changed' => ('变更', Colors.orange),
+      'unchanged' => ('无变化', Colors.green),
+      'skipped' => ('跳过', Colors.grey),
+      'failed' => ('失败', Colors.red),
+      _ => (status, Colors.blueGrey),
+    };
+    return _chip(label, color);
+  }
+
+  Widget _chip(String label, Color color) {
+    return Chip(
+      label: Text(label),
+      side: BorderSide(color: color.withValues(alpha: 0.35)),
+      backgroundColor: color.withValues(alpha: 0.08),
+      labelStyle: TextStyle(color: color),
+      visualDensity: VisualDensity.compact,
+    );
+  }
+
+  String? _formatDate(DateTime? value) {
+    if (value == null) return null;
+    return _dateFmt.format(value.toLocal());
+  }
+
+  Future<void> _publish(List<RuntimeEnvCollectionResult> items) async {
+    final service = context.read<EnvService>();
+    try {
+      final result = await service.publishCollected(items);
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('已发布 ${result.updated} 项变更')));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('发布失败: $e')));
+      }
+    }
   }
 }
 

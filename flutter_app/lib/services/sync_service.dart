@@ -37,9 +37,14 @@ class SyncService {
         }
 
         // Map EnvInfo → Environment and upsert.
-        final serverHost = _extractHost(envInfo.eWebserveraddr);
+        final serverHost = extractHost(envInfo.eWebserveraddr);
         _store.upsertEnvironment(
-          _toEnvironment(envInfo, serverHost: serverHost, syncedAt: now),
+          toEnvironment(
+            envInfo,
+            serverHost: serverHost,
+            syncedAt: now,
+            existing: _store.getEnvironmentByNo(envInfo.eNo),
+          ),
         );
       }
 
@@ -67,19 +72,19 @@ class SyncService {
     return all;
   }
 
-  String? _extractHost(String? webserveraddr) {
+  static String? extractHost(String? webserveraddr) {
     if (webserveraddr == null || webserveraddr.isEmpty) return null;
     final parsed = parseServerAddr(webserveraddr);
     return parsed.host.isNotEmpty ? parsed.host : null;
   }
 
-  Environment _toEnvironment(
+  static Environment toEnvironment(
     EnvInfo info, {
     String? serverHost,
     DateTime? syncedAt,
+    Environment? existing,
   }) {
     // Preserve local-only fields from existing record.
-    final existing = _store.getEnvironmentByNo(info.eNo);
     return Environment(
       eNo: info.eNo,
       name: info.eName,

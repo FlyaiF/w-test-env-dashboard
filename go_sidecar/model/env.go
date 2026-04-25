@@ -37,6 +37,49 @@ type MessageResponse struct {
 	Message string `json:"message"`
 }
 
+type RuntimeEnvFreshInfo struct {
+	SystemVersion *string    `json:"system_version"`
+	SubsystemVer  *string    `json:"subsystem_ver"`
+	BeginTime     *time.Time `json:"begin_time"`
+}
+
+type RuntimeEnvDiff struct {
+	VersionChanged    bool `json:"version_changed"`
+	UpdateTimeChanged bool `json:"update_time_changed"`
+}
+
+type RuntimeEnvCollectionResult struct {
+	ENo         int64                `json:"e_no"`
+	EName       *string              `json:"e_name"`
+	Status      string               `json:"status"`
+	Current     EnvInfo              `json:"current"`
+	Fresh       *RuntimeEnvFreshInfo `json:"fresh,omitempty"`
+	Diff        RuntimeEnvDiff       `json:"diff"`
+	Error       string               `json:"error,omitempty"`
+	CollectedAt time.Time            `json:"collected_at"`
+}
+
+type RuntimeCollectPreviewResponse struct {
+	Data []RuntimeEnvCollectionResult `json:"data"`
+}
+
+type RuntimePublishItem struct {
+	ENo           int64      `json:"e_no"`
+	SystemVersion *string    `json:"system_version"`
+	BeginTime     *time.Time `json:"begin_time"`
+	BeginTimeText *string    `json:"begin_time_text"`
+}
+
+type RuntimePublishRequest struct {
+	Items []RuntimePublishItem `json:"items"`
+}
+
+type RuntimePublishResponse struct {
+	Updated int       `json:"updated"`
+	Skipped []int64   `json:"skipped"`
+	Data    []EnvInfo `json:"data"`
+}
+
 type HealthResponse struct {
 	Status      string `json:"status"`
 	DbConnected bool   `json:"db_connected"`

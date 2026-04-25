@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/env_info.dart';
+import '../models/runtime_env_collection.dart';
 
 class SidecarClient {
   final String baseUrl;
@@ -9,9 +10,13 @@ class SidecarClient {
 
   Future<Map<String, dynamic>> _get(String path) async {
     final resp = await http.get(Uri.parse('$baseUrl$path'));
-    final body = jsonDecode(resp.body) as Map<String, dynamic>;
+    final body = _decodeBody(resp, path);
     if (resp.statusCode >= 400) {
-      throw SidecarException(body['error'] ?? 'Unknown error', resp.statusCode);
+      throw SidecarException(
+        body['error'] ?? 'Unknown error',
+        resp.statusCode,
+        detail: body['detail'] as String?,
+      );
     }
     return body;
   }
@@ -25,9 +30,13 @@ class SidecarClient {
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode(data),
     );
-    final body = jsonDecode(resp.body) as Map<String, dynamic>;
+    final body = _decodeBody(resp, path);
     if (resp.statusCode >= 400) {
-      throw SidecarException(body['error'] ?? 'Unknown error', resp.statusCode);
+      throw SidecarException(
+        body['error'] ?? 'Unknown error',
+        resp.statusCode,
+        detail: body['detail'] as String?,
+      );
     }
     return body;
   }
@@ -41,20 +50,43 @@ class SidecarClient {
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode(data),
     );
-    final body = jsonDecode(resp.body) as Map<String, dynamic>;
+    final body = _decodeBody(resp, path);
     if (resp.statusCode >= 400) {
-      throw SidecarException(body['error'] ?? 'Unknown error', resp.statusCode);
+      throw SidecarException(
+        body['error'] ?? 'Unknown error',
+        resp.statusCode,
+        detail: body['detail'] as String?,
+      );
     }
     return body;
   }
 
   Future<Map<String, dynamic>> _delete(String path) async {
     final resp = await http.delete(Uri.parse('$baseUrl$path'));
-    final body = jsonDecode(resp.body) as Map<String, dynamic>;
+    final body = _decodeBody(resp, path);
     if (resp.statusCode >= 400) {
-      throw SidecarException(body['error'] ?? 'Unknown error', resp.statusCode);
+      throw SidecarException(
+        body['error'] ?? 'Unknown error',
+        resp.statusCode,
+        detail: body['detail'] as String?,
+      );
     }
     return body;
+  }
+
+  Map<String, dynamic> _decodeBody(http.Response resp, String path) {
+    try {
+      return jsonDecode(resp.body) as Map<String, dynamic>;
+    } catch (_) {
+      if (resp.statusCode >= 400) {
+        throw SidecarException(
+          'HTTP ${resp.statusCode} $path',
+          resp.statusCode,
+          detail: resp.body.trim(),
+        );
+      }
+      rethrow;
+    }
   }
 
   // Health
@@ -103,6 +135,24 @@ class SidecarClient {
     return EnvInfo.fromJson(body['data']);
   }
 
+  // Collect fresh runtime DB info and return a preview diff.
+  Future<List<RuntimeEnvCollectionResult>> collectRuntimePreview() async {
+    final body = await _post('/api/runtime-env/collect-preview', const {});
+    return (body['data'] as List)
+        .map((e) => RuntimeEnvCollectionResult.fromJson(e))
+        .toList();
+  }
+
+  // Publish selected collected values back to TENVINFO.
+  Future<RuntimePublishResult> publishCollected(
+    List<RuntimeEnvCollectionResult> items,
+  ) async {
+    final body = await _post('/api/runtime-env/publish-collected', {
+      'items': items.map((e) => e.toPublishJson()).toList(),
+    });
+    return RuntimePublishResult.fromJson(body);
+  }
+
   // Delete environment
   Future<void> deleteEnv(int id) async {
     await _delete('/api/envs/$id');
@@ -118,9 +168,10 @@ class SidecarClient {
 class SidecarException implements Exception {
   final String message;
   final int statusCode;
+  final String? detail;
 
-  SidecarException(this.message, this.statusCode);
+  SidecarException(this.message, this.statusCode, {this.detail});
 
   @override
-  String toString() => message;
+  String toString() => detail == null ? message : '$message: $detail';
 }

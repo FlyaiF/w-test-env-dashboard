@@ -3,12 +3,16 @@ package handler
 import (
 	"database/sql"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"test-env-dashboard/go_sidecar/db"
 	"test-env-dashboard/go_sidecar/model"
 )
+
+const runtimeCollectConcurrency = 10
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -164,6 +168,107 @@ func deleteEnv(w http.ResponseWriter, id int64) {
 		return
 	}
 	writeJSON(w, http.StatusOK, model.MessageResponse{Message: "deleted"})
+}
+
+// CollectPreview handles POST /api/runtime-env/collect-preview.
+func CollectPreview(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	envs, err := db.ListAllEnvs()
+	if err != nil {
+		writeErrorDetail(w, http.StatusInternalServerError, "query failed", err.Error())
+		return
+	}
+
+	results := make([]model.RuntimeEnvCollectionResult, len(envs))
+	log.Printf("CollectPreview: collecting %d environments with concurrency=%d", len(envs), runtimeCollectConcurrency)
+
+	jobs := make(chan int)
+	var wg sync.WaitGroup
+	workerCount := runtimeCollectConcurrency
+	if len(envs) < workerCount {
+		workerCount = len(envs)
+	}
+	for worker := 0; worker < workerCount; worker++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range jobs {
+				env := envs[i]
+				collectedAt := db.Now()
+				dsn := ""
+				if env.EYwdb != nil {
+					dsn = strings.TrimSpace(*env.EYwdb)
+				}
+				if dsn == "" {
+					results[i] = db.BuildRuntimeSkippedResult(env, "E_YWDB is empty", collectedAt)
+					continue
+				}
+
+				fresh, err := db.CollectRuntimeEnvInfo(dsn)
+				if err != nil {
+					results[i] = db.BuildRuntimeFailedResult(env, err, collectedAt)
+					continue
+				}
+				results[i] = db.BuildRuntimeCollectionResult(env, fresh, collectedAt)
+			}
+		}()
+	}
+	for i := range envs {
+		jobs <- i
+	}
+	close(jobs)
+	wg.Wait()
+
+	writeJSON(w, http.StatusOK, model.RuntimeCollectPreviewResponse{Data: results})
+}
+
+// PublishCollected handles POST /api/runtime-env/publish-collected.
+func PublishCollected(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	var req model.RuntimePublishRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	updated := 0
+	skipped := []int64{}
+	updatedRows := []model.EnvInfo{}
+	for _, item := range req.Items {
+		if item.ENo == 0 || (item.SystemVersion == nil && item.BeginTime == nil && item.BeginTimeText == nil) {
+			skipped = append(skipped, item.ENo)
+			continue
+		}
+		if err := db.PublishCollectedEnvInfo(item); err != nil {
+			if err == sql.ErrNoRows {
+				skipped = append(skipped, item.ENo)
+				continue
+			}
+			writeErrorDetail(w, http.StatusInternalServerError, "publish failed", err.Error())
+			return
+		}
+		env, err := db.GetEnv(item.ENo)
+		if err != nil {
+			writeErrorDetail(w, http.StatusInternalServerError, "publish verify failed", err.Error())
+			return
+		}
+		updatedRows = append(updatedRows, env)
+		updated++
+	}
+
+	writeJSON(w, http.StatusOK, model.RuntimePublishResponse{
+		Updated: updated,
+		Skipped: skipped,
+		Data:    updatedRows,
+	})
 }
 
 // TestDB handles POST /api/db/test

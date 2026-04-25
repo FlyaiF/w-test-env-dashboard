@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../models/env_info.dart';
 import '../models/environment.dart';
+import '../models/runtime_env_collection.dart';
 import '../models/server.dart';
 import '../sidecar/sidecar_client.dart';
 import 'local_store.dart';
@@ -15,6 +16,8 @@ class EnvService extends ChangeNotifier {
   int _total = 0;
   bool _loading = false;
   bool _syncing = false;
+  bool _collecting = false;
+  bool _publishingCollected = false;
   String? _error;
   String _search = '';
   int _page = 1;
@@ -24,6 +27,8 @@ class EnvService extends ChangeNotifier {
   int get total => _total;
   bool get loading => _loading;
   bool get syncing => _syncing;
+  bool get collecting => _collecting;
+  bool get publishingCollected => _publishingCollected;
   String? get error => _error;
   String get search => _search;
   int get page => _page;
@@ -72,13 +77,12 @@ class EnvService extends ChangeNotifier {
     // Apply search filter locally.
     if (_search.isNotEmpty) {
       final q = _search.toLowerCase();
-      envs =
-          envs.where((e) {
-            return (e.name?.toLowerCase().contains(q) ?? false) ||
-                (e.url?.toLowerCase().contains(q) ?? false) ||
-                (e.memo?.toLowerCase().contains(q) ?? false) ||
-                (e.version?.toLowerCase().contains(q) ?? false);
-          }).toList();
+      envs = envs.where((e) {
+        return (e.name?.toLowerCase().contains(q) ?? false) ||
+            (e.url?.toLowerCase().contains(q) ?? false) ||
+            (e.memo?.toLowerCase().contains(q) ?? false) ||
+            (e.version?.toLowerCase().contains(q) ?? false);
+      }).toList();
     }
 
     _total = envs.length;
@@ -86,11 +90,10 @@ class EnvService extends ChangeNotifier {
     // Apply pagination.
     final start = (_page - 1) * _pageSize;
     final end = start + _pageSize;
-    final paged =
-        envs.sublist(
-          start.clamp(0, envs.length),
-          end.clamp(0, envs.length),
-        );
+    final paged = envs.sublist(
+      start.clamp(0, envs.length),
+      end.clamp(0, envs.length),
+    );
 
     // Convert Environment → EnvInfo for backward compatibility with UI.
     _envs = paged.map(_toEnvInfo).toList();
@@ -111,6 +114,47 @@ class EnvService extends ChangeNotifier {
     }
     _syncing = false;
     notifyListeners();
+  }
+
+  Future<List<RuntimeEnvCollectionResult>> collectRuntimePreview() async {
+    if (_client == null) return [];
+    _collecting = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      return await _client!.collectRuntimePreview();
+    } catch (e) {
+      _error = '采集失败: $e';
+      rethrow;
+    } finally {
+      _collecting = false;
+      notifyListeners();
+    }
+  }
+
+  Future<RuntimePublishResult> publishCollected(
+    List<RuntimeEnvCollectionResult> items,
+  ) async {
+    if (_client == null) {
+      throw StateError('sidecar is not connected');
+    }
+    _publishingCollected = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final result = await _client!.publishCollected(items);
+      await _applyPublishedRows(result.data);
+      await sync();
+      return result;
+    } catch (e) {
+      _error = '发布失败: $e';
+      rethrow;
+    } finally {
+      _publishingCollected = false;
+      notifyListeners();
+    }
   }
 
   void setSearch(String value) {
@@ -152,12 +196,29 @@ class EnvService extends ChangeNotifier {
     return _store!.getServerByHost(env!.serverHost!);
   }
 
-  List<Server> get servers =>
-      _store?.servers.values.toList() ?? [];
+  List<Server> get servers => _store?.servers.values.toList() ?? [];
 
   LocalStore? get localStore => _store;
 
   // ---- Conversion helpers ----
+
+  Future<void> _applyPublishedRows(List<EnvInfo> rows) async {
+    if (_store == null || rows.isEmpty) return;
+    final now = DateTime.now();
+    for (final info in rows) {
+      final serverHost = SyncService.extractHost(info.eWebserveraddr);
+      _store!.upsertEnvironment(
+        SyncService.toEnvironment(
+          info,
+          serverHost: serverHost,
+          syncedAt: now,
+          existing: _store!.getEnvironmentByNo(info.eNo),
+        ),
+      );
+    }
+    await _store!.save();
+    _loadFromLocal();
+  }
 
   static EnvInfo _toEnvInfo(Environment e) {
     return EnvInfo(
