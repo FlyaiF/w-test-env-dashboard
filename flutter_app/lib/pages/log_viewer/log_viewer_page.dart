@@ -300,16 +300,25 @@ class _LogPanel extends StatefulWidget {
 
 class _LogPanelState extends State<_LogPanel> {
   final ScrollController _scrollController = ScrollController();
+  final ScrollController _selectableVerticalController = ScrollController();
+  final ScrollController _selectableHorizontalController = ScrollController();
+  final FocusNode _selectableFocusNode = FocusNode();
   int _totalLineCount = 0;
   final Map<int, String> _lineCache = {};
   int _displayOffset = 0;
   bool _loadingChunk = false;
   bool _autoScroll = true;
+  bool _selectionMode = false;
+  bool _loadingSelectableText = false;
+  String? _selectableLogText;
+  String? _selectableRangeLabel;
   StreamSubscription? _logSub;
   StreamSubscription? _statusSub;
   late SshSessionStatus _status;
 
   static const int _chunkSize = 200;
+  static const double _lineExtent = 16.8;
+  static const int _selectionContextLines = 1000;
 
   int get _visibleCount => _totalLineCount - _displayOffset;
 
@@ -378,11 +387,89 @@ class _LogPanelState extends State<_LogPanel> {
     }
   }
 
+  Future<void> _toggleSelectionMode() async {
+    if (_selectionMode) {
+      _exitSelectionMode();
+      return;
+    }
+
+    setState(() {
+      _selectionMode = true;
+      _autoScroll = false;
+      _loadingSelectableText = true;
+      _selectableRangeLabel = null;
+    });
+
+    final range = _selectionRange();
+    final lines = await widget.session.readLineRange(range.start, range.end);
+    if (!mounted) return;
+
+    setState(() {
+      _selectableLogText = lines.join('\n');
+      if (_selectableLogText!.isNotEmpty) {
+        _selectableLogText = '$_selectableLogText\n';
+      }
+      _selectableRangeLabel =
+          '${range.start + 1}-${range.end} / $_totalLineCount 行';
+      _loadingSelectableText = false;
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _selectableFocusNode.requestFocus();
+      }
+    });
+  }
+
+  void _exitSelectionMode() {
+    if (!_selectionMode) return;
+    setState(() => _selectionMode = false);
+  }
+
+  ({int start, int end}) _selectionRange() {
+    if (_totalLineCount <= 0) {
+      return (start: 0, end: 0);
+    }
+
+    final position = _scrollController.hasClients
+        ? _scrollController.position
+        : null;
+    final viewportLines = position == null
+        ? 60
+        : (position.viewportDimension / _lineExtent).ceil();
+    final firstVisibleLine = position == null
+        ? (_totalLineCount - viewportLines).clamp(0, _totalLineCount)
+        : _displayOffset + (position.pixels / _lineExtent).floor();
+    final isAtBottom =
+        position != null && position.pixels >= position.maxScrollExtent - 2;
+
+    if (isAtBottom) {
+      return (
+        start: (_totalLineCount - _selectionContextLines * 2).clamp(
+          0,
+          _totalLineCount,
+        ),
+        end: _totalLineCount,
+      );
+    }
+
+    final start = (firstVisibleLine - _selectionContextLines).clamp(
+      0,
+      _totalLineCount,
+    );
+    final end = (firstVisibleLine + viewportLines + _selectionContextLines)
+        .clamp(start, _totalLineCount);
+    return (start: start, end: end);
+  }
+
   @override
   void dispose() {
     _logSub?.cancel();
     _statusSub?.cancel();
     _scrollController.dispose();
+    _selectableVerticalController.dispose();
+    _selectableHorizontalController.dispose();
+    _selectableFocusNode.dispose();
     super.dispose();
   }
 
@@ -409,7 +496,9 @@ class _LogPanelState extends State<_LogPanel> {
               ),
               const Spacer(),
               Text(
-                '$_visibleCount 行',
+                _selectionMode && _selectableRangeLabel != null
+                    ? '选择范围 $_selectableRangeLabel'
+                    : '$_visibleCount 行',
                 style: const TextStyle(fontSize: 12, color: Colors.grey),
               ),
               const SizedBox(width: 8),
@@ -420,6 +509,16 @@ class _LogPanelState extends State<_LogPanel> {
                 ),
                 tooltip: _autoScroll ? '自动滚动: 开' : '自动滚动: 关',
                 onPressed: () => setState(() => _autoScroll = !_autoScroll),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              ),
+              IconButton(
+                icon: Icon(
+                  _selectionMode ? Icons.format_clear : Icons.text_fields,
+                  size: 18,
+                ),
+                tooltip: _selectionMode ? '退出选择' : '选择复制片段',
+                onPressed: _toggleSelectionMode,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               ),
@@ -443,6 +542,9 @@ class _LogPanelState extends State<_LogPanel> {
                 onPressed: () => setState(() {
                   _displayOffset = _totalLineCount;
                   _lineCache.clear();
+                  if (_selectionMode) {
+                    _selectableLogText = '';
+                  }
                 }),
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
@@ -454,41 +556,116 @@ class _LogPanelState extends State<_LogPanel> {
         Expanded(
           child: Container(
             color: const Color(0xFF1E1E1E),
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.all(8),
-              itemCount: _visibleCount,
-              itemExtent: 16.8,
-              itemBuilder: (ctx, i) {
-                final actualIndex = i + _displayOffset;
-                final line = _lineCache[actualIndex];
-                if (line == null) {
-                  _requestChunkLoad(actualIndex);
-                  return const SizedBox.shrink();
-                }
-                final isError =
-                    line.contains('ERROR') || line.contains('STDERR');
-                final isWarn = line.contains('WARN');
-                return Text(
-                  line,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontFamily: 'Sarasa Mono SC',
-                    fontSize: 12,
-                    color: isError
-                        ? Colors.red.shade300
-                        : isWarn
-                        ? Colors.orange.shade300
-                        : Colors.green.shade200,
-                    height: 1.4,
+            child: _selectionMode
+                ? _buildSelectableLog()
+                : ListView.builder(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.all(8),
+                    itemCount: _visibleCount,
+                    itemExtent: _lineExtent,
+                    itemBuilder: (ctx, i) {
+                      final actualIndex = i + _displayOffset;
+                      final line = _lineCache[actualIndex];
+                      if (line == null) {
+                        _requestChunkLoad(actualIndex);
+                        return const SizedBox.shrink();
+                      }
+                      final isError =
+                          line.contains('ERROR') || line.contains('STDERR');
+                      final isWarn = line.contains('WARN');
+                      return Text(
+                        line,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontFamily: 'Sarasa Mono SC',
+                          fontSize: 12,
+                          color: isError
+                              ? Colors.red.shade300
+                              : isWarn
+                              ? Colors.orange.shade300
+                              : Colors.green.shade200,
+                          height: 1.4,
+                        ),
+                      );
+                    },
                   ),
-                );
-              },
-            ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildSelectableLog() {
+    if (_loadingSelectableText) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return KeyboardListener(
+      focusNode: _selectableFocusNode,
+      onKeyEvent: (event) {
+        if (event is! KeyDownEvent) return;
+        final isCopyShortcut =
+            event.logicalKey == LogicalKeyboardKey.keyC &&
+            (HardwareKeyboard.instance.isControlPressed ||
+                HardwareKeyboard.instance.isMetaPressed);
+        if (isCopyShortcut) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _exitSelectionMode();
+            }
+          });
+        }
+      },
+      child: Scrollbar(
+        controller: _selectableVerticalController,
+        thumbVisibility: true,
+        child: SingleChildScrollView(
+          controller: _selectableVerticalController,
+          padding: const EdgeInsets.all(8),
+          child: Scrollbar(
+            controller: _selectableHorizontalController,
+            thumbVisibility: true,
+            notificationPredicate: (notification) => notification.depth == 1,
+            child: SingleChildScrollView(
+              controller: _selectableHorizontalController,
+              scrollDirection: Axis.horizontal,
+              child: SelectableText(
+                _selectableLogText ?? '',
+                contextMenuBuilder: (context, editableTextState) {
+                  final buttonItems = editableTextState.contextMenuButtonItems
+                      .map((item) {
+                        if (item.type != ContextMenuButtonType.copy) {
+                          return item;
+                        }
+
+                        return ContextMenuButtonItem(
+                          type: item.type,
+                          label: item.label,
+                          onPressed: () {
+                            item.onPressed?.call();
+                            _exitSelectionMode();
+                          },
+                        );
+                      })
+                      .toList();
+
+                  return AdaptiveTextSelectionToolbar.buttonItems(
+                    anchors: editableTextState.contextMenuAnchors,
+                    buttonItems: buttonItems,
+                  );
+                },
+                style: TextStyle(
+                  fontFamily: 'Sarasa Mono SC',
+                  fontSize: 12,
+                  color: Colors.green.shade200,
+                  height: 1.4,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 

@@ -3,7 +3,7 @@ import 'dart:io';
 
 class LogFileStore {
   final File _file;
-  IOSink? _sink;
+  RandomAccessFile? _writer;
   final List<int> _lineOffsets = [];
   int _currentOffset = 0;
   bool _disposed = false;
@@ -19,18 +19,22 @@ class LogFileStore {
     );
     await file.create();
     final store = LogFileStore._(file);
-    store._sink = file.openWrite(mode: FileMode.writeOnly);
+    store._writer = await file.open(mode: FileMode.write);
     return store;
   }
 
   int get totalLines => _lineOffsets.length;
 
   void appendLine(String line) {
-    if (_disposed || _sink == null) return;
+    if (_disposed || _writer == null) return;
     final bytes = utf8.encode('$line\n');
     _lineOffsets.add(_currentOffset);
     _currentOffset += bytes.length;
-    _sink!.add(bytes);
+    try {
+      _writer!.writeFromSync(bytes);
+    } on FileSystemException {
+      _disposed = true;
+    }
   }
 
   Future<List<String>> readLines(int start, int end) async {
@@ -40,8 +44,6 @@ class LogFileStore {
     if (start >= end) return [];
 
     try {
-      await _sink?.flush();
-
       final startOffset = _lineOffsets[start];
       final endOffset = end < _lineOffsets.length
           ? _lineOffsets[end]
@@ -65,7 +67,6 @@ class LogFileStore {
   Future<String> readAllText() async {
     if (_disposed) return '';
     try {
-      await _sink?.flush();
       return await _file.readAsString();
     } on FileSystemException {
       return '';
@@ -76,10 +77,9 @@ class LogFileStore {
     if (_disposed) return;
     _disposed = true;
     try {
-      await _sink?.flush();
-      await _sink?.close();
+      await _writer?.close();
     } catch (_) {}
-    _sink = null;
+    _writer = null;
     try {
       await _file.delete();
     } catch (_) {}
