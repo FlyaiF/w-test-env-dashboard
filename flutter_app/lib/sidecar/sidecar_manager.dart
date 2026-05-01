@@ -94,6 +94,32 @@ class SidecarManager extends ChangeNotifier {
     await start(dsn);
   }
 
+  Future<String> testConnection(String dsn) async {
+    final binaryPath = _resolveBinaryPath();
+    final file = File(binaryPath);
+    if (!await file.exists()) {
+      throw StateError('找不到后端服务: $binaryPath');
+    }
+
+    final result = await Process.run(binaryPath, [
+      '--test-dsn',
+      dsn,
+    ]).timeout(const Duration(seconds: 20));
+
+    if (result.exitCode == 0) {
+      return 'connection successful';
+    }
+
+    final stderr = (result.stderr as String).trim();
+    final stdout = (result.stdout as String).trim();
+    final message = stderr.isNotEmpty ? stderr : stdout;
+    throw StateError(
+      message.replaceFirst('DB_ERROR=', '').trim().isEmpty
+          ? '连接失败'
+          : message.replaceFirst('DB_ERROR=', '').trim(),
+    );
+  }
+
   String _resolveBinaryPath() {
     final exe = Platform.resolvedExecutable;
 

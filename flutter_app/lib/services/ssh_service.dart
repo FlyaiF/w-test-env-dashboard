@@ -44,6 +44,10 @@ class SshLogSession {
     status = SshSessionStatus.connecting;
     _statusController.add(SshSessionStatus.connecting);
     try {
+      if (logPath.trim().isEmpty) {
+        throw ArgumentError('日志路径为空');
+      }
+
       _logStore = await LogFileStore.create();
       final socket = await SSHSocket.connect(
         host,
@@ -57,7 +61,9 @@ class SshLogSession {
         onPasswordRequest: () => password,
       );
 
-      _session = await _client!.execute('tail -f $logPath');
+      _session = await _client!.execute(
+        'tail -n 200 -f ${_shellQuote(logPath)}',
+      );
 
       status = SshSessionStatus.connected;
       _statusController.add(SshSessionStatus.connected);
@@ -94,6 +100,10 @@ class SshLogSession {
       _logController.add('[连接失败] $e');
       rethrow;
     }
+  }
+
+  String _shellQuote(String value) {
+    return "'${value.replaceAll("'", "'\"'\"'")}'";
   }
 
   void _addLines(String text) {

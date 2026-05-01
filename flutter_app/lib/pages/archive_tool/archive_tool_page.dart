@@ -151,16 +151,99 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
 
   Future<void> _replaceEntry(String zipExpr) async {
     final result = await FilePicker.platform.pickFiles();
-    if (result == null || result.files.single.path == null) return;
+    final sourcePath = result?.files.single.path;
+    if (sourcePath == null) return;
+
+    if (!mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('确认替换'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('此操作会直接修改当前归档文件。建议在替换前确认已有备份。'),
+            const SizedBox(height: 12),
+            _confirmRow('目标条目', zipExpr),
+            _confirmRow('源文件', sourcePath),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(Icons.swap_horiz),
+            label: const Text('确认替换'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
 
     if (!mounted) return;
     final service = context.read<ZiprService>();
-    await service.replaceEntry(zipExpr, result.files.single.path!);
-    if (mounted && service.error != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('替换失败: ${service.error}')));
+    await service.replaceEntry(zipExpr, sourcePath);
+    if (!mounted) return;
+    final message = service.error == null
+        ? '已用 ${_basename(sourcePath)} 替换目标条目'
+        : '替换失败: ${service.error}';
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Widget _confirmRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 72,
+            child: Text(
+              label,
+              style: TextStyle(color: Theme.of(context).colorScheme.outline),
+            ),
+          ),
+          Expanded(child: SelectableText(value)),
+        ],
+      ),
+    );
+  }
+
+  String _basename(String path) {
+    final parts = path.split(RegExp(r'[/\\]'));
+    return parts.isEmpty ? path : parts.last;
+  }
+
+  void _showArchiveActionError(String prefix, ZiprService service) {
+    if (service.error == null) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('$prefix: ${service.error}')));
+  }
+
+  void _showPatchSummary(
+    String successPrefix,
+    String failurePrefix,
+    ApplySummary? summary,
+    ZiprService service,
+  ) {
+    if (summary == null) {
+      _showArchiveActionError(failurePrefix, service);
+      return;
     }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '$successPrefix: 替换=${summary.replaced}, 删除=${summary.deleted}',
+        ),
+      ),
+    );
   }
 
   Future<void> _deleteEntry(String zipExpr) async {
@@ -247,12 +330,8 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
       _patchSpecPath!,
       dryRun: true,
     );
-    if (mounted && summary != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('预演结果: 替换=${summary.replaced}, 删除=${summary.deleted}'),
-        ),
-      );
+    if (mounted) {
+      _showPatchSummary('预演结果', '预演失败', summary, service);
     }
   }
 
@@ -265,12 +344,8 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
       service.currentArchivePath!,
       _patchSpecPath!,
     );
-    if (mounted && summary != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('已应用: 替换=${summary.replaced}, 删除=${summary.deleted}'),
-        ),
-      );
+    if (mounted) {
+      _showPatchSummary('已应用', '应用失败', summary, service);
     }
   }
 
@@ -382,9 +457,7 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
                   _patchDraftFromDir(path);
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('请先打开归档文件，再拖入目录进行批量替换'),
-                    ),
+                    const SnackBar(content: Text('请先打开归档文件，再拖入目录进行批量替换')),
                   );
                 }
               } else if (_isValidArchiveFile(path)) {
@@ -446,100 +519,96 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
                   )
                 : _detailMode == DetailMode.diff &&
                       service.diffEntries.isNotEmpty
-                    ? Stack(
-                        children: [
-                          DiffTreePanel(
-                            diffEntries: service.diffEntries,
-                            leftPath: service.diffLeftPath ?? '',
-                            rightPath: service.diffRightPath ?? '',
-                            onClose: () {
-                              service.clearDiff();
-                              setState(() => _detailMode = DetailMode.entry);
-                            },
-                          ),
-                          if (_isDragging)
-                            Positioned.fill(
-                              child: Container(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .primary
-                                    .withValues(alpha: 0.08),
-                                child: Center(
-                                  child: Text(
-                                    '松开以切换归档文件',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      color:
-                                          Theme.of(context).colorScheme.primary,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
+                ? Stack(
+                    children: [
+                      DiffTreePanel(
+                        diffEntries: service.diffEntries,
+                        leftPath: service.diffLeftPath ?? '',
+                        rightPath: service.diffRightPath ?? '',
+                        onClose: () {
+                          service.clearDiff();
+                          setState(() => _detailMode = DetailMode.entry);
+                        },
+                      ),
+                      if (_isDragging)
+                        Positioned.fill(
+                          child: Container(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.primary.withValues(alpha: 0.08),
+                            child: Center(
+                              child: Text(
+                                '松开以切换归档文件',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: Theme.of(context).colorScheme.primary,
+                                  fontWeight: FontWeight.w500,
                                 ),
                               ),
                             ),
-                        ],
-                      )
-                    : Stack(
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                flex: 3,
-                                child: ArchiveTreePanel(
-                                  entries: service.entries,
-                                  onEntrySelected: (entry) {
-                                    setState(() {
-                                      _selectedEntry = entry;
-                                      _detailMode = DetailMode.entry;
-                                    });
-                                  },
-                                  onExtract: _extractEntry,
-                                  onReplace: _replaceEntry,
-                                  onDelete: _deleteEntry,
-                                ),
-                              ),
-                              const VerticalDivider(width: 1),
-                              Expanded(
-                                flex: 2,
-                                child: DetailPanel(
-                                  mode: _detailMode,
-                                  selectedEntry: _selectedEntry,
-                                  diffEntries: service.diffEntries,
-                                  patchSpecToml: _patchSpecToml,
-                                  unresolvedEntries: _unresolvedEntries,
-                                  onPatchDraft: _patchDraft,
-                                  onPatchDryRun: _patchDryRun,
-                                  onPatchApply: _patchApply,
-                                  onOpenInEditor: _openInEditor,
-                                  onReload: _reloadSpec,
-                                  onRestoreOriginal: _restoreOriginal,
-                                  onResolve: _patchResolve,
-                                ),
-                              ),
-                            ],
                           ),
-                          if (_isDragging)
-                            Positioned.fill(
-                              child: Container(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .primary
-                                    .withValues(alpha: 0.08),
-                                child: Center(
-                                  child: Text(
-                                    '松开以切换归档文件',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      color:
-                                          Theme.of(context).colorScheme.primary,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                              ),
+                        ),
+                    ],
+                  )
+                : Stack(
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: ArchiveTreePanel(
+                              entries: service.entries,
+                              onEntrySelected: (entry) {
+                                setState(() {
+                                  _selectedEntry = entry;
+                                  _detailMode = DetailMode.entry;
+                                });
+                              },
+                              onExtract: _extractEntry,
+                              onReplace: _replaceEntry,
+                              onDelete: _deleteEntry,
                             ),
+                          ),
+                          const VerticalDivider(width: 1),
+                          Expanded(
+                            flex: 2,
+                            child: DetailPanel(
+                              mode: _detailMode,
+                              selectedEntry: _selectedEntry,
+                              diffEntries: service.diffEntries,
+                              patchSpecToml: _patchSpecToml,
+                              unresolvedEntries: _unresolvedEntries,
+                              onPatchDraft: _patchDraft,
+                              onPatchDryRun: _patchDryRun,
+                              onPatchApply: _patchApply,
+                              onOpenInEditor: _openInEditor,
+                              onReload: _reloadSpec,
+                              onRestoreOriginal: _restoreOriginal,
+                              onResolve: _patchResolve,
+                            ),
+                          ),
                         ],
                       ),
+                      if (_isDragging)
+                        Positioned.fill(
+                          child: Container(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.primary.withValues(alpha: 0.08),
+                            child: Center(
+                              child: Text(
+                                '松开以切换归档文件',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: Theme.of(context).colorScheme.primary,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
           ),
         ),
         // Error bar

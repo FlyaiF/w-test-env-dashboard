@@ -15,8 +15,18 @@ import (
 
 func main() {
 	dsn := flag.String("dsn", "", "Oracle DSN (oracle://user:pass@host:port/service)")
+	testDsn := flag.String("test-dsn", "", "Test an Oracle DSN and exit")
 	listen := flag.String("listen", "127.0.0.1:0", "Listen address (default: random port)")
 	flag.Parse()
+
+	if *testDsn != "" {
+		if err := db.TestConnection(*testDsn); err != nil {
+			fmt.Fprintf(os.Stderr, "DB_ERROR=%s\n", err.Error())
+			os.Exit(1)
+		}
+		fmt.Println("connection successful")
+		return
+	}
 
 	if *dsn == "" {
 		fmt.Fprintln(os.Stderr, "error: --dsn is required")

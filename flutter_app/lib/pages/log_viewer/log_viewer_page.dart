@@ -15,20 +15,28 @@ class LogViewerPage extends StatefulWidget {
   State<LogViewerPage> createState() => LogViewerPageState();
 }
 
-class LogViewerPageState extends State<LogViewerPage>
-    with TickerProviderStateMixin {
+class LogViewerPageState extends State<LogViewerPage> {
   final List<_LogTab> _tabs = [];
-  TabController? _tabController;
+  final _envSearchController = TextEditingController();
+  int _activeTabIndex = 0;
+  int? _selectedEnvNo;
 
   void _addTab(EnvInfo env, String username, String password) {
-    final parsed = parseServerAddr(env.eWebserveraddr ?? '');
+    final existingIndex = _tabs.indexWhere((tab) => tab.env.eNo == env.eNo);
+    if (existingIndex >= 0) {
+      setState(() {
+        _activeTabIndex = existingIndex;
+        _selectedEnvNo = env.eNo;
+      });
+      return;
+    }
 
+    final parsed = parseServerAddr(env.eWebserveraddr ?? '');
     final session = SshLogSession(
       host: parsed.host,
       port: parsed.port,
       logPath: env.eWeblogpath ?? '',
     );
-
     final tab = _LogTab(
       name: env.eName ?? '环境#${env.eNo}',
       session: session,
@@ -37,16 +45,12 @@ class LogViewerPageState extends State<LogViewerPage>
 
     setState(() {
       _tabs.add(tab);
-      _tabController?.dispose();
-      _tabController = TabController(
-        length: _tabs.length,
-        vsync: this,
-        initialIndex: _tabs.length - 1,
-      );
+      _activeTabIndex = _tabs.length - 1;
+      _selectedEnvNo = env.eNo;
     });
 
     session.connect(username: username, password: password).catchError((e) {
-      // Error is handled via the stream
+      // Error is exposed inside the session stream.
     });
   }
 
@@ -62,138 +66,77 @@ class LogViewerPageState extends State<LogViewerPage>
     _tabs[index].session.disconnect();
     setState(() {
       _tabs.removeAt(index);
-      _tabController?.dispose();
-      if (_tabs.isNotEmpty) {
-        _tabController = TabController(
-          length: _tabs.length,
-          vsync: this,
-          initialIndex: index.clamp(0, _tabs.length - 1),
-        );
+      if (_tabs.isEmpty) {
+        _activeTabIndex = 0;
       } else {
-        _tabController = null;
+        _activeTabIndex = index.clamp(0, _tabs.length - 1);
       }
     });
   }
 
-  void _showConnectDialog() async {
-    final envService = context.read<EnvService>();
+  Future<void> _showCredentialDialog(EnvInfo env) async {
     final config = await ConfigService.load();
+    final parsed = parseServerAddr(env.eWebserveraddr ?? '');
+    final usernameCtrl = TextEditingController(
+      text: parsed.username ?? config.ssh.defaultUsername,
+    );
+    final passwordCtrl = TextEditingController(
+      text: parsed.password ?? config.ssh.defaultPassword,
+    );
 
     if (!mounted) return;
 
-    final envs = envService.envs
-        .where((e) => e.eWebserveraddr != null && e.eWeblogpath != null)
-        .toList();
-
-    if (envs.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('没有配置了Web服务地址和日志路径的环境')));
-      return;
-    }
-
-    EnvInfo? selectedEnv = envs.first;
-    final usernameCtrl = TextEditingController();
-    final passwordCtrl = TextEditingController();
-
-    // Pre-fill credentials from the selected env's server addr
-    void fillCredentials(EnvInfo? env) {
-      if (env?.eWebserveraddr != null) {
-        final parsed = parseServerAddr(env!.eWebserveraddr!);
-        usernameCtrl.text = parsed.username ?? config.ssh.defaultUsername;
-        passwordCtrl.text = parsed.password ?? config.ssh.defaultPassword;
-      } else {
-        usernameCtrl.text = config.ssh.defaultUsername;
-        passwordCtrl.text = config.ssh.defaultPassword;
-      }
-    }
-
-    fillCredentials(selectedEnv);
-
     final result = await showDialog<bool>(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) {
-          final displayAddr = selectedEnv?.eWebserveraddr != null
-              ? '${parseServerAddr(selectedEnv!.eWebserveraddr!).host}:${parseServerAddr(selectedEnv!.eWebserveraddr!).port}'
-              : '-';
-          return AlertDialog(
-            title: const Text('SSH连接'),
-            content: SizedBox(
-              width: 400,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  DropdownButtonFormField<EnvInfo>(
-                    initialValue: selectedEnv,
-                    decoration: const InputDecoration(
-                      labelText: '选择环境',
-                      border: OutlineInputBorder(),
-                    ),
-                    isExpanded: true,
-                    items: envs.map((e) {
-                      final p = parseServerAddr(e.eWebserveraddr!);
-                      return DropdownMenuItem(
-                        value: e,
-                        child: Text(
-                          '${e.eName ?? "#${e.eNo}"} (${p.host}:${p.port})',
-                        ),
-                      );
-                    }).toList(),
-                    onChanged: (v) {
-                      setDialogState(() {
-                        selectedEnv = v;
-                        fillCredentials(v);
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    '服务器: $displayAddr',
-                    style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-                  ),
-                  Text(
-                    '日志路径: ${selectedEnv?.eWeblogpath ?? "-"}',
-                    style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: usernameCtrl,
-                    decoration: const InputDecoration(
-                      labelText: '用户名',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: passwordCtrl,
-                    obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: '密码',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ],
+      builder: (ctx) => AlertDialog(
+        title: Text('连接 ${env.eName ?? "#${env.eNo}"}'),
+        content: SizedBox(
+          width: 440,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _DialogMetaRow(
+                label: '服务器',
+                value: '${parsed.host}:${parsed.port}',
               ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('取消'),
+              _DialogMetaRow(label: '日志路径', value: env.eWeblogpath ?? '-'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: usernameCtrl,
+                decoration: const InputDecoration(
+                  labelText: '用户名',
+                  border: OutlineInputBorder(),
+                ),
               ),
-              FilledButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('连接'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: passwordCtrl,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: '密码',
+                  border: OutlineInputBorder(),
+                ),
               ),
             ],
-          );
-        },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(Icons.terminal),
+            label: const Text('连接'),
+          ),
+        ],
       ),
     );
 
-    if (result == true && selectedEnv != null) {
-      _addTab(selectedEnv!, usernameCtrl.text, passwordCtrl.text);
+    if (result == true) {
+      _addTab(env, usernameCtrl.text.trim(), passwordCtrl.text);
     }
 
     usernameCtrl.dispose();
@@ -205,79 +148,423 @@ class LogViewerPageState extends State<LogViewerPage>
     for (final tab in _tabs) {
       tab.session.disconnect();
     }
-    _tabController?.dispose();
+    _envSearchController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final envService = context.watch<EnvService>();
+    final envs = envService.logCapableEnvs;
+    final filteredEnvs = _filteredEnvs(envs);
+    final selectedEnv = _selectedEnv(filteredEnvs);
+    final activeTab = _tabs.isEmpty ? null : _tabs[_activeTabIndex];
+
     return Column(
       children: [
-        // Header
+        _buildHeader(envs.length, filteredEnvs.length),
+        const Divider(height: 1),
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 980;
+              if (compact) {
+                return Column(
+                  children: [
+                    SizedBox(
+                      height: 260,
+                      child: _buildEnvironmentPane(filteredEnvs, selectedEnv),
+                    ),
+                    const Divider(height: 1),
+                    Expanded(child: _buildLogWorkspace(activeTab, selectedEnv)),
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  SizedBox(
+                    width: 360,
+                    child: _buildEnvironmentPane(filteredEnvs, selectedEnv),
+                  ),
+                  const VerticalDivider(width: 1),
+                  Expanded(child: _buildLogWorkspace(activeTab, selectedEnv)),
+                ],
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHeader(int totalLogCapable, int visibleCount) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+      child: Row(
+        children: [
+          Text('日志查看', style: theme.textTheme.headlineSmall),
+          const SizedBox(width: 12),
+          Text(
+            '可连接 $visibleCount / $totalLogCapable 个环境',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.outline,
+            ),
+          ),
+          const Spacer(),
+          if (_tabs.isNotEmpty)
+            TextButton.icon(
+              onPressed: () {
+                for (final tab in _tabs) {
+                  tab.session.disconnect();
+                }
+                setState(() {
+                  _tabs.clear();
+                  _activeTabIndex = 0;
+                });
+              },
+              icon: const Icon(Icons.close),
+              label: const Text('关闭全部'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEnvironmentPane(List<EnvInfo> envs, EnvInfo? selectedEnv) {
+    final theme = Theme.of(context);
+    return Column(
+      children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-          child: Row(
+          padding: const EdgeInsets.all(16),
+          child: TextField(
+            controller: _envSearchController,
+            decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: _envSearchController.text.isEmpty
+                  ? null
+                  : IconButton(
+                      icon: const Icon(Icons.close),
+                      tooltip: '清空搜索',
+                      onPressed: () {
+                        _envSearchController.clear();
+                        setState(() {});
+                      },
+                    ),
+              hintText: '搜索环境、主机、日志路径...',
+              border: const OutlineInputBorder(),
+              isDense: true,
+            ),
+            onChanged: (_) => setState(() {}),
+          ),
+        ),
+        Expanded(
+          child: envs.isEmpty
+              ? Center(
+                  child: Text(
+                    '没有可连接的日志环境',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.outline,
+                    ),
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                  itemCount: envs.length,
+                  itemBuilder: (context, index) {
+                    final env = envs[index];
+                    final parsed = parseServerAddr(env.eWebserveraddr ?? '');
+                    final selected = selectedEnv?.eNo == env.eNo;
+                    final open = _tabs.any((tab) => tab.env.eNo == env.eNo);
+                    return _LogEnvTile(
+                      env: env,
+                      host: parsed.host,
+                      port: parsed.port,
+                      selected: selected,
+                      open: open,
+                      onTap: () => setState(() => _selectedEnvNo = env.eNo),
+                      onConnect: () => connectToEnv(env),
+                      onCredentialConnect: () => _showCredentialDialog(env),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLogWorkspace(_LogTab? activeTab, EnvInfo? selectedEnv) {
+    if (activeTab == null) {
+      return _LogEmptyState(
+        env: selectedEnv,
+        onConnect: selectedEnv == null ? null : () => connectToEnv(selectedEnv),
+        onCredentialConnect: selectedEnv == null
+            ? null
+            : () => _showCredentialDialog(selectedEnv),
+      );
+    }
+
+    return Column(
+      children: [
+        _buildSessionStrip(),
+        const Divider(height: 1),
+        Expanded(
+          child: _LogPanel(
+            key: ValueKey(activeTab.env.eNo),
+            session: activeTab.session,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSessionStrip() {
+    return SizedBox(
+      height: 52,
+      child: ListView.separated(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        scrollDirection: Axis.horizontal,
+        itemCount: _tabs.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final tab = _tabs[index];
+          return InputChip(
+            selected: index == _activeTabIndex,
+            avatar: const Icon(Icons.terminal, size: 18),
+            label: Text(tab.name),
+            onSelected: (_) => setState(() => _activeTabIndex = index),
+            deleteIcon: const Icon(Icons.close, size: 16),
+            onDeleted: () => _closeTab(index),
+          );
+        },
+      ),
+    );
+  }
+
+  List<EnvInfo> _filteredEnvs(List<EnvInfo> envs) {
+    final q = _envSearchController.text.trim().toLowerCase();
+    if (q.isEmpty) return envs;
+    return envs.where((env) {
+      final parsed = parseServerAddr(env.eWebserveraddr ?? '');
+      final values = [
+        '${env.eNo}',
+        env.eName,
+        parsed.host,
+        '${parsed.port}',
+        env.eWebserveraddr,
+        env.eWeblogpath,
+      ].whereType<String>().map((value) => value.toLowerCase());
+      return values.any((value) => value.contains(q));
+    }).toList();
+  }
+
+  EnvInfo? _selectedEnv(List<EnvInfo> envs) {
+    if (envs.isEmpty) return null;
+    if (_selectedEnvNo != null) {
+      for (final env in envs) {
+        if (env.eNo == _selectedEnvNo) return env;
+      }
+    }
+    return envs.first;
+  }
+}
+
+class _LogEnvTile extends StatelessWidget {
+  final EnvInfo env;
+  final String host;
+  final int port;
+  final bool selected;
+  final bool open;
+  final VoidCallback onTap;
+  final VoidCallback onConnect;
+  final VoidCallback onCredentialConnect;
+
+  const _LogEnvTile({
+    required this.env,
+    required this.host,
+    required this.port,
+    required this.selected,
+    required this.open,
+    required this.onTap,
+    required this.onConnect,
+    required this.onCredentialConnect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.only(bottom: 8),
+      color: selected
+          ? colorScheme.primaryContainer.withValues(alpha: 0.38)
+          : colorScheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(
+          color: selected
+              ? colorScheme.primary.withValues(alpha: 0.45)
+              : colorScheme.outlineVariant,
+        ),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('日志查看', style: Theme.of(context).textTheme.headlineSmall),
-              const Spacer(),
-              FilledButton.icon(
-                onPressed: _showConnectDialog,
-                icon: const Icon(Icons.add),
-                label: const Text('新建连接'),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      env.eName ?? '环境 #${env.eNo}',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (open)
+                    Icon(
+                      Icons.check_circle,
+                      size: 18,
+                      color: Colors.green.shade700,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              _tileMeta(Icons.dns_outlined, '$host:$port'),
+              const SizedBox(height: 4),
+              _tileMeta(Icons.article_outlined, env.eWeblogpath ?? '-'),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  FilledButton.tonalIcon(
+                    onPressed: onConnect,
+                    icon: const Icon(Icons.play_arrow),
+                    label: const Text('连接'),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    onPressed: onCredentialConnect,
+                    icon: const Icon(Icons.key),
+                    tooltip: '使用指定账号连接',
+                  ),
+                ],
               ),
             ],
           ),
         ),
-        if (_tabs.isEmpty)
-          const Expanded(
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+      ),
+    );
+  }
+
+  Widget _tileMeta(IconData icon, String text) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: Colors.grey.shade700),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: Colors.grey.shade700),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _LogEmptyState extends StatelessWidget {
+  final EnvInfo? env;
+  final VoidCallback? onConnect;
+  final VoidCallback? onCredentialConnect;
+
+  const _LogEmptyState({
+    required this.env,
+    required this.onConnect,
+    required this.onCredentialConnect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.terminal, size: 56, color: theme.colorScheme.outline),
+            const SizedBox(height: 16),
+            Text(
+              env == null ? '选择一个环境开始查看日志' : env!.eName ?? '环境 #${env!.eNo}',
+              style: theme.textTheme.titleLarge,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              env == null
+                  ? '左侧只显示已配置 Web 服务地址和日志路径的环境。'
+                  : env!.eWeblogpath ?? '-',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.outline,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 18),
+            if (env != null)
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.center,
                 children: [
-                  Icon(Icons.terminal, size: 64, color: Colors.grey),
-                  SizedBox(height: 16),
-                  Text('点击"新建连接"开始查看日志', style: TextStyle(color: Colors.grey)),
+                  FilledButton.icon(
+                    onPressed: onConnect,
+                    icon: const Icon(Icons.play_arrow),
+                    label: const Text('连接日志'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: onCredentialConnect,
+                    icon: const Icon(Icons.key),
+                    label: const Text('指定账号'),
+                  ),
                 ],
               ),
-            ),
-          )
-        else ...[
-          // Tab bar
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: TabBar(
-              controller: _tabController,
-              isScrollable: true,
-              tabs: _tabs.asMap().entries.map((entry) {
-                final i = entry.key;
-                final tab = entry.value;
-                return Tab(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(tab.name),
-                      const SizedBox(width: 4),
-                      InkWell(
-                        onTap: () => _closeTab(i),
-                        child: const Icon(Icons.close, size: 16),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-          // Tab content
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: _tabs
-                  .map((tab) => _LogPanel(session: tab.session))
-                  .toList(),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DialogMetaRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _DialogMetaRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 72,
+            child: Text(
+              label,
+              style: TextStyle(color: Theme.of(context).colorScheme.outline),
             ),
           ),
+          Expanded(child: SelectableText(value)),
         ],
-      ],
+      ),
     );
   }
 }
@@ -292,7 +579,7 @@ class _LogTab {
 
 class _LogPanel extends StatefulWidget {
   final SshLogSession session;
-  const _LogPanel({required this.session});
+  const _LogPanel({super.key, required this.session});
 
   @override
   State<_LogPanel> createState() => _LogPanelState();
@@ -302,6 +589,7 @@ class _LogPanelState extends State<_LogPanel> {
   final ScrollController _scrollController = ScrollController();
   final ScrollController _selectableVerticalController = ScrollController();
   final ScrollController _selectableHorizontalController = ScrollController();
+  final TextEditingController _logSearchController = TextEditingController();
   final FocusNode _selectableFocusNode = FocusNode();
   int _totalLineCount = 0;
   final Map<int, String> _lineCache = {};
@@ -309,6 +597,8 @@ class _LogPanelState extends State<_LogPanel> {
   bool _loadingChunk = false;
   bool _autoScroll = true;
   bool _selectionMode = false;
+  bool _showErrorsOnly = false;
+  bool _showWarningsOnly = false;
   bool _loadingSelectableText = false;
   String? _selectableLogText;
   String? _selectableRangeLabel;
@@ -321,6 +611,19 @@ class _LogPanelState extends State<_LogPanel> {
   static const int _selectionContextLines = 1000;
 
   int get _visibleCount => _totalLineCount - _displayOffset;
+  bool get _hasLogFilter =>
+      _logSearchController.text.trim().isNotEmpty ||
+      _showErrorsOnly ||
+      _showWarningsOnly;
+
+  List<int> get _filteredLineIndexes {
+    final indexes =
+        _lineCache.keys.where((index) => index >= _displayOffset).toList()
+          ..sort();
+    return indexes
+        .where((index) => _lineMatchesFilters(_lineCache[index] ?? ''))
+        .toList();
+  }
 
   @override
   void initState() {
@@ -469,95 +772,24 @@ class _LogPanelState extends State<_LogPanel> {
     _scrollController.dispose();
     _selectableVerticalController.dispose();
     _selectableHorizontalController.dispose();
+    _logSearchController.dispose();
     _selectableFocusNode.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final filteredIndexes = _hasLogFilter ? _filteredLineIndexes : null;
     return Column(
       children: [
-        // Toolbar
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          color: Colors.grey.shade100,
-          child: Row(
-            children: [
-              _statusBadge(),
-              const SizedBox(width: 8),
-              Text(
-                '${widget.session.host}:${widget.session.port}',
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                widget.session.logPath,
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-              const Spacer(),
-              Text(
-                _selectionMode && _selectableRangeLabel != null
-                    ? '选择范围 $_selectableRangeLabel'
-                    : '$_visibleCount 行',
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                icon: Icon(
-                  _autoScroll ? Icons.vertical_align_bottom : Icons.pause,
-                  size: 18,
-                ),
-                tooltip: _autoScroll ? '自动滚动: 开' : '自动滚动: 关',
-                onPressed: () => setState(() => _autoScroll = !_autoScroll),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-              ),
-              IconButton(
-                icon: Icon(
-                  _selectionMode ? Icons.format_clear : Icons.text_fields,
-                  size: 18,
-                ),
-                tooltip: _selectionMode ? '退出选择' : '选择复制片段',
-                onPressed: _toggleSelectionMode,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-              ),
-              IconButton(
-                icon: const Icon(Icons.copy, size: 18),
-                tooltip: '复制全部',
-                onPressed: () async {
-                  final messenger = ScaffoldMessenger.of(context);
-                  final text = await widget.session.readAllText();
-                  await Clipboard.setData(ClipboardData(text: text));
-                  messenger.showSnackBar(
-                    const SnackBar(content: Text('已复制到剪贴板')),
-                  );
-                },
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-              ),
-              IconButton(
-                icon: const Icon(Icons.delete_outline, size: 18),
-                tooltip: '清空',
-                onPressed: () => setState(() {
-                  _displayOffset = _totalLineCount;
-                  _lineCache.clear();
-                  if (_selectionMode) {
-                    _selectableLogText = '';
-                  }
-                }),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-              ),
-            ],
-          ),
-        ),
-        // Log content
+        _buildToolbar(filteredIndexes?.length),
         Expanded(
           child: Container(
             color: const Color(0xFF1E1E1E),
             child: _selectionMode
                 ? _buildSelectableLog()
+                : _hasLogFilter
+                ? _buildFilteredLog(filteredIndexes ?? const [])
                 : ListView.builder(
                     controller: _scrollController,
                     padding: const EdgeInsets.all(8),
@@ -570,30 +802,216 @@ class _LogPanelState extends State<_LogPanel> {
                         _requestChunkLoad(actualIndex);
                         return const SizedBox.shrink();
                       }
-                      final isError =
-                          line.contains('ERROR') || line.contains('STDERR');
-                      final isWarn = line.contains('WARN');
-                      return Text(
-                        line,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontFamily: 'Sarasa Mono SC',
-                          fontSize: 12,
-                          color: isError
-                              ? Colors.red.shade300
-                              : isWarn
-                              ? Colors.orange.shade300
-                              : Colors.green.shade200,
-                          height: 1.4,
-                        ),
-                      );
+                      return _logLine(line);
                     },
                   ),
           ),
         ),
       ],
     );
+  }
+
+  Widget _buildToolbar(int? filteredCount) {
+    final theme = Theme.of(context);
+    final lineLabel = _selectionMode && _selectableRangeLabel != null
+        ? '选择范围 $_selectableRangeLabel'
+        : _hasLogFilter
+        ? '$filteredCount / $_visibleCount 行'
+        : '$_visibleCount 行';
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        border: Border(
+          bottom: BorderSide(color: theme.colorScheme.outlineVariant),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            _statusBadge(),
+            _metaChip(
+              Icons.dns_outlined,
+              '${widget.session.host}:${widget.session.port}',
+            ),
+            _metaChip(Icons.article_outlined, widget.session.logPath),
+            SizedBox(
+              width: 260,
+              child: TextField(
+                controller: _logSearchController,
+                decoration: InputDecoration(
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: _logSearchController.text.isEmpty
+                      ? null
+                      : IconButton(
+                          icon: const Icon(Icons.close),
+                          tooltip: '清空搜索',
+                          onPressed: () {
+                            _logSearchController.clear();
+                            setState(() {});
+                          },
+                        ),
+                  hintText: '过滤日志内容...',
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                ),
+                onChanged: (_) => setState(() => _autoScroll = false),
+              ),
+            ),
+            FilterChip(
+              selected: _showErrorsOnly,
+              avatar: const Icon(Icons.error_outline, size: 16),
+              label: const Text('错误'),
+              visualDensity: VisualDensity.compact,
+              onSelected: (value) => setState(() {
+                _showErrorsOnly = value;
+                if (value) _showWarningsOnly = false;
+                _autoScroll = false;
+              }),
+            ),
+            FilterChip(
+              selected: _showWarningsOnly,
+              avatar: const Icon(Icons.warning_amber, size: 16),
+              label: const Text('警告'),
+              visualDensity: VisualDensity.compact,
+              onSelected: (value) => setState(() {
+                _showWarningsOnly = value;
+                if (value) _showErrorsOnly = false;
+                _autoScroll = false;
+              }),
+            ),
+            Text(
+              lineLabel,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.outline,
+              ),
+            ),
+            IconButton(
+              icon: Icon(
+                _autoScroll ? Icons.vertical_align_bottom : Icons.pause,
+                size: 18,
+              ),
+              tooltip: _autoScroll ? '自动滚动: 开' : '自动滚动: 关',
+              onPressed: () => setState(() => _autoScroll = !_autoScroll),
+            ),
+            IconButton(
+              icon: Icon(
+                _selectionMode ? Icons.format_clear : Icons.text_fields,
+                size: 18,
+              ),
+              tooltip: _selectionMode ? '退出选择' : '选择复制片段',
+              onPressed: _toggleSelectionMode,
+            ),
+            IconButton(
+              icon: const Icon(Icons.copy, size: 18),
+              tooltip: '复制全部',
+              onPressed: _copyAll,
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete_outline, size: 18),
+              tooltip: '清空显示',
+              onPressed: _clearVisibleLog,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilteredLog(List<int> indexes) {
+    if (indexes.isEmpty) {
+      return Center(
+        child: Text('没有匹配的日志', style: TextStyle(color: Colors.grey.shade400)),
+      );
+    }
+    return ListView.builder(
+      controller: _scrollController,
+      padding: const EdgeInsets.all(8),
+      itemCount: indexes.length,
+      itemExtent: _lineExtent,
+      itemBuilder: (ctx, i) => _logLine(_lineCache[indexes[i]] ?? ''),
+    );
+  }
+
+  Widget _logLine(String line) {
+    final query = _logSearchController.text.trim();
+    return Container(
+      color:
+          query.isNotEmpty && line.toLowerCase().contains(query.toLowerCase())
+          ? Colors.yellow.withValues(alpha: 0.16)
+          : null,
+      child: Text(
+        line,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontFamily: 'Sarasa Mono SC',
+          fontSize: 12,
+          color: _lineColor(line),
+          height: 1.4,
+        ),
+      ),
+    );
+  }
+
+  Widget _metaChip(IconData icon, String label) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 360),
+      child: Chip(
+        avatar: Icon(icon, size: 16),
+        label: Text(label, overflow: TextOverflow.ellipsis),
+        visualDensity: VisualDensity.compact,
+      ),
+    );
+  }
+
+  Color _lineColor(String line) {
+    if (_isErrorLine(line)) return Colors.red.shade300;
+    if (_isWarnLine(line)) return Colors.orange.shade300;
+    return Colors.green.shade200;
+  }
+
+  bool _lineMatchesFilters(String line) {
+    if (_showErrorsOnly && !_isErrorLine(line)) return false;
+    if (_showWarningsOnly && !_isWarnLine(line)) return false;
+    final query = _logSearchController.text.trim().toLowerCase();
+    return query.isEmpty || line.toLowerCase().contains(query);
+  }
+
+  bool _isErrorLine(String line) {
+    final upper = line.toUpperCase();
+    return upper.contains('ERROR') ||
+        upper.contains('STDERR') ||
+        line.contains('异常') ||
+        line.contains('失败');
+  }
+
+  bool _isWarnLine(String line) {
+    final upper = line.toUpperCase();
+    return upper.contains('WARN') || line.contains('警告');
+  }
+
+  Future<void> _copyAll() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final text = await widget.session.readAllText();
+    await Clipboard.setData(ClipboardData(text: text));
+    messenger.showSnackBar(const SnackBar(content: Text('已复制到剪贴板')));
+  }
+
+  void _clearVisibleLog() {
+    setState(() {
+      _displayOffset = _totalLineCount;
+      _lineCache.clear();
+      _logSearchController.clear();
+      _showErrorsOnly = false;
+      _showWarningsOnly = false;
+      if (_selectionMode) {
+        _selectableLogText = '';
+      }
+    });
   }
 
   Widget _buildSelectableLog() {

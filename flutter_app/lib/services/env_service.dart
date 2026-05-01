@@ -33,6 +33,19 @@ class EnvService extends ChangeNotifier {
   String get search => _search;
   int get page => _page;
   int get pageSize => _pageSize;
+  List<EnvInfo> get allEnvs {
+    if (_store == null) return _envs;
+    return _store!.environments.map(_toEnvInfo).toList();
+  }
+
+  List<EnvInfo> get filteredEnvs {
+    if (_store == null) return _envs;
+    return _filteredLocalEnvironments().map(_toEnvInfo).toList();
+  }
+
+  List<EnvInfo> get logCapableEnvs => allEnvs
+      .where((e) => e.eWebserveraddr != null && e.eWeblogpath != null)
+      .toList();
 
   void setLocalStore(LocalStore store) {
     _store = store;
@@ -72,18 +85,7 @@ class EnvService extends ChangeNotifier {
   }
 
   void _loadFromLocal() {
-    var envs = _store!.environments;
-
-    // Apply search filter locally.
-    if (_search.isNotEmpty) {
-      final q = _search.toLowerCase();
-      envs = envs.where((e) {
-        return (e.name?.toLowerCase().contains(q) ?? false) ||
-            (e.url?.toLowerCase().contains(q) ?? false) ||
-            (e.memo?.toLowerCase().contains(q) ?? false) ||
-            (e.version?.toLowerCase().contains(q) ?? false);
-      }).toList();
-    }
+    final envs = _filteredLocalEnvironments();
 
     _total = envs.length;
 
@@ -97,6 +99,25 @@ class EnvService extends ChangeNotifier {
 
     // Convert Environment → EnvInfo for backward compatibility with UI.
     _envs = paged.map(_toEnvInfo).toList();
+  }
+
+  List<Environment> _filteredLocalEnvironments() {
+    var envs = _store!.environments;
+
+    if (_search.isEmpty) return envs;
+
+    final q = _search.toLowerCase();
+    return envs.where((e) {
+      return (e.name?.toLowerCase().contains(q) ?? false) ||
+          (e.url?.toLowerCase().contains(q) ?? false) ||
+          (e.memo?.toLowerCase().contains(q) ?? false) ||
+          (e.version?.toLowerCase().contains(q) ?? false) ||
+          e.eNo.toString().contains(q) ||
+          (e.ywdb?.toLowerCase().contains(q) ?? false) ||
+          (e.zjdb?.toLowerCase().contains(q) ?? false) ||
+          (e.webserverAddrRaw?.toLowerCase().contains(q) ?? false) ||
+          (e.webLogPath?.toLowerCase().contains(q) ?? false);
+    }).toList();
   }
 
   /// Sync from remote Oracle, then reload from local store.

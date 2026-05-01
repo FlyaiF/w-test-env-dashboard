@@ -1,12 +1,16 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:intl/intl.dart';
+
 import '../../models/env_info.dart';
 import '../../services/env_service.dart';
 import '../../widgets/filter_history_text_field.dart';
+
+enum _EnvQuickFilter { logConfig, url, recent, incomplete }
 
 class DashboardPage extends StatefulWidget {
   final void Function(EnvInfo env)? onViewLog;
@@ -20,7 +24,9 @@ class DashboardPage extends StatefulWidget {
 class _DashboardPageState extends State<DashboardPage> {
   final _searchController = TextEditingController();
   final _dateFmt = DateFormat('yyyy-MM-dd HH:mm');
+  final Set<_EnvQuickFilter> _filters = {};
   Timer? _debounce;
+  int? _selectedEnvNo;
 
   @override
   void initState() {
@@ -40,29 +46,68 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   Widget build(BuildContext context) {
     final service = context.watch<EnvService>();
+    final envs = _applyQuickFilters(service.filteredEnvs);
+    final selected = _selectedEnv(envs);
 
     return Column(
       children: [
-        // Header
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
+        _buildHeader(service, envs.length),
+        if (service.error != null) _buildErrorBanner(service),
+        if (service.loading || service.syncing) const LinearProgressIndicator(),
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 900;
+              if (envs.isEmpty && !service.loading) {
+                return _buildEmptyState();
+              }
+              if (compact) {
+                return Column(
+                  children: [
+                    Expanded(child: _buildEnvList(envs, selected)),
+                    const Divider(height: 1),
+                    SizedBox(height: 280, child: _buildDetailPane(selected)),
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  SizedBox(width: 420, child: _buildEnvList(envs, selected)),
+                  const VerticalDivider(width: 1),
+                  Expanded(child: _buildDetailPane(selected)),
+                ],
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHeader(EnvService service, int visibleCount) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Text('环境总览', style: Theme.of(context).textTheme.headlineSmall),
-              const SizedBox(width: 16),
+              Text('环境工作台', style: theme.textTheme.headlineSmall),
+              const SizedBox(width: 12),
               Text(
-                '共 ${service.total} 条',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(color: Colors.grey),
+                '显示 $visibleCount / ${service.total} 条',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.outline,
+                ),
               ),
               const Spacer(),
               SizedBox(
-                width: 300,
+                width: 340,
                 child: FilterHistoryTextField(
                   controller: _searchController,
                   filterText: _searchController.text,
-                  hintText: '搜索环境名称、地址、备注、版本...',
+                  hintText: '搜索编号、名称、地址、日志、版本...',
                   onChanged: (v) {
                     setState(() {});
                     _debounce?.cancel();
@@ -80,252 +125,289 @@ class _DashboardPageState extends State<DashboardPage> {
               ),
             ],
           ),
-        ),
-        // Error banner
-        if (service.error != null)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            color: Colors.red.shade50,
-            child: Row(
-              children: [
-                const Icon(Icons.error, color: Colors.red, size: 18),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    service.error!,
-                    style: const TextStyle(color: Colors.red),
-                  ),
-                ),
-                TextButton(onPressed: service.load, child: const Text('重试')),
-              ],
-            ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _filterChip(_EnvQuickFilter.logConfig, '可看日志', Icons.article),
+              _filterChip(_EnvQuickFilter.url, '有访问地址', Icons.link),
+              _filterChip(_EnvQuickFilter.recent, '30天内更新', Icons.schedule),
+              _filterChip(
+                _EnvQuickFilter.incomplete,
+                '缺少配置',
+                Icons.warning_amber,
+              ),
+            ],
           ),
-        // Loading
-        if (service.loading || service.syncing) const LinearProgressIndicator(),
-        // Card list
-        Expanded(
-          child: service.envs.isEmpty && !service.loading
-              ? const Center(
-                  child: Text('暂无数据', style: TextStyle(color: Colors.grey)),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.only(top: 4, bottom: 8),
-                  itemCount: service.envs.length,
-                  itemBuilder: (context, index) =>
-                      _buildCard(service.envs[index]),
-                ),
-        ),
-        // Pagination
-        if (service.total > service.pageSize)
-          Padding(
-            padding: const EdgeInsets.all(8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.chevron_left),
-                  onPressed: service.page > 1
-                      ? () => service.setPage(service.page - 1)
-                      : null,
-                ),
-                Text(
-                  '第 ${service.page} 页 / 共 ${(service.total / service.pageSize).ceil()} 页',
-                ),
-                IconButton(
-                  icon: const Icon(Icons.chevron_right),
-                  onPressed:
-                      service.page < (service.total / service.pageSize).ceil()
-                      ? () => service.setPage(service.page + 1)
-                      : null,
-                ),
-              ],
-            ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 
-  Widget _buildCard(EnvInfo e) {
+  Widget _filterChip(_EnvQuickFilter filter, String label, IconData icon) {
+    final selected = _filters.contains(filter);
+    return FilterChip(
+      selected: selected,
+      avatar: Icon(icon, size: 16),
+      label: Text(label),
+      onSelected: (value) {
+        setState(() {
+          if (value) {
+            _filters.add(filter);
+          } else {
+            _filters.remove(filter);
+          }
+        });
+      },
+    );
+  }
+
+  Widget _buildErrorBanner(EnvService service) {
     final colorScheme = Theme.of(context).colorScheme;
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      color: colorScheme.errorContainer,
+      child: Row(
+        children: [
+          Icon(Icons.error_outline, color: colorScheme.error, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              service.error!,
+              style: TextStyle(color: colorScheme.error),
+            ),
+          ),
+          TextButton(onPressed: service.load, child: const Text('重试')),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEnvList(List<EnvInfo> envs, EnvInfo? selected) {
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+      itemCount: envs.length,
+      itemBuilder: (context, index) {
+        final env = envs[index];
+        return _EnvListTile(
+          env: env,
+          selected: selected?.eNo == env.eNo,
+          dateFmt: _dateFmt,
+          onTap: () => setState(() => _selectedEnvNo = env.eNo),
+          onCopyUrl: env.eUrl == null
+              ? null
+              : () => _copyToClipboard(env.eUrl!, '访问地址'),
+          onOpenUrl: env.eUrl == null ? null : () => _launchUrl(env.eUrl!),
+          onViewLog: _canViewLog(env)
+              ? () => widget.onViewLog?.call(env)
+              : null,
+        );
+      },
+    );
+  }
+
+  Widget _buildDetailPane(EnvInfo? env) {
+    final theme = Theme.of(context);
+    if (env == null) {
+      return Center(
+        child: Text(
+          '选择一个环境查看详情',
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.outline,
+          ),
+        ),
+      );
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 760),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Title row: number badge + name + actions
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 2,
+                    horizontal: 10,
+                    vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: colorScheme.primaryContainer,
+                    color: theme.colorScheme.primaryContainer,
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    '#${e.eNo}',
+                    '#${env.eNo}',
                     style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: colorScheme.onPrimaryContainer,
+                      color: theme.colorScheme.onPrimaryContainer,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    e.eName ?? '-',
-                    style: Theme.of(context).textTheme.titleMedium,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                if (e.eWeblogpath != null && e.eWebserveraddr != null)
-                  IconButton(
-                    icon: const Icon(Icons.article, size: 18),
-                    tooltip: '查看日志',
-                    onPressed: () => widget.onViewLog?.call(e),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: 32,
-                      minHeight: 32,
-                    ),
-                  ),
-                if (e.eSeeurl != null)
-                  IconButton(
-                    icon: const Icon(Icons.open_in_new, size: 18),
-                    tooltip: 'SEE平台',
-                    onPressed: () => _launchUrl(e.eSeeurl!),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: 32,
-                      minHeight: 32,
-                    ),
-                  ),
-                IconButton(
-                  icon: const Icon(Icons.info_outline, size: 18),
-                  tooltip: '详情',
-                  onPressed: () => _showDetail(e),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 32,
-                    minHeight: 32,
+                    env.eName ?? '未命名环境',
+                    style: theme.textTheme.headlineSmall,
                   ),
                 ),
               ],
             ),
-            const Divider(height: 16),
-            // URL row
-            if (e.eUrl != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Row(
-                  children: [
-                    Icon(Icons.link, size: 16, color: Colors.grey.shade600),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: InkWell(
-                        onTap: () => _launchUrl(e.eUrl!),
-                        child: Text(
-                          e.eUrl!,
-                          style: const TextStyle(
-                            color: Colors.blue,
-                            decoration: TextDecoration.underline,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      icon: Icon(
-                        Icons.copy,
-                        size: 14,
-                        color: Colors.grey.shade600,
-                      ),
-                      tooltip: '复制地址',
-                      onPressed: () => _copyToClipboard(e.eUrl!, '访问地址'),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(
-                        minWidth: 28,
-                        minHeight: 28,
-                      ),
-                    ),
-                  ],
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilledButton.icon(
+                  onPressed: env.eUrl == null
+                      ? null
+                      : () => _launchUrl(env.eUrl!),
+                  icon: const Icon(Icons.open_in_new),
+                  label: const Text('打开环境'),
                 ),
-              ),
-            // Version + time row
-            Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.label_outline,
-                    size: 16,
-                    color: Colors.grey.shade600,
-                  ),
-                  const SizedBox(width: 6),
-                  Flexible(
-                    child: Text(
-                      e.eVersion ?? '-',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ),
-                  if (e.eVersion != null)
-                    IconButton(
-                      icon: Icon(
-                        Icons.copy,
-                        size: 14,
-                        color: Colors.grey.shade600,
-                      ),
-                      tooltip: '复制版本号',
-                      onPressed: () => _copyToClipboard(e.eVersion!, '版本号'),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(
-                        minWidth: 28,
-                        minHeight: 28,
-                      ),
-                    ),
-                  const SizedBox(width: 16),
-                  Icon(Icons.schedule, size: 16, color: Colors.grey.shade600),
-                  const SizedBox(width: 6),
-                  Text(
-                    e.eUpdatetime != null
-                        ? _dateFmt.format(e.eUpdatetime!.toLocal())
-                        : '-',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
-                ],
-              ),
+                OutlinedButton.icon(
+                  onPressed: env.eSeeurl == null
+                      ? null
+                      : () => _launchUrl(env.eSeeurl!),
+                  icon: const Icon(Icons.travel_explore),
+                  label: const Text('打开SEE'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _canViewLog(env)
+                      ? () => widget.onViewLog?.call(env)
+                      : null,
+                  icon: const Icon(Icons.article),
+                  label: const Text('查看日志'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: env.eVersion == null
+                      ? null
+                      : () => _copyToClipboard(env.eVersion!, '版本号'),
+                  icon: const Icon(Icons.copy),
+                  label: const Text('复制版本'),
+                ),
+              ],
             ),
-            // Memo row
-            if (e.eMemo != null && e.eMemo!.isNotEmpty)
-              Row(
-                children: [
-                  Icon(Icons.notes, size: 16, color: Colors.grey.shade600),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      e.eMemo!,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.grey.shade600,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 2,
-                    ),
-                  ),
-                ],
-              ),
+            const SizedBox(height: 20),
+            _sectionTitle('运行信息'),
+            _DetailGrid(
+              rows: [
+                _DetailItem('访问地址', env.eUrl, copy: _copyToClipboard),
+                _DetailItem('版本号', env.eVersion, copy: _copyToClipboard),
+                _DetailItem(
+                  '更新时间',
+                  env.eUpdatetime == null
+                      ? null
+                      : _dateFmt.format(env.eUpdatetime!.toLocal()),
+                ),
+                _DetailItem('数据库类型', env.eDbtype),
+              ],
+            ),
+            const SizedBox(height: 18),
+            _sectionTitle('数据库'),
+            _DetailGrid(
+              rows: [
+                _DetailItem('业务库', env.eYwdb, copy: _copyToClipboard),
+                _DetailItem('中间库', env.eZjdb, copy: _copyToClipboard),
+              ],
+            ),
+            const SizedBox(height: 18),
+            _sectionTitle('日志'),
+            _DetailGrid(
+              rows: [
+                _DetailItem(
+                  'Web服务地址',
+                  env.eWebserveraddr,
+                  copy: _copyToClipboard,
+                ),
+                _DetailItem('Web日志路径', env.eWeblogpath, copy: _copyToClipboard),
+              ],
+            ),
+            const SizedBox(height: 18),
+            _sectionTitle('备注'),
+            SelectableText(
+              env.eMemo?.isNotEmpty == true ? env.eMemo! : '-',
+              style: theme.textTheme.bodyMedium,
+            ),
           ],
         ),
       ),
     );
   }
+
+  Widget _sectionTitle(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(
+        text,
+        style: Theme.of(
+          context,
+        ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    final theme = Theme.of(context);
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.search_off, size: 56, color: theme.colorScheme.outline),
+          const SizedBox(height: 12),
+          Text(
+            '没有匹配的环境',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.outline,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<EnvInfo> _applyQuickFilters(List<EnvInfo> envs) {
+    var result = envs;
+    for (final filter in _filters) {
+      result = result.where((env) {
+        switch (filter) {
+          case _EnvQuickFilter.logConfig:
+            return _canViewLog(env);
+          case _EnvQuickFilter.url:
+            return env.eUrl != null;
+          case _EnvQuickFilter.recent:
+            final updated = env.eUpdatetime;
+            if (updated == null) return false;
+            return updated.toLocal().isAfter(
+              DateTime.now().subtract(const Duration(days: 30)),
+            );
+          case _EnvQuickFilter.incomplete:
+            return env.eUrl == null ||
+                env.eVersion == null ||
+                env.eWebserveraddr == null ||
+                env.eWeblogpath == null;
+        }
+      }).toList();
+    }
+    return result;
+  }
+
+  EnvInfo? _selectedEnv(List<EnvInfo> envs) {
+    if (envs.isEmpty) return null;
+    if (_selectedEnvNo != null) {
+      for (final env in envs) {
+        if (env.eNo == _selectedEnvNo) return env;
+      }
+    }
+    return envs.first;
+  }
+
+  bool _canViewLog(EnvInfo env) =>
+      env.eWeblogpath != null && env.eWebserveraddr != null;
 
   void _copyToClipboard(String text, String label) {
     Clipboard.setData(ClipboardData(text: text));
@@ -337,73 +419,6 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  void _showDetail(EnvInfo e) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(e.eName ?? '环境 #${e.eNo}'),
-        content: SizedBox(
-          width: 500,
-          child: SingleChildScrollView(
-            child: Table(
-              columnWidths: const {
-                0: IntrinsicColumnWidth(),
-                1: FlexColumnWidth(),
-              },
-              defaultVerticalAlignment: TableCellVerticalAlignment.top,
-              children: [
-                _detailRow('编号', '${e.eNo}'),
-                _detailRow('环境别名', e.eName),
-                _detailRow('业务库', e.eYwdb),
-                _detailRow('中间库', e.eZjdb),
-                _detailRow('访问地址', e.eUrl),
-                _detailRow('版本号', e.eVersion),
-                _detailRow(
-                  '更新时间',
-                  e.eUpdatetime != null
-                      ? _dateFmt.format(e.eUpdatetime!.toLocal())
-                      : null,
-                ),
-                _detailRow('SEE平台', e.eSeeurl),
-                _detailRow('Web服务地址', e.eWebserveraddr),
-                _detailRow('Web日志路径', e.eWeblogpath),
-                _detailRow('备注', e.eMemo),
-                _detailRow('数据库类型', e.eDbtype),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('关闭'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  TableRow _detailRow(String label, String? value) {
-    return TableRow(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(6),
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              color: Colors.grey,
-            ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.all(6),
-          child: SelectableText(value ?? '-'),
-        ),
-      ],
-    );
-  }
-
   Future<void> _launchUrl(String url) async {
     var uri = Uri.tryParse(url);
     if (uri != null && !uri.hasScheme) {
@@ -412,5 +427,259 @@ class _DashboardPageState extends State<DashboardPage> {
     if (uri != null) {
       await launchUrl(uri);
     }
+  }
+}
+
+class _EnvListTile extends StatelessWidget {
+  final EnvInfo env;
+  final bool selected;
+  final DateFormat dateFmt;
+  final VoidCallback onTap;
+  final VoidCallback? onCopyUrl;
+  final VoidCallback? onOpenUrl;
+  final VoidCallback? onViewLog;
+
+  const _EnvListTile({
+    required this.env,
+    required this.selected,
+    required this.dateFmt,
+    required this.onTap,
+    this.onCopyUrl,
+    this.onOpenUrl,
+    this.onViewLog,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      color: selected
+          ? colorScheme.primaryContainer.withValues(alpha: 0.35)
+          : null,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    '#${env.eNo}',
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: colorScheme.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      env.eName ?? '-',
+                      style: theme.textTheme.titleSmall,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (onViewLog != null)
+                    IconButton(
+                      icon: const Icon(Icons.article, size: 18),
+                      tooltip: '查看日志',
+                      onPressed: onViewLog,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 30,
+                        minHeight: 30,
+                      ),
+                    ),
+                  if (onOpenUrl != null)
+                    IconButton(
+                      icon: const Icon(Icons.open_in_new, size: 18),
+                      tooltip: '打开环境',
+                      onPressed: onOpenUrl,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 30,
+                        minHeight: 30,
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              _InlineInfo(
+                icon: Icons.link,
+                text: env.eUrl ?? '未配置访问地址',
+                muted: env.eUrl == null,
+                trailing: onCopyUrl == null
+                    ? null
+                    : IconButton(
+                        icon: const Icon(Icons.copy, size: 14),
+                        tooltip: '复制地址',
+                        onPressed: onCopyUrl,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 24,
+                          minHeight: 24,
+                        ),
+                      ),
+              ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Expanded(
+                    child: _InlineInfo(
+                      icon: Icons.label_outline,
+                      text: env.eVersion ?? '-',
+                      muted: env.eVersion == null,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 128,
+                    child: _InlineInfo(
+                      icon: Icons.schedule,
+                      text: env.eUpdatetime == null
+                          ? '-'
+                          : dateFmt.format(env.eUpdatetime!.toLocal()),
+                      muted: env.eUpdatetime == null,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _InlineInfo extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  final bool muted;
+  final Widget? trailing;
+
+  const _InlineInfo({
+    required this.icon,
+    required this.text,
+    this.muted = false,
+    this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = muted
+        ? Theme.of(context).colorScheme.outline
+        : Theme.of(context).colorScheme.onSurfaceVariant;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 15, color: color),
+        const SizedBox(width: 5),
+        Flexible(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 12, color: color),
+          ),
+        ),
+        ?trailing,
+      ],
+    );
+  }
+}
+
+class _DetailItem {
+  final String label;
+  final String? value;
+  final void Function(String text, String label)? copy;
+
+  const _DetailItem(this.label, this.value, {this.copy});
+}
+
+class _DetailGrid extends StatelessWidget {
+  final List<_DetailItem> rows;
+
+  const _DetailGrid({required this.rows});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final twoColumns = constraints.maxWidth >= 560;
+        return Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: rows
+              .map(
+                (item) => SizedBox(
+                  width: twoColumns
+                      ? (constraints.maxWidth - 12) / 2
+                      : constraints.maxWidth,
+                  child: _DetailField(item: item),
+                ),
+              )
+              .toList(),
+        );
+      },
+    );
+  }
+}
+
+class _DetailField extends StatelessWidget {
+  final _DetailItem item;
+
+  const _DetailField({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final value = item.value?.isNotEmpty == true ? item.value! : '-';
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            item.label,
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: theme.colorScheme.outline,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(
+                child: SelectableText(
+                  value,
+                  maxLines: 2,
+                  style: theme.textTheme.bodyMedium,
+                ),
+              ),
+              if (item.copy != null && item.value?.isNotEmpty == true)
+                IconButton(
+                  icon: const Icon(Icons.copy, size: 16),
+                  tooltip: '复制${item.label}',
+                  onPressed: () => item.copy!(item.value!, item.label),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 30,
+                    minHeight: 30,
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }
