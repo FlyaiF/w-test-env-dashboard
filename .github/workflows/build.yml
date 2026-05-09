@@ -15,13 +15,6 @@ concurrency:
 jobs:
   build-macos:
     runs-on: macos-latest
-    strategy:
-      matrix:
-        profile:
-          - name: env_viewer
-            desc: Environment viewer
-          - name: zipr_tool
-            desc: Archive comparison tool
     steps:
       - uses: actions/checkout@v6
         with:
@@ -98,37 +91,34 @@ jobs:
             --dart-define=COMMIT="$COMMIT" \
             --dart-define=BUILD_TIME="$BUILD_TIME"
 
-      - name: Bundle sidecar, zipr and package as ${{ matrix.profile.name }}
+      - name: Bundle sidecar, zipr and package profiles
         run: |
           SRC_APP="flutter_app/build/macos/Build/Products/Release/test_env_dashboard.app"
-          PROFILE="${{ matrix.profile.name }}"
-          DEST_APP="flutter_app/build/macos/Build/Products/Release/${PROFILE}.app"
+          RELEASE_DIR="flutter_app/build/macos/Build/Products/Release"
+          PROFILES=(env_viewer zipr_tool)
 
-          # Rename .app bundle so FeatureProfile resolves the correct profile
-          cp -R "$SRC_APP" "$DEST_APP"
+          for PROFILE in "${PROFILES[@]}"; do
+            DEST_APP="$RELEASE_DIR/${PROFILE}.app"
 
-          cp go_sidecar/go_sidecar "$DEST_APP/Contents/Resources/go_sidecar"
-          chmod +x "$DEST_APP/Contents/Resources/go_sidecar"
-          cp zipr/zipr "$DEST_APP/Contents/Resources/zipr"
-          chmod +x "$DEST_APP/Contents/Resources/zipr"
+            # Rename .app bundle so FeatureProfile resolves the correct profile.
+            rm -rf "$DEST_APP"
+            cp -R "$SRC_APP" "$DEST_APP"
 
-          cd flutter_app/build/macos/Build/Products/Release
-          zip -r -y "${PROFILE}-macos.zip" "${PROFILE}.app"
+            cp go_sidecar/go_sidecar "$DEST_APP/Contents/Resources/go_sidecar"
+            chmod +x "$DEST_APP/Contents/Resources/go_sidecar"
+            cp zipr/zipr "$DEST_APP/Contents/Resources/zipr"
+            chmod +x "$DEST_APP/Contents/Resources/zipr"
+
+            (cd "$RELEASE_DIR" && zip -r -y "${PROFILE}-macos.zip" "${PROFILE}.app")
+          done
 
       - uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.profile.name }}-macos
-          path: flutter_app/build/macos/Build/Products/Release/${{ matrix.profile.name }}-macos.zip
+          name: macos
+          path: flutter_app/build/macos/Build/Products/Release/*-macos.zip
 
   build-windows:
     runs-on: windows-latest
-    strategy:
-      matrix:
-        profile:
-          - name: env_viewer
-            desc: Environment viewer
-          - name: zipr_tool
-            desc: Archive comparison tool
     steps:
       - uses: actions/checkout@v6
         with:
@@ -197,26 +187,36 @@ jobs:
             --dart-define=COMMIT="$COMMIT" \
             --dart-define=BUILD_TIME="$BUILD_TIME"
 
-      - name: Bundle sidecar, zipr and package as ${{ matrix.profile.name }}
+      - name: Bundle sidecar, zipr and package profiles
         shell: bash
         run: |
           RELEASE_DIR="flutter_app/build/windows/x64/runner/Release"
-          PROFILE="${{ matrix.profile.name }}"
+          RUNNER_DIR="flutter_app/build/windows/x64/runner"
+          PACKAGE_DIR="$RUNNER_DIR/package"
+          PROFILES=(env_viewer zipr_tool)
 
-          mkdir -p "$RELEASE_DIR/data"
-          cp go_sidecar/go_sidecar.exe "$RELEASE_DIR/data/go_sidecar.exe"
-          cp zipr/target/release/zipr.exe "$RELEASE_DIR/data/zipr.exe"
+          for PROFILE in "${PROFILES[@]}"; do
+            STAGE_DIR="$PACKAGE_DIR/$PROFILE"
 
-          # Rename executable so FeatureProfile resolves the correct profile
-          mv "$RELEASE_DIR/test_env_dashboard.exe" "$RELEASE_DIR/${PROFILE}.exe"
+            rm -rf "$STAGE_DIR"
+            mkdir -p "$STAGE_DIR"
+            cp -R "$RELEASE_DIR"/. "$STAGE_DIR"/
 
-          cd "$RELEASE_DIR"
-          7z a -tzip "../${PROFILE}-windows.zip" ./*
+            mkdir -p "$STAGE_DIR/data"
+            cp go_sidecar/go_sidecar.exe "$STAGE_DIR/data/go_sidecar.exe"
+            cp zipr/target/release/zipr.exe "$STAGE_DIR/data/zipr.exe"
+
+            # Rename executable so FeatureProfile resolves the correct profile.
+            mv "$STAGE_DIR/test_env_dashboard.exe" "$STAGE_DIR/${PROFILE}.exe"
+
+            rm -f "$RUNNER_DIR/${PROFILE}-windows.zip"
+            (cd "$STAGE_DIR" && 7z a -tzip "../../${PROFILE}-windows.zip" ./*)
+          done
 
       - uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.profile.name }}-windows
-          path: flutter_app/build/windows/x64/runner/${{ matrix.profile.name }}-windows.zip
+          name: windows
+          path: flutter_app/build/windows/x64/runner/*-windows.zip
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
