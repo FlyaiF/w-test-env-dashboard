@@ -48,10 +48,15 @@ class MacosTerminalTool extends SshTool {
 
     final user = target.username;
     final hostPart = (user != null && user.isNotEmpty)
-        ? '${_escapeAppleScript(user)}@${_escapeAppleScript(target.host)}'
-        : _escapeAppleScript(target.host);
-    final sshCmd = 'ssh -p ${target.port} $hostPart';
-    final script = 'tell application "Terminal" to do script "$sshCmd"';
+        ? '$user@${target.host}'
+        : target.host;
+    final hasStartPath =
+        target.startPath != null && target.startPath!.trim().isNotEmpty;
+    final rawSshCmd = hasStartPath
+        ? _buildSshWithStartPath(hostPart, target.port, target.startPath!)
+        : 'ssh -p ${target.port} $hostPart';
+    final script =
+        'tell application "Terminal" to do script "${_escapeAppleScript(rawSshCmd)}"';
 
     var passwordCopied = false;
     if (mode == PasswordMode.clipboard &&
@@ -81,4 +86,19 @@ class MacosTerminalTool extends SshTool {
 
   static String _escapeAppleScript(String s) =>
       s.replaceAll(r'\', r'\\').replaceAll('"', r'\"');
+
+  /// Wraps [s] in a bash single-quoted argument, escaping any embedded
+  /// single quotes via the `'\''` idiom.
+  static String _bashSingleQuote(String s) =>
+      "'${s.replaceAll("'", r"'\''")}'";
+
+  static String _buildSshWithStartPath(
+    String hostPart,
+    int port,
+    String startPath,
+  ) {
+    final remoteCmd = 'cd ${_bashSingleQuote(startPath)}; exec \$SHELL -l';
+    final localArg = _bashSingleQuote(remoteCmd);
+    return 'ssh -t -p $port $hostPart $localArg';
+  }
 }

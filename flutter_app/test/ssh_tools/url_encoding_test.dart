@@ -62,5 +62,45 @@ void main() {
       );
       expect(url, 'ssh://u@h:22');
     });
+
+    test('appends start path when includeStartPath is true', () {
+      final url = buildNetsarangUrl(
+        'sftp',
+        const ConnectionTarget(
+          host: 'h',
+          port: 22,
+          username: 'u',
+          password: 'p',
+          startPath: '/var/log/my app',
+        ),
+        includeStartPath: true,
+      );
+      expect(url, 'sftp://u:p@h:22/var/log/my%20app');
+    });
+
+    test('ignores start path when includeStartPath is false', () {
+      final url = buildNetsarangUrl(
+        'ssh',
+        const ConnectionTarget(
+          host: 'h',
+          port: 22,
+          startPath: '/var/log',
+        ),
+      );
+      expect(url, 'ssh://h:22');
+    });
+
+    test('handles start path with no leading slash', () {
+      final url = buildNetsarangUrl(
+        'sftp',
+        const ConnectionTarget(
+          host: 'h',
+          port: 22,
+          startPath: 'opt/app/logs',
+        ),
+        includeStartPath: true,
+      );
+      expect(url, 'sftp://h:22/opt/app/logs');
+    });
   });
 }

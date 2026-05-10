@@ -330,12 +330,14 @@ class _DashboardPageState extends State<DashboardPage> {
                   trailingActions: [
                     _SshLaunchButton(
                       addr: env.eWebserveraddr,
+                      startPath: _parentDir(env.eWeblogpath),
                       kind: SshToolKind.terminal,
                       icon: Icons.terminal,
                       tooltip: '在终端中打开',
                     ),
                     _SshLaunchButton(
                       addr: env.eWebserveraddr,
+                      startPath: _parentDir(env.eWeblogpath),
                       kind: SshToolKind.sftp,
                       icon: Icons.folder_open,
                       tooltip: '在 SFTP 中打开',
@@ -426,6 +428,21 @@ class _DashboardPageState extends State<DashboardPage> {
 
   bool _canViewLog(EnvInfo env) =>
       env.eWeblogpath != null && env.eWebserveraddr != null;
+
+  /// Returns the directory portion of a remote (POSIX) file path, or `null`
+  /// when no directory can be derived. Trailing slashes are treated as a
+  /// directory marker.
+  String? _parentDir(String? path) {
+    if (path == null) return null;
+    final trimmed = path.trim();
+    if (trimmed.isEmpty) return null;
+    if (trimmed.endsWith('/')) {
+      return trimmed == '/' ? '/' : trimmed.substring(0, trimmed.length - 1);
+    }
+    final idx = trimmed.lastIndexOf('/');
+    if (idx < 0) return null;
+    return idx == 0 ? '/' : trimmed.substring(0, idx);
+  }
 
   void _copyToClipboard(String text, String label) {
     Clipboard.setData(ClipboardData(text: text));
@@ -711,6 +728,7 @@ class _DetailField extends StatelessWidget {
 
 class _SshLaunchButton extends StatelessWidget {
   final String? addr;
+  final String? startPath;
   final SshToolKind kind;
   final IconData icon;
   final String tooltip;
@@ -720,6 +738,7 @@ class _SshLaunchButton extends StatelessWidget {
     required this.kind,
     required this.icon,
     required this.tooltip,
+    this.startPath,
   });
 
   @override
@@ -837,6 +856,7 @@ class _SshLaunchButton extends StatelessWidget {
       port: parsed.port,
       username: user,
       password: pwd,
+      startPath: startPath,
     );
   }
 

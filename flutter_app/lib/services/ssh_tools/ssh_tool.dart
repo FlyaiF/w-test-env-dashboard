@@ -8,11 +8,17 @@ class ConnectionTarget {
   final String? username;
   final String? password;
 
+  /// Optional remote directory the tool should land in. SFTP tools navigate
+  /// here on connect; terminal tools `cd` here before handing the user a
+  /// shell. Tools that have no clean way to honor this may ignore it.
+  final String? startPath;
+
   const ConnectionTarget({
     required this.host,
     required this.port,
     this.username,
     this.password,
+    this.startPath,
   });
 }
 

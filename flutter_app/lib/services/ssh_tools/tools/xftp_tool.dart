@@ -59,8 +59,9 @@ class XftpTool extends SshTool {
             host: target.host,
             port: target.port,
             username: target.username,
+            startPath: target.startPath,
           );
-    final url = buildNetsarangUrl('sftp', urlTarget);
+    final url = buildNetsarangUrl('sftp', urlTarget, includeStartPath: true);
     try {
       await Process.start(exe, [
         '-url',
