@@ -1,8 +1,11 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../config/config_service.dart';
 import '../../config/feature_profile.dart';
+import '../../services/ssh_tools/ssh_tool.dart';
+import '../../services/ssh_tools/ssh_tool_registry.dart';
 import '../../sidecar/sidecar_manager.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -20,6 +23,11 @@ class _SettingsPageState extends State<SettingsPage> {
   final _passCtrl = TextEditingController();
   final _sshUserCtrl = TextEditingController();
   final _sshPassCtrl = TextEditingController();
+  final Map<String, TextEditingController> _toolPathCtrls = {};
+
+  String? _defaultTerminalToolId;
+  String? _defaultSftpToolId;
+  String _passwordMode = 'argv';
 
   bool _testing = false;
   bool _saving = false;
@@ -47,10 +55,25 @@ class _SettingsPageState extends State<SettingsPage> {
     _passCtrl.text = config.oracle.password;
     _sshUserCtrl.text = config.ssh.defaultUsername;
     _sshPassCtrl.text = config.ssh.defaultPassword;
+    _defaultTerminalToolId = config.sshTools.defaultTerminalToolId;
+    _defaultSftpToolId = config.sshTools.defaultSftpToolId;
+    _passwordMode = config.sshTools.passwordMode;
+    for (final tool in SshToolRegistry.availableOnPlatform) {
+      final ctrl = _toolPathCtrls.putIfAbsent(
+        tool.id,
+        TextEditingController.new,
+      );
+      ctrl.text = config.sshTools.executablePaths[tool.id] ?? '';
+    }
     if (mounted) setState(() {});
   }
 
   AppConfig _buildConfig() {
+    final paths = <String, String>{};
+    _toolPathCtrls.forEach((id, ctrl) {
+      final v = ctrl.text.trim();
+      if (v.isNotEmpty) paths[id] = v;
+    });
     return AppConfig(
       oracle: OracleConfig(
         host: _hostCtrl.text.trim(),
@@ -62,6 +85,12 @@ class _SettingsPageState extends State<SettingsPage> {
       ssh: SshConfig(
         defaultUsername: _sshUserCtrl.text.trim(),
         defaultPassword: _sshPassCtrl.text.trim(),
+      ),
+      sshTools: SshToolsConfig(
+        defaultTerminalToolId: _defaultTerminalToolId,
+        defaultSftpToolId: _defaultSftpToolId,
+        executablePaths: paths,
+        passwordMode: _passwordMode,
       ),
       showAllFeatures: context.read<FeatureProfile>().showAll,
     );
@@ -156,6 +185,9 @@ class _SettingsPageState extends State<SettingsPage> {
     _passCtrl.dispose();
     _sshUserCtrl.dispose();
     _sshPassCtrl.dispose();
+    for (final ctrl in _toolPathCtrls.values) {
+      ctrl.dispose();
+    }
     super.dispose();
   }
 
@@ -180,6 +212,8 @@ class _SettingsPageState extends State<SettingsPage> {
           _buildOracleSection(),
           const SizedBox(height: 16),
           _buildSshSection(),
+          const SizedBox(height: 16),
+          _buildSshToolsSection(),
           const SizedBox(height: 16),
           _buildFeatureSection(),
           const SizedBox(height: 24),
@@ -316,6 +350,148 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
       ),
     );
+  }
+
+  Widget _buildSshToolsSection() {
+    final terminals = SshToolRegistry.availableFor(SshToolKind.terminal);
+    final sftps = SshToolRegistry.availableFor(SshToolKind.sftp);
+    final platformTools = SshToolRegistry.availableOnPlatform;
+    if (platformTools.isEmpty) return const SizedBox.shrink();
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('SSH 外部工具', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 4),
+            Text(
+              '配置默认连接工具与可执行文件路径，用于从仪表板一键连接目标主机。',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.outline,
+              ),
+            ),
+            const SizedBox(height: 16),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final stacked = constraints.maxWidth < 680;
+                final term = _toolDropdown(
+                  label: '默认终端工具',
+                  value: _defaultTerminalToolId,
+                  tools: terminals,
+                  onChanged: (v) =>
+                      setState(() => _defaultTerminalToolId = v),
+                );
+                final sftp = _toolDropdown(
+                  label: '默认 SFTP 工具',
+                  value: _defaultSftpToolId,
+                  tools: sftps,
+                  onChanged: (v) => setState(() => _defaultSftpToolId = v),
+                );
+                if (stacked) {
+                  return Column(
+                    children: [term, const SizedBox(height: 12), sftp],
+                  );
+                }
+                return Row(
+                  children: [
+                    Expanded(child: term),
+                    const SizedBox(width: 12),
+                    Expanded(child: sftp),
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '密码传递方式',
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+            const SizedBox(height: 8),
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'argv', label: Text('命令行参数')),
+                ButtonSegment(value: 'clipboard', label: Text('复制到剪贴板')),
+              ],
+              selected: {_passwordMode},
+              onSelectionChanged: (s) =>
+                  setState(() => _passwordMode = s.first),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'macOS 终端始终使用剪贴板模式（系统 ssh 不支持命令行密码）。',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.outline,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text('可执行文件路径', style: Theme.of(context).textTheme.labelLarge),
+            const SizedBox(height: 8),
+            for (final tool in platformTools) ...[
+              _toolPathField(tool),
+              const SizedBox(height: 8),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _toolDropdown({
+    required String label,
+    required String? value,
+    required List<SshTool> tools,
+    required ValueChanged<String?> onChanged,
+  }) {
+    final ids = tools.map((t) => t.id).toSet();
+    return DropdownButtonFormField<String?>(
+      initialValue: ids.contains(value) ? value : null,
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+        isDense: true,
+      ),
+      items: [
+        const DropdownMenuItem<String?>(value: null, child: Text('未设置')),
+        for (final tool in tools)
+          DropdownMenuItem<String?>(value: tool.id, child: Text(tool.displayName)),
+      ],
+      onChanged: tools.isEmpty ? null : onChanged,
+    );
+  }
+
+  Widget _toolPathField(SshTool tool) {
+    final ctrl = _toolPathCtrls.putIfAbsent(
+      tool.id,
+      TextEditingController.new,
+    );
+    return TextField(
+      controller: ctrl,
+      decoration: InputDecoration(
+        labelText: tool.displayName,
+        hintText: '留空使用默认安装路径',
+        border: const OutlineInputBorder(),
+        isDense: true,
+        suffixIcon: IconButton(
+          tooltip: '选择文件',
+          icon: const Icon(Icons.folder_open),
+          onPressed: () => _pickToolPath(tool),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickToolPath(SshTool tool) async {
+    final result = await FilePicker.platform.pickFiles(
+      dialogTitle: '选择 ${tool.displayName} 可执行文件',
+    );
+    if (result == null) return;
+    final path = result.files.single.path;
+    if (path == null) return;
+    setState(() {
+      _toolPathCtrls[tool.id]!.text = path;
+    });
   }
 
   Widget _buildFeatureSection() {

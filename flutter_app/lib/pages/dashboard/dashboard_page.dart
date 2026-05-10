@@ -6,8 +6,12 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../config/config_service.dart';
 import '../../models/env_info.dart';
 import '../../services/env_service.dart';
+import '../../services/ssh_tools/ssh_tool.dart';
+import '../../services/ssh_tools/ssh_tool_registry.dart';
+import '../../utils/addr_parser.dart';
 import '../../widgets/filter_history_text_field.dart';
 
 enum _EnvQuickFilter { logConfig, url, recent, incomplete }
@@ -323,6 +327,20 @@ class _DashboardPageState extends State<DashboardPage> {
                   'Web服务地址',
                   env.eWebserveraddr,
                   copy: _copyToClipboard,
+                  trailingActions: [
+                    _SshLaunchButton(
+                      addr: env.eWebserveraddr,
+                      kind: SshToolKind.terminal,
+                      icon: Icons.terminal,
+                      tooltip: '在终端中打开',
+                    ),
+                    _SshLaunchButton(
+                      addr: env.eWebserveraddr,
+                      kind: SshToolKind.sftp,
+                      icon: Icons.folder_open,
+                      tooltip: '在 SFTP 中打开',
+                    ),
+                  ],
                 ),
                 _DetailItem('Web日志路径', env.eWeblogpath, copy: _copyToClipboard),
               ],
@@ -597,8 +615,14 @@ class _DetailItem {
   final String label;
   final String? value;
   final void Function(String text, String label)? copy;
+  final List<Widget> trailingActions;
 
-  const _DetailItem(this.label, this.value, {this.copy});
+  const _DetailItem(
+    this.label,
+    this.value, {
+    this.copy,
+    this.trailingActions = const [],
+  });
 }
 
 class _DetailGrid extends StatelessWidget {
@@ -676,10 +700,155 @@ class _DetailField extends StatelessWidget {
                     minHeight: 30,
                   ),
                 ),
+              ...item.trailingActions,
             ],
           ),
         ],
       ),
     );
+  }
+}
+
+class _SshLaunchButton extends StatelessWidget {
+  final String? addr;
+  final SshToolKind kind;
+  final IconData icon;
+  final String tooltip;
+
+  const _SshLaunchButton({
+    required this.addr,
+    required this.kind,
+    required this.icon,
+    required this.tooltip,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final available = SshToolRegistry.availableFor(kind);
+    final hasAddr = addr != null && addr!.trim().isNotEmpty;
+    final disabled = !hasAddr || available.isEmpty;
+    final disabledReason = !hasAddr
+        ? '$tooltip（无地址）'
+        : available.isEmpty
+        ? '$tooltip（当前平台无可用工具）'
+        : tooltip;
+
+    return IconButton(
+      icon: Icon(icon, size: 16),
+      tooltip: disabledReason,
+      onPressed: disabled ? null : () => _onPressed(context),
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+    );
+  }
+
+  Future<void> _onPressed(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final config = await ConfigService.load();
+    final tools = SshToolRegistry.availableFor(kind);
+    if (tools.isEmpty) return;
+
+    final defaultId = kind == SshToolKind.terminal
+        ? config.sshTools.defaultTerminalToolId
+        : config.sshTools.defaultSftpToolId;
+
+    SshTool? tool;
+    if (defaultId != null) {
+      tool = tools.firstWhere(
+        (t) => t.id == defaultId,
+        orElse: () => tools.first,
+      );
+    } else if (tools.length == 1) {
+      tool = tools.first;
+    } else {
+      if (!context.mounted) return;
+      tool = await _pickTool(context, tools);
+    }
+    if (tool == null) return;
+
+    final target = _resolveTarget(addr!, config.ssh);
+    if (target == null) {
+      messenger.showSnackBar(const SnackBar(content: Text('无法解析地址')));
+      return;
+    }
+
+    final preferred = _parsePasswordMode(config.sshTools.passwordMode);
+    final result = await tool.launch(
+      target,
+      preferredMode: preferred,
+      executableOverride: config.sshTools.executablePaths[tool.id],
+    );
+
+    if (result.message != null) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(result.message!),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  Future<SshTool?> _pickTool(
+    BuildContext context,
+    List<SshTool> tools,
+  ) async {
+    return showMenu<SshTool>(
+      context: context,
+      position: _menuPositionFor(context),
+      items: [
+        for (final t in tools)
+          PopupMenuItem<SshTool>(value: t, child: Text(t.displayName)),
+      ],
+    );
+  }
+
+  RelativeRect _menuPositionFor(BuildContext context) {
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
+    final box = context.findRenderObject() as RenderBox?;
+    if (overlay == null || box == null) {
+      return const RelativeRect.fromLTRB(0, 0, 0, 0);
+    }
+    final origin = box.localToGlobal(Offset.zero, ancestor: overlay);
+    return RelativeRect.fromLTRB(
+      origin.dx,
+      origin.dy + box.size.height,
+      origin.dx + box.size.width,
+      origin.dy,
+    );
+  }
+
+  ConnectionTarget? _resolveTarget(String rawAddr, SshConfig defaults) {
+    final parsed = parseServerAddr(rawAddr);
+    if (parsed.host.isEmpty) return null;
+    final user = (parsed.username != null && parsed.username!.isNotEmpty)
+        ? parsed.username
+        : (defaults.defaultUsername.isNotEmpty
+            ? defaults.defaultUsername
+            : null);
+    final pwd = (parsed.password != null && parsed.password!.isNotEmpty)
+        ? parsed.password
+        : (defaults.defaultPassword.isNotEmpty
+            ? defaults.defaultPassword
+            : null);
+    return ConnectionTarget(
+      host: parsed.host,
+      port: parsed.port,
+      username: user,
+      password: pwd,
+    );
+  }
+
+  PasswordMode _parsePasswordMode(String mode) {
+    switch (mode) {
+      case 'clipboard':
+        return PasswordMode.clipboard;
+      case 'none':
+        return PasswordMode.none;
+      case 'argv':
+      default:
+        return PasswordMode.argv;
+    }
   }
 }

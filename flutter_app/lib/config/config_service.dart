@@ -4,11 +4,13 @@ import 'dart:io';
 class AppConfig {
   OracleConfig oracle;
   SshConfig ssh;
+  SshToolsConfig sshTools;
   bool showAllFeatures;
 
   AppConfig({
     required this.oracle,
     required this.ssh,
+    required this.sshTools,
     this.showAllFeatures = false,
   });
 
@@ -21,17 +23,20 @@ class AppConfig {
       password: '',
     ),
     ssh: SshConfig(defaultUsername: '', defaultPassword: ''),
+    sshTools: SshToolsConfig.empty(),
   );
 
   factory AppConfig.fromJson(Map<String, dynamic> json) => AppConfig(
     oracle: OracleConfig.fromJson(json['oracle'] ?? {}),
     ssh: SshConfig.fromJson(json['ssh'] ?? {}),
+    sshTools: SshToolsConfig.fromJson(json['ssh_tools'] ?? {}),
     showAllFeatures: json['show_all_features'] ?? false,
   );
 
   Map<String, dynamic> toJson() => {
     'oracle': oracle.toJson(),
     'ssh': ssh.toJson(),
+    'ssh_tools': sshTools.toJson(),
     'show_all_features': showAllFeatures,
   };
 
@@ -91,6 +96,54 @@ class SshConfig {
     'default_username': defaultUsername,
     'default_password': defaultPassword,
   };
+}
+
+class SshToolsConfig {
+  String? defaultTerminalToolId;
+  String? defaultSftpToolId;
+  Map<String, String> executablePaths;
+  String passwordMode; // 'argv' | 'clipboard'
+
+  SshToolsConfig({
+    this.defaultTerminalToolId,
+    this.defaultSftpToolId,
+    Map<String, String>? executablePaths,
+    this.passwordMode = 'argv',
+  }) : executablePaths = executablePaths ?? {};
+
+  factory SshToolsConfig.empty() => SshToolsConfig();
+
+  factory SshToolsConfig.fromJson(Map<String, dynamic> json) {
+    final raw = json['executable_paths'];
+    final paths = <String, String>{};
+    if (raw is Map) {
+      for (final entry in raw.entries) {
+        final v = entry.value;
+        if (v is String && v.isNotEmpty) {
+          paths[entry.key.toString()] = v;
+        }
+      }
+    }
+    return SshToolsConfig(
+      defaultTerminalToolId: _nullableString(json['default_terminal_tool_id']),
+      defaultSftpToolId: _nullableString(json['default_sftp_tool_id']),
+      executablePaths: paths,
+      passwordMode: (json['password_mode'] as String?) ?? 'argv',
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    if (defaultTerminalToolId != null)
+      'default_terminal_tool_id': defaultTerminalToolId,
+    if (defaultSftpToolId != null) 'default_sftp_tool_id': defaultSftpToolId,
+    'executable_paths': executablePaths,
+    'password_mode': passwordMode,
+  };
+
+  static String? _nullableString(dynamic v) {
+    if (v is String && v.isNotEmpty) return v;
+    return null;
+  }
 }
 
 class ConfigService {
