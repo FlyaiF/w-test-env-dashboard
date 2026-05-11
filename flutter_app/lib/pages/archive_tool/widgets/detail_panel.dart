@@ -427,28 +427,7 @@ class _DetailPanelState extends State<DetailPanel> {
           else if (isMultiple && entry.candidates.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(left: 20, top: 2),
-              child: DropdownButton<String>(
-                value: chosen,
-                hint: const Text('选择目标...', style: TextStyle(fontSize: 11)),
-                isExpanded: true,
-                isDense: true,
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontFamily: 'Sarasa Mono SC',
-                  color: Colors.black87,
-                ),
-                items: entry.candidates.map((c) {
-                  return DropdownMenuItem(
-                    value: c,
-                    child: Text(c, overflow: TextOverflow.ellipsis),
-                  );
-                }).toList(),
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() => _resolutions[entry.source] = value);
-                  }
-                },
-              ),
+              child: _buildCandidateDropdown(entry, chosen),
             )
           else if (!isMultiple && !isIgnored)
             Padding(
@@ -461,6 +440,84 @@ class _DetailPanelState extends State<DetailPanel> {
         ],
       ),
     );
+  }
+
+  Widget _buildCandidateDropdown(UnresolvedEntry entry, String? chosen) {
+    final commonPrefix = _commonPathPrefix(entry.candidates);
+    String stripped(String path) => commonPrefix.isNotEmpty
+        ? path.substring(commonPrefix.length)
+        : path;
+
+    final dropdown = DropdownButton<String>(
+      value: chosen,
+      hint: const Text('选择目标...', style: TextStyle(fontSize: 11)),
+      isExpanded: true,
+      isDense: true,
+      style: const TextStyle(
+        fontSize: 11,
+        fontFamily: 'Sarasa Mono SC',
+        color: Colors.black87,
+      ),
+      selectedItemBuilder: (context) => entry.candidates.map((c) {
+        return Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: Text(stripped(c), overflow: TextOverflow.ellipsis),
+        );
+      }).toList(),
+      items: entry.candidates.map((c) {
+        return DropdownMenuItem(
+          value: c,
+          child: Tooltip(
+            message: c,
+            child: Text(stripped(c), overflow: TextOverflow.ellipsis),
+          ),
+        );
+      }).toList(),
+      onChanged: (value) {
+        if (value != null) {
+          setState(() => _resolutions[entry.source] = value);
+        }
+      },
+    );
+
+    if (commonPrefix.isEmpty) return dropdown;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Tooltip(
+          message: commonPrefix,
+          child: Text(
+            commonPrefix,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 10,
+              fontFamily: 'Sarasa Mono SC',
+              color: Colors.grey.shade600,
+            ),
+          ),
+        ),
+        dropdown,
+      ],
+    );
+  }
+
+  // Longest common path-segment prefix across [paths], with a trailing '/'.
+  // Always leaves at least one segment per path so dropdown labels are non-empty.
+  static String _commonPathPrefix(List<String> paths) {
+    if (paths.length < 2) return '';
+    final splits = paths.map((p) => p.split('/')).toList();
+    final maxCommon = splits
+        .map((s) => s.length - 1)
+        .reduce((a, b) => a < b ? a : b);
+    final common = <String>[];
+    for (var i = 0; i < maxCommon; i++) {
+      final seg = splits[0][i];
+      if (!splits.every((s) => s[i] == seg)) break;
+      common.add(seg);
+    }
+    return common.isEmpty ? '' : '${common.join('/')}/';
   }
 
   bool _canApplyResolutions() {
