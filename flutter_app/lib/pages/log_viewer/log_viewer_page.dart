@@ -883,10 +883,17 @@ class _LogPanelState extends State<_LogPanel> {
                 _autoScroll = false;
               }),
             ),
-            Text(
-              lineLabel,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.outline,
+            SizedBox(
+              width: 140,
+              child: Text(
+                lineLabel,
+                textAlign: TextAlign.right,
+                overflow: TextOverflow.fade,
+                softWrap: false,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.outline,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
               ),
             ),
             IconButton(
