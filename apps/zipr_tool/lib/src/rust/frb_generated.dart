@@ -64,7 +64,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => 332792714;
+  int get rustContentHash => -309109281;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -113,6 +113,8 @@ abstract class RustLibApi extends BaseApi {
     required String zipExpr,
     required String sourcePath,
   });
+
+  Future<RustBuildInfo> crateApiZiprApiRustBuildInfo();
 }
 
 class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
@@ -423,6 +425,33 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         argNames: ["zipExpr", "sourcePath"],
       );
 
+  @override
+  Future<RustBuildInfo> crateApiZiprApiRustBuildInfo() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 10,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_rust_build_info,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiZiprApiRustBuildInfoConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiZiprApiRustBuildInfoConstMeta =>
+      const TaskConstMeta(debugName: "rust_build_info", argNames: []);
+
   @protected
   AnyhowException dco_decode_AnyhowException(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -540,6 +569,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       source: dco_decode_String(arr[0]),
       action: dco_decode_String(arr[1]),
       chosenTarget: dco_decode_String(arr[2]),
+    );
+  }
+
+  @protected
+  RustBuildInfo dco_decode_rust_build_info(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return RustBuildInfo(
+      ziprVersion: dco_decode_String(arr[0]),
+      ziprGitRev: dco_decode_String(arr[1]),
     );
   }
 
@@ -736,6 +777,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  RustBuildInfo sse_decode_rust_build_info(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_ziprVersion = sse_decode_String(deserializer);
+    var var_ziprGitRev = sse_decode_String(deserializer);
+    return RustBuildInfo(
+      ziprVersion: var_ziprVersion,
+      ziprGitRev: var_ziprGitRev,
+    );
+  }
+
+  @protected
   BigInt sse_decode_u_64(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getBigUint64();
@@ -904,6 +956,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.source, serializer);
     sse_encode_String(self.action, serializer);
     sse_encode_String(self.chosenTarget, serializer);
+  }
+
+  @protected
+  void sse_encode_rust_build_info(
+    RustBuildInfo self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.ziprVersion, serializer);
+    sse_encode_String(self.ziprGitRev, serializer);
   }
 
   @protected

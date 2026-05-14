@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 332792714;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -309109281;
 
 // Section: executor
 
@@ -378,6 +378,38 @@ fn wire__crate__api__zipr_api__replace_entry_impl(
         },
     )
 }
+fn wire__crate__api__zipr_api__rust_build_info_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "rust_build_info",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Result::<_, ()>::Ok(crate::api::zipr_api::rust_build_info())?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 
 // Section: dart2rust
 
@@ -553,6 +585,18 @@ impl SseDecode for crate::api::zipr_api::Resolution {
     }
 }
 
+impl SseDecode for crate::api::zipr_api::RustBuildInfo {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_ziprVersion = <String>::sse_decode(deserializer);
+        let mut var_ziprGitRev = <String>::sse_decode(deserializer);
+        return crate::api::zipr_api::RustBuildInfo {
+            zipr_version: var_ziprVersion,
+            zipr_git_rev: var_ziprGitRev,
+        };
+    }
+}
+
 impl SseDecode for u64 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -618,6 +662,7 @@ fn pde_ffi_dispatcher_primary_impl(
         7 => wire__crate__api__zipr_api__patch_resolve_impl(port, ptr, rust_vec_len, data_len),
         8 => wire__crate__api__zipr_api__read_patch_spec_impl(port, ptr, rust_vec_len, data_len),
         9 => wire__crate__api__zipr_api__replace_entry_impl(port, ptr, rust_vec_len, data_len),
+        10 => wire__crate__api__zipr_api__rust_build_info_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -744,6 +789,27 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::zipr_api::Resolution>
     for crate::api::zipr_api::Resolution
 {
     fn into_into_dart(self) -> crate::api::zipr_api::Resolution {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::zipr_api::RustBuildInfo {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.zipr_version.into_into_dart().into_dart(),
+            self.zipr_git_rev.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::zipr_api::RustBuildInfo
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::zipr_api::RustBuildInfo>
+    for crate::api::zipr_api::RustBuildInfo
+{
+    fn into_into_dart(self) -> crate::api::zipr_api::RustBuildInfo {
         self
     }
 }
@@ -897,6 +963,14 @@ impl SseEncode for crate::api::zipr_api::Resolution {
         <String>::sse_encode(self.source, serializer);
         <String>::sse_encode(self.action, serializer);
         <String>::sse_encode(self.chosen_target, serializer);
+    }
+}
+
+impl SseEncode for crate::api::zipr_api::RustBuildInfo {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.zipr_version, serializer);
+        <String>::sse_encode(self.zipr_git_rev, serializer);
     }
 }
 

@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_ui/shared_ui.dart';
 
+import '../../src/rust/api/zipr_api.dart';
+
 const String _appCommit = String.fromEnvironment('COMMIT', defaultValue: 'dev');
 const String _appBuildTime =
     String.fromEnvironment('BUILD_TIME', defaultValue: 'unknown');
@@ -18,17 +20,31 @@ class AboutPage extends StatefulWidget {
 
 class _AboutPageState extends State<AboutPage> {
   PackageInfo? _packageInfo;
+  RustBuildInfo? _rustBuildInfo;
+  String? _rustError;
 
   @override
   void initState() {
     super.initState();
     _loadPackageInfo();
+    _loadRustBuildInfo();
   }
 
   Future<void> _loadPackageInfo() async {
     final info = await PackageInfo.fromPlatform();
     if (!mounted) return;
     setState(() => _packageInfo = info);
+  }
+
+  Future<void> _loadRustBuildInfo() async {
+    try {
+      final info = await rustBuildInfo();
+      if (!mounted) return;
+      setState(() => _rustBuildInfo = info);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _rustError = e.toString());
+    }
   }
 
   String _buildPlainText() {
@@ -38,6 +54,16 @@ class _AboutPageState extends State<AboutPage> {
         '${_packageInfo?.buildNumber ?? '-'}');
     buf.writeln('commit: $_appCommit');
     buf.writeln('buildTime: $_appBuildTime');
+    buf.writeln();
+    buf.writeln('=== 归档引擎 (Rust) ===');
+    if (_rustBuildInfo != null) {
+      buf.writeln('ziprVersion: ${_rustBuildInfo!.ziprVersion}');
+      buf.writeln('ziprGitRev: ${_rustBuildInfo!.ziprGitRev}');
+    } else if (_rustError != null) {
+      buf.writeln('error: $_rustError');
+    } else {
+      buf.writeln('status: 加载中');
+    }
     buf.writeln();
     buf.writeln('=== 运行环境 ===');
     buf.writeln('os: ${Platform.operatingSystem}');
@@ -98,6 +124,11 @@ class _AboutPageState extends State<AboutPage> {
                   ),
                   const SizedBox(height: 12),
                   Section(
+                    title: '归档引擎 (Rust)',
+                    rows: _rustRows(),
+                  ),
+                  const SizedBox(height: 12),
+                  Section(
                     title: '运行环境',
                     rows: [
                       LabelValueRow('操作系统', Platform.operatingSystem),
@@ -113,5 +144,19 @@ class _AboutPageState extends State<AboutPage> {
         ],
       ),
     );
+  }
+
+  List<LabelValueRow> _rustRows() {
+    final info = _rustBuildInfo;
+    if (info != null) {
+      return [
+        LabelValueRow('zipr 版本', info.ziprVersion),
+        LabelValueRow('zipr Commit', info.ziprGitRev),
+      ];
+    }
+    if (_rustError != null) {
+      return [LabelValueRow('错误', _rustError!)];
+    }
+    return [const LabelValueRow('状态', '加载中...')];
   }
 }

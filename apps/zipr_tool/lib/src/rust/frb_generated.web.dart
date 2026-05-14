@@ -63,6 +63,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Resolution dco_decode_resolution(dynamic raw);
 
   @protected
+  RustBuildInfo dco_decode_rust_build_info(dynamic raw);
+
+  @protected
   BigInt dco_decode_u_64(dynamic raw);
 
   @protected
@@ -122,6 +125,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   Resolution sse_decode_resolution(SseDeserializer deserializer);
+
+  @protected
+  RustBuildInfo sse_decode_rust_build_info(SseDeserializer deserializer);
 
   @protected
   BigInt sse_decode_u_64(SseDeserializer deserializer);
@@ -200,6 +206,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_resolution(Resolution self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_rust_build_info(RustBuildInfo self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_64(BigInt self, SseSerializer serializer);

@@ -51,12 +51,25 @@ pub struct ApplySummary {
     pub deleted: usize,
 }
 
+pub struct RustBuildInfo {
+    pub zipr_version: String,
+    pub zipr_git_rev: String,
+}
+
 // ---------------------------------------------------------------------------
 // API functions
 // ---------------------------------------------------------------------------
 
 fn default_config() -> Result<Config> {
     Config::load(None)
+}
+
+/// Build info for the embedded zipr_lib Rust crate.
+pub fn rust_build_info() -> RustBuildInfo {
+    RustBuildInfo {
+        zipr_version: env!("ZIPR_VERSION").to_string(),
+        zipr_git_rev: env!("ZIPR_GIT_REV").to_string(),
+    }
 }
 
 /// List all entries in an archive recursively (including nested archives).

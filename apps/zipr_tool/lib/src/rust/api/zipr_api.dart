@@ -8,6 +8,10 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `default_config`
 
+/// Build info for the embedded zipr_lib Rust crate.
+Future<RustBuildInfo> rustBuildInfo() =>
+    RustLib.instance.api.crateApiZiprApiRustBuildInfo();
+
 /// List all entries in an archive recursively (including nested archives).
 Future<List<ArchiveEntry>> listArchive({required String path}) =>
     RustLib.instance.api.crateApiZiprApiListArchive(path: path);
@@ -218,6 +222,24 @@ class Resolution {
           source == other.source &&
           action == other.action &&
           chosenTarget == other.chosenTarget;
+}
+
+class RustBuildInfo {
+  final String ziprVersion;
+  final String ziprGitRev;
+
+  const RustBuildInfo({required this.ziprVersion, required this.ziprGitRev});
+
+  @override
+  int get hashCode => ziprVersion.hashCode ^ ziprGitRev.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is RustBuildInfo &&
+          runtimeType == other.runtimeType &&
+          ziprVersion == other.ziprVersion &&
+          ziprGitRev == other.ziprGitRev;
 }
 
 class UnresolvedEntry {
