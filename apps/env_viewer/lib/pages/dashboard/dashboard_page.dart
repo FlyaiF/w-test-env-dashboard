@@ -12,7 +12,7 @@ import '../../services/env_service.dart';
 import '../../services/ssh_tools/ssh_tool.dart';
 import '../../services/ssh_tools/ssh_tool_registry.dart';
 import '../../utils/addr_parser.dart';
-import '../../widgets/filter_history_text_field.dart';
+import 'package:shared_ui/shared_ui.dart';
 
 enum _EnvQuickFilter { logConfig, url, recent, incomplete }
 

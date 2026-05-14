@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:env_viewer/widgets/filter_history_text_field.dart';
+import 'package:shared_ui/shared_ui.dart';
 
 class _Harness extends StatefulWidget {
   const _Harness();

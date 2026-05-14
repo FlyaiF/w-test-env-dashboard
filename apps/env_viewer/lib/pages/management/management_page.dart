@@ -7,7 +7,7 @@ import 'package:provider/provider.dart';
 import '../../models/env_info.dart';
 import '../../models/runtime_env_collection.dart';
 import '../../services/env_service.dart';
-import '../../widgets/filter_history_text_field.dart';
+import 'package:shared_ui/shared_ui.dart';
 
 enum _ManagementFilter { incomplete, logReady, recent }
 
