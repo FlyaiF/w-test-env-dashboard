@@ -146,7 +146,7 @@ class SidecarManager extends ChangeNotifier {
 
   String _devBinaryPath() {
     // In dev mode, look for the Go binary built locally
-    // Navigate from flutter_app/.dart_tool/... up to project root
+    // Navigate from apps/env_viewer/.dart_tool/... up to project root
     var dir = Directory(Platform.resolvedExecutable).parent;
     for (var i = 0; i < 10; i++) {
       final candidate = File('${dir.path}/go_sidecar/go_sidecar');
