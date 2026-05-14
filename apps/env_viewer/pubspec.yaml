@@ -1,4 +1,4 @@
-name: test_env_dashboard
+name: env_viewer
 description: "测试环境速查工具"
 publish_to: 'none'
 version: 1.0.0+1
@@ -18,14 +18,10 @@ dependencies:
   url_launcher: ^6.3.0
   path_provider: ^2.1.0
   intl: ^0.20.0
-  rust_lib_test_env_dashboard:
-    path: rust_builder
-  flutter_rust_bridge: 2.12.0
   file_picker: ^10.3.10
-  desktop_drop: ^0.5.0
   package_info_plus: ^8.1.0
   shared_ui:
-    path: ../packages/shared_ui
+    path: ../../packages/shared_ui
 
 dev_dependencies:
   flutter_test:
@@ -40,11 +36,11 @@ flutter:
   fonts:
     - family: Sarasa Gothic SC
       fonts:
-        - asset: ../assets/fonts/SarasaGothicSC-Regular.ttf
-        - asset: ../assets/fonts/SarasaGothicSC-Bold.ttf
+        - asset: ../../assets/fonts/SarasaGothicSC-Regular.ttf
+        - asset: ../../assets/fonts/SarasaGothicSC-Bold.ttf
           weight: 700
     - family: Sarasa Mono SC
       fonts:
-        - asset: ../assets/fonts/SarasaMonoSC-Regular.ttf
-        - asset: ../assets/fonts/SarasaMonoSC-Bold.ttf
+        - asset: ../../assets/fonts/SarasaMonoSC-Regular.ttf
+        - asset: ../../assets/fonts/SarasaMonoSC-Bold.ttf
           weight: 700
