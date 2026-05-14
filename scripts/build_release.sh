@@ -8,6 +8,11 @@ PLATFORM=${1:-macos}
 
 echo "=== Release build for $PLATFORM ==="
 
+# Step 0: Sync shared assets (fonts) into each app's local assets/
+echo ""
+echo "--- Step 0: Syncing shared assets ---"
+"$SCRIPT_DIR/sync_assets.sh"
+
 # Step 1: Build Go sidecar (env_viewer's backend)
 echo ""
 echo "--- Step 1: Building Go sidecar ---"

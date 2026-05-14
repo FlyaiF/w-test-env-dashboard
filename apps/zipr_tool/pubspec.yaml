@@ -34,11 +34,11 @@ flutter:
   fonts:
     - family: Sarasa Gothic SC
       fonts:
-        - asset: ../../assets/fonts/SarasaGothicSC-Regular.ttf
-        - asset: ../../assets/fonts/SarasaGothicSC-Bold.ttf
+        - asset: assets/fonts/SarasaGothicSC-Regular.ttf
+        - asset: assets/fonts/SarasaGothicSC-Bold.ttf
           weight: 700
     - family: Sarasa Mono SC
       fonts:
-        - asset: ../../assets/fonts/SarasaMonoSC-Regular.ttf
-        - asset: ../../assets/fonts/SarasaMonoSC-Bold.ttf
+        - asset: assets/fonts/SarasaMonoSC-Regular.ttf
+        - asset: assets/fonts/SarasaMonoSC-Bold.ttf
           weight: 700

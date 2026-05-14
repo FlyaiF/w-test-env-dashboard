@@ -25,6 +25,9 @@ A monorepo with two separate Flutter desktop apps that share a small UI package.
 ## Common Commands
 
 ```bash
+# One-time per checkout / after pulling new font files
+./scripts/sync_assets.sh
+
 # env_viewer
 cd apps/env_viewer && flutter pub get
 cd apps/env_viewer && flutter run -d macos
@@ -68,11 +71,11 @@ cd go_sidecar && go build -o ../build/sidecar/go_sidecar .
   unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
   ```
 - **Oracle DATE timezone**: Oracle `DATE` columns have no timezone. `go-ora` reads them as Go local time, which gets serialized to UTC in JSON. Flutter must call `.toLocal()` before formatting with `DateFormat`, otherwise times will be off by the local UTC offset.
-- **Per-app `assets/` is build noise**: When a Flutter app declares fonts via `../../assets/fonts/...`, the build process drops a build-time copy at `apps/<app>/assets/`. That path is gitignored — don't commit it.
+- **Per-app `assets/` is gitignored, but required at build time**: Each app's `pubspec.yaml` references fonts via the local path `assets/fonts/...`. Flutter's bundler does not reliably resolve `..` paths on Windows, so we keep a single canonical copy of the fonts at repo-root `assets/fonts/` and use `scripts/sync_assets.sh` to populate each app's local `assets/fonts/` before any build. Run the script after a fresh clone or when font files change. Build scripts and CI call it automatically.
 
 ## Conventions
 
 - Go model uses `*string` for nullable fields; Dart uses `String?`
 - Platform binary resolution: `SidecarManager._resolveBinaryPath()` checks app bundle first, then `build/sidecar/` for dev
 - CI builds universal macOS binary via `lipo` (arm64 + amd64)
-- Fonts live once at repo root `assets/fonts/`; each app's pubspec references them via `../../assets/fonts/...`
+- Fonts live once at repo root `assets/fonts/`; `scripts/sync_assets.sh` copies them into each app's local `assets/fonts/` (gitignored) so Flutter's bundler picks them up reliably on all platforms
