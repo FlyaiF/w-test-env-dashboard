@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_ui/shared_ui.dart';
 
 import '../../config/feature_profile.dart';
 import '../../sidecar/sidecar_client.dart';
@@ -137,36 +138,36 @@ class _AboutPageState extends State<AboutPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _Section(
+                  Section(
                     title: '应用版本',
                     rows: [
-                      _Row('版本号', flutterVersion),
-                      _Row('Commit', _appCommit),
-                      _Row('构建时间', _appBuildTime),
-                      if (info != null) _Row('包名', info.packageName),
+                      LabelValueRow('版本号', flutterVersion),
+                      const LabelValueRow('Commit', _appCommit),
+                      const LabelValueRow('构建时间', _appBuildTime),
+                      if (info != null) LabelValueRow('包名', info.packageName),
                     ],
                   ),
                   const SizedBox(height: 12),
-                  _Section(
+                  Section(
                     title: '后端服务',
                     rows: _sidecarRows(sidecar),
                   ),
                   const SizedBox(height: 12),
-                  _Section(
+                  Section(
                     title: '运行环境',
                     rows: [
-                      _Row('操作系统', Platform.operatingSystem),
-                      _Row('系统版本', Platform.operatingSystemVersion),
-                      _Row('Dart', Platform.version),
-                      _Row('可执行文件', Platform.resolvedExecutable),
+                      LabelValueRow('操作系统', Platform.operatingSystem),
+                      LabelValueRow('系统版本', Platform.operatingSystemVersion),
+                      LabelValueRow('Dart', Platform.version),
+                      LabelValueRow('可执行文件', Platform.resolvedExecutable),
                     ],
                   ),
                   const SizedBox(height: 12),
-                  _Section(
+                  Section(
                     title: '功能配置',
                     rows: [
-                      _Row('命名配置', profile.isNamedProfile ? '是' : '否'),
-                      _Row('已启用功能',
+                      LabelValueRow('命名配置', profile.isNamedProfile ? '是' : '否'),
+                      LabelValueRow('已启用功能',
                           profile.enabledFeatures.map((f) => f.name).join(', ')),
                     ],
                   ),
@@ -179,86 +180,24 @@ class _AboutPageState extends State<AboutPage> {
     );
   }
 
-  List<_Row> _sidecarRows(SidecarManager sidecar) {
+  List<LabelValueRow> _sidecarRows(SidecarManager sidecar) {
     if (!sidecar.connected) {
-      return [const _Row('状态', '未连接')];
+      return [const LabelValueRow('状态', '未连接')];
     }
     final v = _sidecarVersion;
     if (v == null) {
       if (_sidecarError != null) {
-        return [_Row('错误', _sidecarError!)];
+        return [LabelValueRow('错误', _sidecarError!)];
       }
-      return [const _Row('状态', '加载中...')];
+      return [const LabelValueRow('状态', '加载中...')];
     }
     return [
-      _Row('版本号', v['version']?.toString() ?? '-'),
-      _Row('Commit', v['commit']?.toString() ?? '-'),
-      _Row('构建时间', v['buildTime']?.toString() ?? '-'),
-      _Row('Go 版本', v['goVersion']?.toString() ?? '-'),
-      _Row('平台', v['platform']?.toString() ?? '-'),
-      _Row('监听地址', sidecar.baseUrl),
+      LabelValueRow('版本号', v['version']?.toString() ?? '-'),
+      LabelValueRow('Commit', v['commit']?.toString() ?? '-'),
+      LabelValueRow('构建时间', v['buildTime']?.toString() ?? '-'),
+      LabelValueRow('Go 版本', v['goVersion']?.toString() ?? '-'),
+      LabelValueRow('平台', v['platform']?.toString() ?? '-'),
+      LabelValueRow('监听地址', sidecar.baseUrl),
     ];
-  }
-}
-
-class _Row {
-  final String label;
-  final String value;
-  const _Row(this.label, this.value);
-}
-
-class _Section extends StatelessWidget {
-  final String title;
-  final List<_Row> rows;
-
-  const _Section({required this.title, required this.rows});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 12),
-            for (final row in rows) ...[
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: 100,
-                      child: Text(
-                        row.label,
-                        style: TextStyle(color: theme.colorScheme.outline),
-                      ),
-                    ),
-                    Expanded(
-                      child: SelectableText(
-                        row.value,
-                        style: const TextStyle(
-                          fontFamily: 'Sarasa Mono SC',
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
   }
 }
