@@ -1,0 +1,13 @@
+[package]
+name = "rust_lib_test_env_dashboard"
+version = "0.1.0"
+edition = "2021"
+build = "build.rs"
+
+[lib]
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+flutter_rust_bridge = "=2.12.0"
+zipr = { path = "../../../zipr" }
+anyhow = "1.0"

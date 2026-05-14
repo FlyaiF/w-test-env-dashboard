@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-macos:
+  env-viewer-macos:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v6
@@ -26,20 +26,6 @@ jobs:
         with:
           go-version: '1.22'
           cache-dependency-path: go_sidecar/go.sum
-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
-
-      - name: Cache Cargo registry and build artifacts
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            zipr/target
-          key: macos-cargo-${{ hashFiles('zipr/Cargo.lock') }}
-          restore-keys: macos-cargo-
 
       - uses: subosito/flutter-action@v2
         with:
@@ -70,18 +56,8 @@ jobs:
           lipo -create -output go_sidecar go_sidecar_arm64 go_sidecar_amd64
           file go_sidecar
 
-      - name: Build zipr CLI (universal binary)
-        working-directory: zipr
-        run: |
-          cargo build --release --target aarch64-apple-darwin
-          cargo build --release --target x86_64-apple-darwin
-          lipo -create -output zipr \
-            target/aarch64-apple-darwin/release/zipr \
-            target/x86_64-apple-darwin/release/zipr
-          file zipr
-
-      - name: Build Flutter macOS app
-        working-directory: flutter_app
+      - name: Build env_viewer
+        working-directory: apps/env_viewer
         env:
           COMMIT: ${{ steps.meta.outputs.commit }}
           BUILD_TIME: ${{ steps.meta.outputs.build_time }}
@@ -91,38 +67,79 @@ jobs:
             --dart-define=COMMIT="$COMMIT" \
             --dart-define=BUILD_TIME="$BUILD_TIME"
 
-      - name: Bundle sidecar, zipr and package profiles
+      - name: Bundle sidecar and package
         run: |
-          SRC_APP="flutter_app/build/macos/Build/Products/Release/test_env_dashboard.app"
-          RELEASE_DIR="flutter_app/build/macos/Build/Products/Release"
-          PROFILES=(env_viewer zipr_tool)
-
-          for PROFILE in "${PROFILES[@]}"; do
-            DEST_APP="$RELEASE_DIR/${PROFILE}.app"
-
-            # Rename .app bundle so FeatureProfile resolves the correct profile.
-            rm -rf "$DEST_APP"
-            cp -R "$SRC_APP" "$DEST_APP"
-
-            cp go_sidecar/go_sidecar "$DEST_APP/Contents/Resources/go_sidecar"
-            chmod +x "$DEST_APP/Contents/Resources/go_sidecar"
-            cp zipr/zipr "$DEST_APP/Contents/Resources/zipr"
-            chmod +x "$DEST_APP/Contents/Resources/zipr"
-
-            (cd "$RELEASE_DIR" && zip -r -y "${PROFILE}-macos.zip" "${PROFILE}.app")
-          done
+          RELEASE_DIR="apps/env_viewer/build/macos/Build/Products/Release"
+          APP="$RELEASE_DIR/env_viewer.app"
+          cp go_sidecar/go_sidecar "$APP/Contents/Resources/go_sidecar"
+          chmod +x "$APP/Contents/Resources/go_sidecar"
+          (cd "$RELEASE_DIR" && zip -r -y "env_viewer-macos.zip" "env_viewer.app")
 
       - uses: actions/upload-artifact@v7
         with:
           name: env_viewer-macos
-          path: flutter_app/build/macos/Build/Products/Release/env_viewer-macos.zip
+          path: apps/env_viewer/build/macos/Build/Products/Release/env_viewer-macos.zip
+
+  zipr-tool-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          persist-credentials: true
+          token: ${{ secrets.PAT || github.token }}
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Cache Cargo registry and build artifacts
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            apps/zipr_tool/rust/target
+            zipr/target
+          key: macos-cargo-${{ hashFiles('zipr/Cargo.lock', 'apps/zipr_tool/rust/Cargo.lock') }}
+          restore-keys: macos-cargo-
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.41.6'
+
+      - name: Compute build metadata
+        id: meta
+        run: |
+          VERSION=$(git describe --tags --always 2>/dev/null || echo "dev")
+          COMMIT=$(git rev-parse --short HEAD)
+          BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+          echo "build_time=$BUILD_TIME" >> "$GITHUB_OUTPUT"
+
+      - name: Build zipr_tool
+        working-directory: apps/zipr_tool
+        env:
+          COMMIT: ${{ steps.meta.outputs.commit }}
+          BUILD_TIME: ${{ steps.meta.outputs.build_time }}
+        run: |
+          flutter pub get
+          flutter build macos --release \
+            --dart-define=COMMIT="$COMMIT" \
+            --dart-define=BUILD_TIME="$BUILD_TIME"
+
+      - name: Package
+        run: |
+          RELEASE_DIR="apps/zipr_tool/build/macos/Build/Products/Release"
+          (cd "$RELEASE_DIR" && zip -r -y "zipr_tool-macos.zip" "zipr_tool.app")
 
       - uses: actions/upload-artifact@v7
         with:
           name: zipr_tool-macos
-          path: flutter_app/build/macos/Build/Products/Release/zipr_tool-macos.zip
+          path: apps/zipr_tool/build/macos/Build/Products/Release/zipr_tool-macos.zip
 
-  build-windows:
+  env-viewer-windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v6
@@ -136,18 +153,6 @@ jobs:
           go-version: '1.22'
           cache-dependency-path: go_sidecar/go.sum
 
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Cargo registry and build artifacts
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            zipr/target
-          key: windows-cargo-${{ hashFiles('zipr/Cargo.lock') }}
-          restore-keys: windows-cargo-
-
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -160,7 +165,6 @@ jobs:
           VERSION=$(git describe --tags --always 2>/dev/null || echo "dev")
           COMMIT=$(git rev-parse --short HEAD)
           BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
           echo "build_time=$BUILD_TIME" >> "$GITHUB_OUTPUT"
 
@@ -176,12 +180,8 @@ jobs:
           LDFLAGS="-s -w -X $PKG.Version=$VERSION -X $PKG.Commit=$COMMIT -X $PKG.BuildTime=$BUILD_TIME"
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="$LDFLAGS" -o go_sidecar.exe .
 
-      - name: Build zipr CLI
-        working-directory: zipr
-        run: cargo build --release
-
-      - name: Build Flutter Windows app
-        working-directory: flutter_app
+      - name: Build env_viewer
+        working-directory: apps/env_viewer
         shell: bash
         env:
           COMMIT: ${{ steps.meta.outputs.commit }}
@@ -192,45 +192,82 @@ jobs:
             --dart-define=COMMIT="$COMMIT" \
             --dart-define=BUILD_TIME="$BUILD_TIME"
 
-      - name: Bundle sidecar, zipr and package profiles
+      - name: Bundle sidecar and package
         shell: bash
         run: |
-          RELEASE_DIR="flutter_app/build/windows/x64/runner/Release"
-          RUNNER_DIR="flutter_app/build/windows/x64/runner"
-          PACKAGE_DIR="$RUNNER_DIR/package"
-          PROFILES=(env_viewer zipr_tool)
-
-          for PROFILE in "${PROFILES[@]}"; do
-            STAGE_DIR="$PACKAGE_DIR/$PROFILE"
-
-            rm -rf "$STAGE_DIR"
-            mkdir -p "$STAGE_DIR"
-            cp -R "$RELEASE_DIR"/. "$STAGE_DIR"/
-
-            mkdir -p "$STAGE_DIR/data"
-            cp go_sidecar/go_sidecar.exe "$STAGE_DIR/data/go_sidecar.exe"
-            cp zipr/target/release/zipr.exe "$STAGE_DIR/data/zipr.exe"
-
-            # Rename executable so FeatureProfile resolves the correct profile.
-            mv "$STAGE_DIR/test_env_dashboard.exe" "$STAGE_DIR/${PROFILE}.exe"
-
-            rm -f "$RUNNER_DIR/${PROFILE}-windows.zip"
-            (cd "$STAGE_DIR" && 7z a -tzip "../../${PROFILE}-windows.zip" ./*)
-          done
+          RELEASE_DIR="apps/env_viewer/build/windows/x64/runner/Release"
+          mkdir -p "$RELEASE_DIR/data"
+          cp go_sidecar/go_sidecar.exe "$RELEASE_DIR/data/go_sidecar.exe"
+          (cd "$RELEASE_DIR" && 7z a -tzip "../env_viewer-windows.zip" ./*)
 
       - uses: actions/upload-artifact@v7
         with:
           name: env_viewer-windows
-          path: flutter_app/build/windows/x64/runner/env_viewer-windows.zip
+          path: apps/env_viewer/build/windows/x64/runner/env_viewer-windows.zip
+
+  zipr-tool-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          persist-credentials: true
+          token: ${{ secrets.PAT || github.token }}
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry and build artifacts
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            apps/zipr_tool/rust/target
+            zipr/target
+          key: windows-cargo-${{ hashFiles('zipr/Cargo.lock', 'apps/zipr_tool/rust/Cargo.lock') }}
+          restore-keys: windows-cargo-
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.41.6'
+
+      - name: Compute build metadata
+        id: meta
+        shell: bash
+        run: |
+          VERSION=$(git describe --tags --always 2>/dev/null || echo "dev")
+          COMMIT=$(git rev-parse --short HEAD)
+          BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+          echo "build_time=$BUILD_TIME" >> "$GITHUB_OUTPUT"
+
+      - name: Build zipr_tool
+        working-directory: apps/zipr_tool
+        shell: bash
+        env:
+          COMMIT: ${{ steps.meta.outputs.commit }}
+          BUILD_TIME: ${{ steps.meta.outputs.build_time }}
+        run: |
+          flutter pub get
+          flutter build windows --release \
+            --dart-define=COMMIT="$COMMIT" \
+            --dart-define=BUILD_TIME="$BUILD_TIME"
+
+      - name: Package
+        shell: bash
+        run: |
+          RELEASE_DIR="apps/zipr_tool/build/windows/x64/runner/Release"
+          (cd "$RELEASE_DIR" && 7z a -tzip "../zipr_tool-windows.zip" ./*)
 
       - uses: actions/upload-artifact@v7
         with:
           name: zipr_tool-windows
-          path: flutter_app/build/windows/x64/runner/zipr_tool-windows.zip
+          path: apps/zipr_tool/build/windows/x64/runner/zipr_tool-windows.zip
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [build-macos, build-windows]
+    needs: [env-viewer-macos, zipr-tool-macos, env-viewer-windows, zipr-tool-windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write

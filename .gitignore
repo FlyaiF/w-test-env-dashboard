@@ -3,11 +3,16 @@ build/
 *.log
 
 # Flutter
-flutter_app/.dart_tool/
-flutter_app/build/
-flutter_app/.flutter-plugins
-flutter_app/.flutter-plugins-dependencies
-flutter_app/.packages
+**/.dart_tool/
+**/build/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.packages
+# Lock files only for library packages, not apps
+packages/*/pubspec.lock
+
+# Per-app assets/ is a build-time duplicate of the repo-root assets/
+apps/*/assets/
 
 # Go binary
 go_sidecar/go_sidecar
