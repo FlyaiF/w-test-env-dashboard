@@ -5,72 +5,42 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 BUILD_DIR="$PROJECT_DIR/build"
 PLATFORM=${1:-macos}
-PROFILES=("env_viewer" "zipr_tool")
 
 echo "=== Release build for $PLATFORM ==="
 
-# Step 1a: Build Go sidecar
+# Step 1: Build Go sidecar (env_viewer's backend)
 echo ""
-echo "--- Step 1a: Building Go sidecar ---"
+echo "--- Step 1: Building Go sidecar ---"
 "$SCRIPT_DIR/build_sidecar.sh"
 
-# Step 1b: Build zipr CLI
+# Step 2: Build env_viewer
 echo ""
-echo "--- Step 1b: Building zipr CLI ---"
-"$SCRIPT_DIR/build_zipr.sh"
-
-# Step 2: Build Flutter app
-echo ""
-echo "--- Step 2: Building Flutter app ---"
-cd "$PROJECT_DIR/flutter_app"
+echo "--- Step 2: Building env_viewer ---"
+cd "$PROJECT_DIR/apps/env_viewer"
+flutter pub get
 
 case "$PLATFORM" in
     macos)
         flutter build macos --release
-
-        SRC_APP="$PROJECT_DIR/flutter_app/build/macos/Build/Products/Release/test_env_dashboard.app"
-        for PROFILE in "${PROFILES[@]}"; do
-            echo "--- Packaging profile: $PROFILE ---"
-            DEST_APP="$PROJECT_DIR/flutter_app/build/macos/Build/Products/Release/${PROFILE}.app"
-            rm -rf "$DEST_APP"
-            cp -R "$SRC_APP" "$DEST_APP"
-            cp "$BUILD_DIR/sidecar/go_sidecar" "$DEST_APP/Contents/Resources/go_sidecar"
-            chmod +x "$DEST_APP/Contents/Resources/go_sidecar"
-            cp "$BUILD_DIR/zipr/zipr" "$DEST_APP/Contents/Resources/zipr"
-            chmod +x "$DEST_APP/Contents/Resources/zipr"
-            echo "  Created $DEST_APP"
-        done
+        APP="$PROJECT_DIR/apps/env_viewer/build/macos/Build/Products/Release/env_viewer.app"
+        cp "$BUILD_DIR/sidecar/go_sidecar" "$APP/Contents/Resources/go_sidecar"
+        chmod +x "$APP/Contents/Resources/go_sidecar"
+        echo "  Created $APP"
         ;;
     windows)
         flutter build windows --release
-
-        WINDOWS_DIR="$PROJECT_DIR/flutter_app/build/windows/x64/runner/Release"
-        mkdir -p "$WINDOWS_DIR/data"
-        cp "$BUILD_DIR/sidecar/go_sidecar" "$WINDOWS_DIR/data/go_sidecar.exe"
-        cp "$BUILD_DIR/zipr/zipr" "$WINDOWS_DIR/data/zipr.exe"
-
-        for PROFILE in "${PROFILES[@]}"; do
-            echo "--- Packaging profile: $PROFILE ---"
-            cp "$WINDOWS_DIR/test_env_dashboard.exe" "$WINDOWS_DIR/${PROFILE}.exe"
-            echo "  Created $WINDOWS_DIR/${PROFILE}.exe"
-        done
+        RUNNER_DIR="$PROJECT_DIR/apps/env_viewer/build/windows/x64/runner/Release"
+        mkdir -p "$RUNNER_DIR/data"
+        cp "$BUILD_DIR/sidecar/go_sidecar" "$RUNNER_DIR/data/go_sidecar.exe"
+        echo "  Created $RUNNER_DIR/env_viewer.exe"
         ;;
     linux)
         flutter build linux --release
-
-        LINUX_DIR="$PROJECT_DIR/flutter_app/build/linux/x64/release/bundle"
-        mkdir -p "$LINUX_DIR/data"
-        cp "$BUILD_DIR/sidecar/go_sidecar" "$LINUX_DIR/data/go_sidecar"
-        chmod +x "$LINUX_DIR/data/go_sidecar"
-        cp "$BUILD_DIR/zipr/zipr" "$LINUX_DIR/data/zipr"
-        chmod +x "$LINUX_DIR/data/zipr"
-
-        for PROFILE in "${PROFILES[@]}"; do
-            echo "--- Packaging profile: $PROFILE ---"
-            cp "$LINUX_DIR/test_env_dashboard" "$LINUX_DIR/${PROFILE}"
-            chmod +x "$LINUX_DIR/${PROFILE}"
-            echo "  Created $LINUX_DIR/${PROFILE}"
-        done
+        BUNDLE_DIR="$PROJECT_DIR/apps/env_viewer/build/linux/x64/release/bundle"
+        mkdir -p "$BUNDLE_DIR/data"
+        cp "$BUILD_DIR/sidecar/go_sidecar" "$BUNDLE_DIR/data/go_sidecar"
+        chmod +x "$BUNDLE_DIR/data/go_sidecar"
+        echo "  Created $BUNDLE_DIR/env_viewer"
         ;;
     *)
         echo "Unknown platform: $PLATFORM"
@@ -79,6 +49,24 @@ case "$PLATFORM" in
         ;;
 esac
 
+# Step 3: Build zipr_tool (Rust comes in via FFI, no separate binary)
+echo ""
+echo "--- Step 3: Building zipr_tool ---"
+cd "$PROJECT_DIR/apps/zipr_tool"
+flutter pub get
+flutter build "$PLATFORM" --release
+
+case "$PLATFORM" in
+    macos)
+        echo "  Created $PROJECT_DIR/apps/zipr_tool/build/macos/Build/Products/Release/zipr_tool.app"
+        ;;
+    windows)
+        echo "  Created $PROJECT_DIR/apps/zipr_tool/build/windows/x64/runner/Release/zipr_tool.exe"
+        ;;
+    linux)
+        echo "  Created $PROJECT_DIR/apps/zipr_tool/build/linux/x64/release/bundle/zipr_tool"
+        ;;
+esac
+
 echo ""
 echo "=== Release build complete ==="
-echo "Profiles built: ${PROFILES[*]}"
