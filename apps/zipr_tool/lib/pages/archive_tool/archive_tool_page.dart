@@ -779,6 +779,71 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
     await _reloadSpec();
   }
 
+  Widget _buildPatchPage(BuildContext context, ZiprService service) {
+    return Stack(
+      children: [
+        DetailPanel(
+          mode: DetailMode.patch,
+          patchSpecToml: _patchSpecToml,
+          unresolvedEntries: _unresolvedEntries,
+          onPatchDraftExtend: _patchDraftExtend,
+          onPatchDiscard: _discardPatchDraft,
+          onPatchSourcesDropped: _handlePatchSources,
+          onPatchDryRun: _patchDryRun,
+          onPatchApply: _patchApply,
+          onOpenInEditor: _openInEditor,
+          onReload: _reloadSpec,
+          onRestoreOriginal: _restoreOriginal,
+          onRollbackArchive: _rollbackArchive,
+          canRollback: service.lastBackupPath != null,
+          onResolve: _patchResolve,
+          onClose: () => setState(() => _detailMode = DetailMode.entry),
+        ),
+        if (_isDragging) _buildDragOverlay(context, service),
+      ],
+    );
+  }
+
+  Widget _buildBrowsePage(BuildContext context, ZiprService service) {
+    return Stack(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              flex: 3,
+              child: ArchiveTreePanel(
+                entries: service.entries,
+                expandingArchives: service.expandingArchivesView,
+                onEntrySelected: (entry) {
+                  setState(() {
+                    _selectedEntry = entry;
+                    _detailMode = DetailMode.entry;
+                  });
+                },
+                onExtract: _extractEntry,
+                onReplace: _replaceEntry,
+                onDelete: _deleteEntry,
+                onExpandArchive: (zipExpr) {
+                  service.expandArchive(zipExpr);
+                },
+              ),
+            ),
+            const VerticalDivider(width: 1),
+            Expanded(
+              flex: 2,
+              child: DetailPanel(
+                mode: DetailMode.entry,
+                selectedEntry: _selectedEntry,
+                diffEntries: service.diffEntries,
+              ),
+            ),
+          ],
+        ),
+        if (_isDragging) _buildDragOverlay(context, service),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final service = context.watch<ZiprService>();
@@ -958,56 +1023,9 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
                         _buildDragOverlay(context, service),
                     ],
                   )
-                : Stack(
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            flex: 3,
-                            child: ArchiveTreePanel(
-                              entries: service.entries,
-                              expandingArchives: service.expandingArchivesView,
-                              onEntrySelected: (entry) {
-                                setState(() {
-                                  _selectedEntry = entry;
-                                  _detailMode = DetailMode.entry;
-                                });
-                              },
-                              onExtract: _extractEntry,
-                              onReplace: _replaceEntry,
-                              onDelete: _deleteEntry,
-                              onExpandArchive: (zipExpr) {
-                                service.expandArchive(zipExpr);
-                              },
-                            ),
-                          ),
-                          const VerticalDivider(width: 1),
-                          Expanded(
-                            flex: 2,
-                            child: DetailPanel(
-                              mode: _detailMode,
-                              selectedEntry: _selectedEntry,
-                              diffEntries: service.diffEntries,
-                              patchSpecToml: _patchSpecToml,
-                              unresolvedEntries: _unresolvedEntries,
-                              onPatchDraftExtend: _patchDraftExtend,
-                              onPatchDiscard: _discardPatchDraft,
-                              onPatchSourcesDropped: _handlePatchSources,
-                              onPatchDryRun: _patchDryRun,
-                              onPatchApply: _patchApply,
-                              onOpenInEditor: _openInEditor,
-                              onReload: _reloadSpec,
-                              onRestoreOriginal: _restoreOriginal,
-                              onRollbackArchive: _rollbackArchive,
-                              canRollback: service.lastBackupPath != null,
-                              onResolve: _patchResolve,
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (_isDragging) _buildDragOverlay(context, service),
-                    ],
-                  ),
+                : _detailMode == DetailMode.patch
+                ? _buildPatchPage(context, service)
+                : _buildBrowsePage(context, service),
           ),
         ),
         if (service.operationMessage != null && !service.loading)

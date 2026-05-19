@@ -125,6 +125,37 @@ void main() {
       expect(find.text('批量替换'), findsOneWidget);
     });
 
+    testWidgets('batch replace opens as a full page and returns to browse', (
+      tester,
+    ) async {
+      mock.listResult = [
+        ArchiveEntry(
+          expr: 'file.txt',
+          size: BigInt.from(10),
+          compressedSize: BigInt.from(5),
+          isArchive: false,
+        ),
+      ];
+      await service.listArchive('/test.jar');
+
+      await tester.pumpWidget(_wrapWithProviders(service));
+      await tester.pump();
+
+      await tester.tap(find.text('批量替换'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('拖入替换文件或目录'), findsOneWidget);
+      expect(find.text('首次添加会自动生成清单'), findsOneWidget);
+      expect(find.text('选择文件查看详情'), findsNothing);
+      expect(find.byTooltip('返回浏览'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('返回浏览'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('选择文件查看详情'), findsOneWidget);
+      expect(find.text('拖入替换文件或目录'), findsNothing);
+    });
+
     testWidgets('shows archive path in toolbar after loading', (tester) async {
       mock.listResult = [];
       await service.listArchive('/path/to/my-archive.jar');

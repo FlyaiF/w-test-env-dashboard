@@ -20,6 +20,7 @@ class DetailPanel extends StatefulWidget {
   final VoidCallback? onReload;
   final VoidCallback? onRestoreOriginal;
   final VoidCallback? onRollbackArchive;
+  final VoidCallback? onClose;
   final Future<void> Function(List<Resolution> resolutions)? onResolve;
   final bool canRollback;
 
@@ -39,6 +40,7 @@ class DetailPanel extends StatefulWidget {
     this.onReload,
     this.onRestoreOriginal,
     this.onRollbackArchive,
+    this.onClose,
     this.onResolve,
     this.canRollback = false,
   });
@@ -216,7 +218,18 @@ class _DetailPanelState extends State<DetailPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('批量替换', style: Theme.of(context).textTheme.titleMedium),
+          Row(
+            children: [
+              Text('批量替换', style: Theme.of(context).textTheme.titleMedium),
+              const Spacer(),
+              if (widget.onClose != null)
+                IconButton(
+                  onPressed: widget.onClose,
+                  icon: const Icon(Icons.close, size: 18),
+                  tooltip: '返回浏览',
+                ),
+            ],
+          ),
           const SizedBox(height: 4),
           Text(summary, style: _mutedTextStyle(context)),
           const SizedBox(height: 12),
