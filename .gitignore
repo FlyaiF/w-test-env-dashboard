@@ -18,6 +18,7 @@ apps/*/assets/
 
 # Go binary
 go_sidecar/go_sidecar
+apps/env_viewer/go_sidecar/
 
 # IDE / tools
 .idea/

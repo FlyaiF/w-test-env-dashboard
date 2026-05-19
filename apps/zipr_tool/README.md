@@ -21,23 +21,16 @@ All paths below are relative to the repository root unless otherwise noted.
 ## First-time setup
 
 ```bash
-# 1. Sync shared font assets into the app's local assets/ directory.
-#    Required because Flutter's bundler doesn't follow `..` paths on
-#    Windows. Re-run after pulling new fonts.
-./scripts/sync_assets.sh
-
-# 2. Make sure the zipr submodule is checked out.
-git submodule update --init
-
-# 3. Fetch Dart dependencies.
-cd apps/zipr_tool && flutter pub get
+# Sync assets, verify the zipr submodule, and fetch Dart dependencies.
+./scripts/dev_zipr_tool.sh
 ```
 
 ## Run in dev mode
 
 ```bash
-cd apps/zipr_tool
-flutter run -d macos          # or: windows / linux
+./scripts/dev_zipr_tool.sh run
+# or pass Flutter args explicitly:
+./scripts/dev_zipr_tool.sh run -d macos
 ```
 
 The first launch is slow because cargokit compiles the Rust library (typically 1–3 minutes on a fresh checkout, instant after that thanks to Cargo's incremental cache).

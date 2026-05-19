@@ -123,10 +123,11 @@ class SidecarManager extends ChangeNotifier {
   String _resolveBinaryPath() {
     final exe = Platform.resolvedExecutable;
 
+    if (kDebugMode) {
+      return _devBinaryPath();
+    }
+
     if (Platform.isMacOS) {
-      if (kDebugMode) {
-        return _devBinaryPath();
-      }
       // In .app bundle: Contents/Resources/go_sidecar
       final contentsIdx = exe.indexOf('/Contents/');
       if (contentsIdx != -1) {
@@ -144,19 +145,36 @@ class SidecarManager extends ChangeNotifier {
     }
   }
 
+  String get _sidecarExecutableName =>
+      Platform.isWindows ? 'go_sidecar.exe' : 'go_sidecar';
+
   String _devBinaryPath() {
     // In dev mode, look for the Go binary built locally
     // Navigate from apps/env_viewer/.dart_tool/... up to project root
+    final binaryName = _sidecarExecutableName;
     var dir = Directory(Platform.resolvedExecutable).parent;
     for (var i = 0; i < 10; i++) {
-      final candidate = File('${dir.path}/go_sidecar/go_sidecar');
-      if (candidate.existsSync()) return candidate.path;
-      final candidate2 = File('${dir.path}/build/sidecar/go_sidecar');
-      if (candidate2.existsSync()) return candidate2.path;
+      final candidates = [
+        File('${dir.path}/apps/env_viewer/go_sidecar/$binaryName'),
+        File('${dir.path}/go_sidecar/$binaryName'),
+        File('${dir.path}/build/sidecar/$binaryName'),
+        File('${dir.path}/build/sidecar/go_sidecar'),
+      ];
+      for (final candidate in candidates) {
+        if (candidate.existsSync()) return candidate.path;
+      }
       dir = dir.parent;
     }
     // Fallback: relative to CWD
-    return '${Directory.current.path}/go_sidecar/go_sidecar';
+    final cwd = Directory.current.path;
+    final cwdCandidates = [
+      File('$cwd/go_sidecar/$binaryName'),
+      File('$cwd/apps/env_viewer/go_sidecar/$binaryName'),
+    ];
+    for (final candidate in cwdCandidates) {
+      if (candidate.existsSync()) return candidate.path;
+    }
+    return cwdCandidates.first.path;
   }
 
   @override

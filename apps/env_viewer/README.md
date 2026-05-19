@@ -17,24 +17,17 @@ All paths below are relative to the repository root unless otherwise noted.
 ## First-time setup
 
 ```bash
-# 1. Sync shared font assets into the app's local assets/ directory.
-#    Required because Flutter's bundler doesn't follow `..` paths on
-#    Windows. Re-run after pulling new fonts.
-./scripts/sync_assets.sh
-
-# 2. Build the Go sidecar into build/sidecar/.
-#    env_viewer looks for the binary here when run from `flutter run`.
-./scripts/build_sidecar.sh
-
-# 3. Fetch Dart dependencies.
-cd apps/env_viewer && flutter pub get
+# Sync assets, build the Go sidecar + JDBC helper, copy them into
+# apps/env_viewer/go_sidecar/, and fetch Dart dependencies.
+./scripts/dev_env_viewer.sh
 ```
 
 ## Run in dev mode
 
 ```bash
-cd apps/env_viewer
-flutter run -d macos          # or: windows / linux
+./scripts/dev_env_viewer.sh run
+# or pass Flutter args explicitly:
+./scripts/dev_env_viewer.sh run -d macos
 ```
 
 What you should see on a healthy launch:
@@ -43,7 +36,7 @@ What you should see on a healthy launch:
 - The header has a cloud icon: **red** = sidecar not running, **green** = sidecar connected. On first launch, before you configure Oracle, it's red and the app lands you on the 设置 page automatically.
 - Fill out the Oracle DSN in 设置 (host, port, service name, username, password), click **测试连接**, then **保存并重新连接**. The header indicator should turn green, and 总览 will populate.
 
-The Go sidecar is started as a child process at runtime; it writes `PORT=<num>` to stdout, which `SidecarManager` reads to configure the HTTP client. If startup fails, check that `build/sidecar/go_sidecar` exists and is executable — that's where `_devBinaryPath()` looks for it (`lib/sidecar/sidecar_manager.dart:147`).
+The Go sidecar is started as a child process at runtime; it writes `PORT=<num>` to stdout, which `SidecarManager` reads to configure the HTTP client. In dev mode, `scripts/dev_env_viewer.sh` copies the binary and JDBC helper jars into `apps/env_viewer/go_sidecar/`; `_devBinaryPath()` also falls back to `go_sidecar/` and `build/sidecar/` for older local workflows.
 
 ## Run tests
 
@@ -68,7 +61,7 @@ Output for macOS: `apps/env_viewer/build/macos/Build/Products/Release/env_viewer
 
 ## Troubleshooting
 
-- **Header indicator stays red after entering Oracle credentials**: check Settings → 测试连接 for the underlying error. If it says the sidecar isn't running, the Go binary couldn't be located — re-run `./scripts/build_sidecar.sh` from the repo root.
+- **Header indicator stays red after entering Oracle credentials**: check Settings → 测试连接 for the underlying error. If it says the sidecar isn't running, the Go binary couldn't be located — re-run `./scripts/dev_env_viewer.sh` from the repo root.
 - **`flutter test` hangs or fails with WebSocket error**: unset all proxy env vars first (see above).
 - **macOS build fails on a fresh checkout with CocoaPods errors**: `cd apps/env_viewer/macos && pod install`.
 - **Window opens but fonts look wrong (square boxes for Chinese characters)**: you skipped `scripts/sync_assets.sh`. Run it, then `flutter clean && flutter run`.
