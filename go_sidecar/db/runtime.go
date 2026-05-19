@@ -21,6 +21,9 @@ const (
 	RuntimeDBOracle          = "oracle"
 	RuntimeDBDameng          = "dameng"
 	RuntimeDBOceanBaseOracle = "oceanbase-oracle"
+
+	runtimeCollectTimeout = 15 * time.Second
+	runtimeTestTimeout    = 10 * time.Second
 )
 
 type RuntimeDBCredentials struct {
@@ -112,7 +115,7 @@ func CollectRuntimeEnvInfo(dbType, dsn string) (model.RuntimeEnvFreshInfo, error
 		return model.RuntimeEnvFreshInfo{}, UnsupportedRuntimeDBTypeError{Type: NormalizeRuntimeDBType(dbType)}
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), runtimeCollectTimeout)
 	defer cancel()
 	return adapter.CollectRuntimeInfo(ctx, dsn, dashboardRuntimeCredentials())
 }
@@ -123,7 +126,7 @@ func TestRuntimeConnection(dbType, dsn string) error {
 		return UnsupportedRuntimeDBTypeError{Type: NormalizeRuntimeDBType(dbType)}
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), runtimeTestTimeout)
 	defer cancel()
 	return adapter.TestConnection(ctx, dsn, dashboardRuntimeCredentials())
 }
@@ -185,7 +188,7 @@ func (a oracleRuntimeAdapter) CollectRuntimeInfo(ctx context.Context, dsn string
 	runtimeDB.SetConnMaxLifetime(30 * time.Second)
 
 	if err := runtimeDB.PingContext(ctx); err != nil {
-		return fresh, fmt.Errorf("connect runtime db: %w", err)
+		return fresh, runtimeOperationError(ctx, "connect runtime db", err)
 	}
 
 	var systemVersion sql.NullString
@@ -193,7 +196,7 @@ func (a oracleRuntimeAdapter) CollectRuntimeInfo(ctx context.Context, dsn string
 		"select param_value from tsys_parameter where param_code = 'SystemVersion'",
 	).Scan(&systemVersion)
 	if err != nil {
-		return fresh, fmt.Errorf("query SystemVersion: %w", err)
+		return fresh, runtimeOperationError(ctx, "query SystemVersion", err)
 	}
 	if systemVersion.Valid {
 		v := strings.TrimSpace(systemVersion.String)
@@ -208,7 +211,7 @@ func (a oracleRuntimeAdapter) CollectRuntimeInfo(ctx context.Context, dsn string
 		"select * from (select begin_time, subsystem_ver from jres_subsystem_rc order by begin_time desc) where rownum = 1",
 	).Scan(&beginTime, &subsystemVer)
 	if err != nil {
-		return fresh, fmt.Errorf("query subsystem version: %w", err)
+		return fresh, runtimeOperationError(ctx, "query subsystem version", err)
 	}
 	if beginTime.Valid {
 		t := beginTime.Time
@@ -368,7 +371,7 @@ func (a damengRuntimeAdapter) CollectRuntimeInfo(ctx context.Context, dsn string
 	runtimeDB.SetConnMaxLifetime(30 * time.Second)
 
 	if err := runtimeDB.PingContext(ctx); err != nil {
-		return fresh, fmt.Errorf("connect runtime db: %w", err)
+		return fresh, runtimeOperationError(ctx, "connect runtime db", err)
 	}
 
 	var systemVersion sql.NullString
@@ -376,7 +379,7 @@ func (a damengRuntimeAdapter) CollectRuntimeInfo(ctx context.Context, dsn string
 		"select param_value from tsys_parameter where param_code = 'SystemVersion'",
 	).Scan(&systemVersion)
 	if err != nil {
-		return fresh, fmt.Errorf("query SystemVersion: %w", err)
+		return fresh, runtimeOperationError(ctx, "query SystemVersion", err)
 	}
 	if systemVersion.Valid {
 		v := strings.TrimSpace(systemVersion.String)
@@ -391,7 +394,7 @@ func (a damengRuntimeAdapter) CollectRuntimeInfo(ctx context.Context, dsn string
 		"select * from (select begin_time, subsystem_ver from jres_subsystem_rc order by begin_time desc) where rownum = 1",
 	).Scan(&beginTime, &subsystemVer)
 	if err != nil {
-		return fresh, fmt.Errorf("query subsystem version: %w", err)
+		return fresh, runtimeOperationError(ctx, "query subsystem version", err)
 	}
 	if beginTime.Valid {
 		t := beginTime.Time
@@ -480,4 +483,14 @@ func ensureDamengPort(address string) string {
 		}
 	}
 	return address + ":5236"
+}
+
+func runtimeOperationError(ctx context.Context, operation string, err error) error {
+	if err == nil {
+		return nil
+	}
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return fmt.Errorf("%s: %w after %s (last error: %v)", operation, ctxErr, runtimeCollectTimeout, err)
+	}
+	return fmt.Errorf("%s: %w", operation, err)
 }

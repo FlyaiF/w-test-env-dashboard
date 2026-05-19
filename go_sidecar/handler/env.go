@@ -12,7 +12,7 @@ import (
 	"test-env-dashboard/go_sidecar/model"
 )
 
-const runtimeCollectConcurrency = 10
+const runtimeCollectConcurrency = 4
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json")
