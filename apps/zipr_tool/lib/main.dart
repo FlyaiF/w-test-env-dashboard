@@ -34,12 +34,21 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
-      providers: [ChangeNotifierProvider(create: (_) => ZiprService())],
-      child: MaterialApp(
-        title: '归档差异与补丁工具',
-        debugShowCheckedModeBanner: false,
-        theme: buildAppTheme(),
-        home: const HomePage(),
+      providers: [
+        ChangeNotifierProvider(create: (_) => AppThemeController()..load()),
+        ChangeNotifierProvider(create: (_) => ZiprService()),
+      ],
+      child: Consumer<AppThemeController>(
+        builder: (context, themeController, _) {
+          return MaterialApp(
+            title: '归档差异与补丁工具',
+            debugShowCheckedModeBanner: false,
+            theme: buildAppTheme(),
+            darkTheme: buildAppTheme(brightness: Brightness.dark),
+            themeMode: themeController.themeMode,
+            home: const HomePage(),
+          );
+        },
       ),
     );
   }

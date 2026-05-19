@@ -135,7 +135,7 @@ class _DetailPanelState extends State<DetailPanel> {
             itemCount: widget.diffEntries.length,
             itemBuilder: (context, index) {
               final entry = widget.diffEntries[index];
-              return _diffRow(entry);
+              return _diffRow(context, entry);
             },
           ),
         ),
@@ -143,7 +143,8 @@ class _DetailPanelState extends State<DetailPanel> {
     );
   }
 
-  Widget _diffRow(DiffEntry entry) {
+  Widget _diffRow(BuildContext context, DiffEntry entry) {
+    final colorScheme = Theme.of(context).colorScheme;
     final (tag, color) = switch (entry.kind) {
       'added' => ('A', Colors.green.shade300),
       'removed' => ('D', Colors.red.shade300),
@@ -185,11 +186,14 @@ class _DetailPanelState extends State<DetailPanel> {
             ],
           ),
           if (entry.contentChanged)
-            const Padding(
-              padding: EdgeInsets.only(left: 28),
+            Padding(
+              padding: const EdgeInsets.only(left: 28),
               child: Text(
                 'content: changed',
-                style: TextStyle(fontSize: 11, color: Colors.grey),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: colorScheme.onSurfaceVariant,
+                ),
               ),
             ),
           for (final meta in entry.metadataChanges)
@@ -197,7 +201,10 @@ class _DetailPanelState extends State<DetailPanel> {
               padding: const EdgeInsets.only(left: 28),
               child: Text(
                 'meta: $meta',
-                style: const TextStyle(fontSize: 11, color: Colors.grey),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: colorScheme.onSurfaceVariant,
+                ),
               ),
             ),
         ],
@@ -400,11 +407,12 @@ class _DetailPanelState extends State<DetailPanel> {
   }
 
   Widget _buildPatchSpecDisclosure(BuildContext context, String toml) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+        border: Border.all(color: colorScheme.outlineVariant),
       ),
       child: ExpansionTile(
         tilePadding: const EdgeInsets.symmetric(horizontal: 12),
@@ -416,9 +424,9 @@ class _DetailPanelState extends State<DetailPanel> {
             width: double.infinity,
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.grey.shade100,
+              color: colorScheme.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.grey.shade300),
+              border: Border.all(color: colorScheme.outlineVariant),
             ),
             child: SelectableText(
               toml,
@@ -435,11 +443,15 @@ class _DetailPanelState extends State<DetailPanel> {
 
   Widget _buildUnresolvedSection(BuildContext context) {
     final entries = widget.unresolvedEntries;
+    final colorScheme = Theme.of(context).colorScheme;
+    final warningColor = colorScheme.brightness == Brightness.dark
+        ? Colors.orange.shade300
+        : Colors.orange.shade700;
     return Container(
       decoration: BoxDecoration(
-        color: Colors.orange.shade50,
+        color: warningColor.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.orange.shade200),
+        border: Border.all(color: warningColor.withValues(alpha: 0.35)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -448,18 +460,14 @@ class _DetailPanelState extends State<DetailPanel> {
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
             child: Row(
               children: [
-                Icon(
-                  Icons.warning_amber,
-                  size: 18,
-                  color: Colors.orange.shade700,
-                ),
+                Icon(Icons.warning_amber, size: 18, color: warningColor),
                 const SizedBox(width: 6),
                 Text(
                   '未解析条目 (${entries.length})',
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 13,
-                    color: Colors.orange.shade900,
+                    color: warningColor,
                   ),
                 ),
                 const Spacer(),
@@ -586,7 +594,7 @@ class _DetailPanelState extends State<DetailPanel> {
           else if (isMultiple && entry.candidates.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(left: 20, top: 2),
-              child: _buildCandidateDropdown(entry, chosen),
+              child: _buildCandidateDropdown(context, entry, chosen),
             )
           else if (!isMultiple && !isIgnored)
             Padding(
@@ -601,7 +609,12 @@ class _DetailPanelState extends State<DetailPanel> {
     );
   }
 
-  Widget _buildCandidateDropdown(UnresolvedEntry entry, String? chosen) {
+  Widget _buildCandidateDropdown(
+    BuildContext context,
+    UnresolvedEntry entry,
+    String? chosen,
+  ) {
+    final colorScheme = Theme.of(context).colorScheme;
     final commonPrefix = _commonPathPrefix(entry.candidates);
     String stripped(String path) =>
         commonPrefix.isNotEmpty ? path.substring(commonPrefix.length) : path;
@@ -611,10 +624,10 @@ class _DetailPanelState extends State<DetailPanel> {
       hint: const Text('选择目标...', style: TextStyle(fontSize: 11)),
       isExpanded: true,
       isDense: true,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 11,
         fontFamily: 'Sarasa Mono SC',
-        color: Colors.black87,
+        color: colorScheme.onSurface,
       ),
       selectedItemBuilder: (context) => entry.candidates.map((c) {
         return Align(

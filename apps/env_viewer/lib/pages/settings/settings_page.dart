@@ -1,6 +1,8 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_ui/shared_ui.dart'
+    show AppThemeController, ThemeModeSelector;
 
 import '../../config/config_service.dart';
 import '../../services/ssh_tools/ssh_tool.dart';
@@ -207,6 +209,8 @@ class _SettingsPageState extends State<SettingsPage> {
             testResult: _testResult,
           ),
           const SizedBox(height: 16),
+          _buildAppearanceSection(),
+          const SizedBox(height: 16),
           _buildOracleSection(),
           const SizedBox(height: 16),
           _buildSshSection(),
@@ -215,6 +219,26 @@ class _SettingsPageState extends State<SettingsPage> {
           const SizedBox(height: 24),
           _buildActionBar(),
         ],
+      ),
+    );
+  }
+
+  Widget _buildAppearanceSection() {
+    final themeController = context.watch<AppThemeController>();
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('外观', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 12),
+            ThemeModeSelector(
+              value: themeController.themeMode,
+              onChanged: themeController.setThemeMode,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -376,8 +400,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   label: '默认终端工具',
                   value: _defaultTerminalToolId,
                   tools: terminals,
-                  onChanged: (v) =>
-                      setState(() => _defaultTerminalToolId = v),
+                  onChanged: (v) => setState(() => _defaultTerminalToolId = v),
                 );
                 final sftp = _toolDropdown(
                   label: '默认 SFTP 工具',
@@ -400,10 +423,7 @@ class _SettingsPageState extends State<SettingsPage> {
               },
             ),
             const SizedBox(height: 16),
-            Text(
-              '密码传递方式',
-              style: Theme.of(context).textTheme.labelLarge,
-            ),
+            Text('密码传递方式', style: Theme.of(context).textTheme.labelLarge),
             const SizedBox(height: 8),
             SegmentedButton<String>(
               segments: const [
@@ -451,17 +471,17 @@ class _SettingsPageState extends State<SettingsPage> {
       items: [
         const DropdownMenuItem<String?>(value: null, child: Text('未设置')),
         for (final tool in tools)
-          DropdownMenuItem<String?>(value: tool.id, child: Text(tool.displayName)),
+          DropdownMenuItem<String?>(
+            value: tool.id,
+            child: Text(tool.displayName),
+          ),
       ],
       onChanged: tools.isEmpty ? null : onChanged,
     );
   }
 
   Widget _toolPathField(SshTool tool) {
-    final ctrl = _toolPathCtrls.putIfAbsent(
-      tool.id,
-      TextEditingController.new,
-    );
+    final ctrl = _toolPathCtrls.putIfAbsent(tool.id, TextEditingController.new);
     return TextField(
       controller: ctrl,
       decoration: InputDecoration(

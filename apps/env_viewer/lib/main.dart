@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_ui/shared_ui.dart' show buildAppTheme;
+import 'package:shared_ui/shared_ui.dart'
+    show AppThemeController, buildAppTheme;
 import 'package:window_manager/window_manager.dart';
 import 'config/config_service.dart';
 import 'sidecar/sidecar_manager.dart';
@@ -43,15 +44,22 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => AppThemeController()..load()),
         ChangeNotifierProvider(create: (_) => SidecarManager()),
         ChangeNotifierProvider(create: (_) => LocalStore()),
         ChangeNotifierProvider(create: (_) => EnvService()),
       ],
-      child: MaterialApp(
-        title: '测试环境速查工具',
-        debugShowCheckedModeBanner: false,
-        theme: buildAppTheme(),
-        home: const HomePage(),
+      child: Consumer<AppThemeController>(
+        builder: (context, themeController, _) {
+          return MaterialApp(
+            title: '测试环境速查工具',
+            debugShowCheckedModeBanner: false,
+            theme: buildAppTheme(),
+            darkTheme: buildAppTheme(brightness: Brightness.dark),
+            themeMode: themeController.themeMode,
+            home: const HomePage(),
+          );
+        },
       ),
     );
   }
@@ -158,10 +166,12 @@ class _HomePageState extends State<HomePage> with WindowListener {
       child: IndexedStack(
         index: _selectedIndex,
         children: [
-          DashboardPage(onViewLog: (env) {
-            setState(() => _selectedIndex = 1);
-            _logViewerKey.currentState?.connectToEnv(env);
-          }),
+          DashboardPage(
+            onViewLog: (env) {
+              setState(() => _selectedIndex = 1);
+              _logViewerKey.currentState?.connectToEnv(env);
+            },
+          ),
           LogViewerPage(key: _logViewerKey),
           const ManagementPage(),
           const SettingsPage(),

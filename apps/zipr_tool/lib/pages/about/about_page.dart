@@ -3,13 +3,16 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_ui/shared_ui.dart';
 
 import '../../src/rust/api/zipr_api.dart';
 
 const String _appCommit = String.fromEnvironment('COMMIT', defaultValue: 'dev');
-const String _appBuildTime =
-    String.fromEnvironment('BUILD_TIME', defaultValue: 'unknown');
+const String _appBuildTime = String.fromEnvironment(
+  'BUILD_TIME',
+  defaultValue: 'unknown',
+);
 
 class AboutPage extends StatefulWidget {
   const AboutPage({super.key});
@@ -50,8 +53,10 @@ class _AboutPageState extends State<AboutPage> {
   String _buildPlainText() {
     final buf = StringBuffer();
     buf.writeln('=== 应用版本 ===');
-    buf.writeln('version: ${_packageInfo?.version ?? '-'}+'
-        '${_packageInfo?.buildNumber ?? '-'}');
+    buf.writeln(
+      'version: ${_packageInfo?.version ?? '-'}+'
+      '${_packageInfo?.buildNumber ?? '-'}',
+    );
     buf.writeln('commit: $_appCommit');
     buf.writeln('buildTime: $_appBuildTime');
     buf.writeln();
@@ -80,6 +85,7 @@ class _AboutPageState extends State<AboutPage> {
     final appVersion = info == null
         ? '加载中...'
         : '${info.version}+${info.buildNumber}';
+    final themeController = context.watch<AppThemeController>();
 
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -95,7 +101,8 @@ class _AboutPageState extends State<AboutPage> {
                 label: const Text('复制全部信息'),
                 onPressed: () async {
                   await Clipboard.setData(
-                      ClipboardData(text: _buildPlainText()));
+                    ClipboardData(text: _buildPlainText()),
+                  );
                   if (!context.mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
@@ -113,6 +120,29 @@ class _AboutPageState extends State<AboutPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  Card(
+                    margin: EdgeInsets.zero,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '外观',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          ThemeModeSelector(
+                            value: themeController.themeMode,
+                            onChanged: themeController.setThemeMode,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   Section(
                     title: '应用版本',
                     rows: [
@@ -123,10 +153,7 @@ class _AboutPageState extends State<AboutPage> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  Section(
-                    title: '归档引擎 (Rust)',
-                    rows: _rustRows(),
-                  ),
+                  Section(title: '归档引擎 (Rust)', rows: _rustRows()),
                   const SizedBox(height: 12),
                   Section(
                     title: '运行环境',
