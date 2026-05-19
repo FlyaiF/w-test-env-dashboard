@@ -13,6 +13,8 @@ import (
 	"strings"
 	"test-env-dashboard/go_sidecar/model"
 	"time"
+
+	_ "github.com/ywhking/gorm-dameng/dm8"
 )
 
 const (
@@ -54,6 +56,7 @@ var runtimeDBTypeLabels = map[string]string{
 
 func init() {
 	RegisterRuntimeDBAdapter(oracleRuntimeAdapter{})
+	RegisterRuntimeDBAdapter(damengRuntimeAdapter{})
 }
 
 func RegisterRuntimeDBAdapter(adapter RuntimeDBAdapter) {
@@ -90,11 +93,13 @@ func NormalizeRuntimeDBType(dbType string) string {
 	value = strings.ReplaceAll(value, "_", "-")
 	value = strings.ReplaceAll(value, " ", "-")
 	switch value {
-	case "", "ora", "oracle":
+	case "", "0", "ora", "oracle":
 		return RuntimeDBOracle
 	case "dm", "dameng", "dm8":
 		return RuntimeDBDameng
-	case "ob", "ob-oracle", "oceanbase", "oceanbase-oracle", "oceanbaseoracle":
+	case "2":
+		return RuntimeDBDameng
+	case "1", "ob", "ob-oracle", "oceanbase", "oceanbase-oracle", "oceanbaseoracle":
 		return RuntimeDBOceanBaseOracle
 	default:
 		return value
@@ -312,4 +317,167 @@ func ensureOraclePort(address string) string {
 func IsUnsupportedRuntimeDBType(err error) bool {
 	var target UnsupportedRuntimeDBTypeError
 	return errors.As(err, &target)
+}
+
+type damengRuntimeAdapter struct{}
+
+func (damengRuntimeAdapter) Type() string {
+	return RuntimeDBDameng
+}
+
+func (damengRuntimeAdapter) Label() string {
+	return "Dameng"
+}
+
+func (damengRuntimeAdapter) RuntimeCollectionSupported() bool {
+	return true
+}
+
+func (a damengRuntimeAdapter) TestConnection(ctx context.Context, dsn string, fallback RuntimeDBCredentials) error {
+	normalizedDSN, err := a.normalizeDSN(dsn, fallback)
+	if err != nil {
+		return err
+	}
+
+	runtimeDB, err := sql.Open("dm", normalizedDSN)
+	if err != nil {
+		return err
+	}
+	defer runtimeDB.Close()
+	runtimeDB.SetMaxOpenConns(1)
+	runtimeDB.SetMaxIdleConns(0)
+	runtimeDB.SetConnMaxLifetime(30 * time.Second)
+	return runtimeDB.PingContext(ctx)
+}
+
+func (a damengRuntimeAdapter) CollectRuntimeInfo(ctx context.Context, dsn string, fallback RuntimeDBCredentials) (model.RuntimeEnvFreshInfo, error) {
+	var fresh model.RuntimeEnvFreshInfo
+
+	normalizedDSN, err := a.normalizeDSN(dsn, fallback)
+	if err != nil {
+		return fresh, err
+	}
+
+	runtimeDB, err := sql.Open("dm", normalizedDSN)
+	if err != nil {
+		return fresh, err
+	}
+	defer runtimeDB.Close()
+	runtimeDB.SetMaxOpenConns(1)
+	runtimeDB.SetMaxIdleConns(0)
+	runtimeDB.SetConnMaxLifetime(30 * time.Second)
+
+	if err := runtimeDB.PingContext(ctx); err != nil {
+		return fresh, fmt.Errorf("connect runtime db: %w", err)
+	}
+
+	var systemVersion sql.NullString
+	err = runtimeDB.QueryRowContext(ctx,
+		"select param_value from tsys_parameter where param_code = 'SystemVersion'",
+	).Scan(&systemVersion)
+	if err != nil {
+		return fresh, fmt.Errorf("query SystemVersion: %w", err)
+	}
+	if systemVersion.Valid {
+		v := strings.TrimSpace(systemVersion.String)
+		if v != "" {
+			fresh.SystemVersion = &v
+		}
+	}
+
+	var beginTime sql.NullTime
+	var subsystemVer sql.NullString
+	err = runtimeDB.QueryRowContext(ctx,
+		"select * from (select begin_time, subsystem_ver from jres_subsystem_rc order by begin_time desc) where rownum = 1",
+	).Scan(&beginTime, &subsystemVer)
+	if err != nil {
+		return fresh, fmt.Errorf("query subsystem version: %w", err)
+	}
+	if beginTime.Valid {
+		t := beginTime.Time
+		fresh.BeginTime = &t
+	}
+	if subsystemVer.Valid {
+		v := strings.TrimSpace(subsystemVer.String)
+		if v != "" {
+			fresh.SubsystemVer = &v
+		}
+	}
+
+	return fresh, nil
+}
+
+func (damengRuntimeAdapter) normalizeDSN(raw string, fallback RuntimeDBCredentials) (string, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return "", fmt.Errorf("E_YWDB is empty")
+	}
+	lower := strings.ToLower(value)
+	if strings.HasPrefix(lower, "dm://") {
+		return value, nil
+	}
+	if strings.HasPrefix(lower, "jdbc:dm://") {
+		return "dm://" + value[len("jdbc:dm://"):], nil
+	}
+
+	if match := plainCredsRe.FindStringSubmatch(value); match != nil {
+		return buildDamengDSN(match[1], match[2], normalizeDamengAddress(match[3])), nil
+	}
+
+	if strings.TrimSpace(fallback.Username) == "" {
+		return "", fmt.Errorf("E_YWDB has no credentials and dashboard DSN credentials are unavailable")
+	}
+	return buildDamengDSN(fallback.Username, fallback.Password, normalizeDamengAddress(value)), nil
+}
+
+func buildDamengDSN(username, password, address string) string {
+	host, rawQuery := splitAddressQuery(address)
+	u := url.URL{
+		Scheme:   "dm",
+		User:     url.UserPassword(strings.TrimSpace(username), strings.TrimSpace(password)),
+		Host:     host,
+		RawQuery: rawQuery,
+	}
+	return u.String()
+}
+
+func normalizeDamengAddress(address string) string {
+	value := strings.TrimSpace(address)
+	value = strings.TrimPrefix(value, "//")
+	value = strings.TrimPrefix(value, "@")
+	value = strings.TrimPrefix(value, "//")
+
+	host, rawQuery := splitAddressQuery(value)
+	host = ensureDamengPort(host)
+	if rawQuery == "" {
+		return host
+	}
+	return host + "?" + rawQuery
+}
+
+func splitAddressQuery(address string) (string, string) {
+	if question := strings.Index(address, "?"); question >= 0 {
+		return address[:question], address[question+1:]
+	}
+	return address, ""
+}
+
+func ensureDamengPort(address string) string {
+	if address == "" {
+		return address
+	}
+	if host, port, err := net.SplitHostPort(address); err == nil {
+		if port == "" {
+			return net.JoinHostPort(host, "5236")
+		}
+		return address
+	}
+
+	if strings.Contains(address, ":") {
+		lastColon := strings.LastIndex(address, ":")
+		if _, err := strconv.Atoi(address[lastColon+1:]); err == nil {
+			return address
+		}
+	}
+	return address + ":5236"
 }

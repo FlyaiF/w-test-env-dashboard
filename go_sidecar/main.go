@@ -15,12 +15,13 @@ import (
 
 func main() {
 	dsn := flag.String("dsn", "", "Oracle DSN (oracle://user:pass@host:port/service)")
-	testDsn := flag.String("test-dsn", "", "Test an Oracle DSN and exit")
+	testDsn := flag.String("test-dsn", "", "Test a runtime database DSN and exit")
+	testDBType := flag.String("test-db-type", db.RuntimeDBOracle, "Runtime database type for --test-dsn")
 	listen := flag.String("listen", "127.0.0.1:0", "Listen address (default: random port)")
 	flag.Parse()
 
 	if *testDsn != "" {
-		if err := db.TestConnection(*testDsn); err != nil {
+		if err := db.TestRuntimeConnection(*testDBType, *testDsn); err != nil {
 			fmt.Fprintf(os.Stderr, "DB_ERROR=%s\n", err.Error())
 			os.Exit(1)
 		}

@@ -143,10 +143,67 @@ func TestNormalizeOracleDSN(t *testing.T) {
 	}
 }
 
+func TestNormalizeDamengDSN(t *testing.T) {
+	fallback := RuntimeDBCredentials{Username: "dash", Password: "secret"}
+	adapter := damengRuntimeAdapter{}
+
+	tests := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{
+			name: "already dm url",
+			raw:  "dm://u:p@host:5236?schema=APP",
+			want: "dm://u:p@host:5236?schema=APP",
+		},
+		{
+			name: "jdbc dm url",
+			raw:  "jdbc:dm://u:p@host:5236?schema=APP",
+			want: "dm://u:p@host:5236?schema=APP",
+		},
+		{
+			name: "plain credentials",
+			raw:  "app/pass@10.0.0.4:5236",
+			want: "dm://app:pass@10.0.0.4:5236",
+		},
+		{
+			name: "plain credentials default port",
+			raw:  "app/pass@10.0.0.4",
+			want: "dm://app:pass@10.0.0.4:5236",
+		},
+		{
+			name: "plain address with fallback credentials",
+			raw:  "10.0.0.5:5236?schema=APP",
+			want: "dm://dash:secret@10.0.0.5:5236?schema=APP",
+		},
+		{
+			name: "plain address default port with fallback credentials",
+			raw:  "10.0.0.5",
+			want: "dm://dash:secret@10.0.0.5:5236",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := adapter.normalizeDSN(tt.raw, fallback)
+			if err != nil {
+				t.Fatalf("normalizeDSN() error = %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("normalizeDSN() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestNormalizeRuntimeDBType(t *testing.T) {
 	tests := map[string]string{
 		"":                 RuntimeDBOracle,
+		"0":                RuntimeDBOracle,
 		"oracle":           RuntimeDBOracle,
+		"1":                RuntimeDBOceanBaseOracle,
+		"2":                RuntimeDBDameng,
 		"dm":               RuntimeDBDameng,
 		"Dameng":           RuntimeDBDameng,
 		"oceanbase":        RuntimeDBOceanBaseOracle,
