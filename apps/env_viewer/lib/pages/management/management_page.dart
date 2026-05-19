@@ -666,6 +666,9 @@ class _RuntimeDiffDialogState extends State<_RuntimeDiffDialog> {
     final changed = widget.results.where((e) => e.status == 'changed').length;
     final skipped = widget.results.where((e) => e.status == 'skipped').length;
     final failed = widget.results.where((e) => e.status == 'failed').length;
+    final unsupported = widget.results
+        .where((e) => e.status == 'unsupported')
+        .length;
     final unchanged = widget.results
         .where((e) => e.status == 'unchanged')
         .length;
@@ -687,6 +690,7 @@ class _RuntimeDiffDialogState extends State<_RuntimeDiffDialog> {
                 _chip('变更 $changed', Colors.orange),
                 _chip('无变化 $unchanged', Colors.green),
                 _chip('跳过 $skipped', Colors.grey),
+                _chip('不支持 $unsupported', Colors.blueGrey),
                 _chip('失败 $failed', Colors.red),
               ],
             ),
@@ -701,6 +705,7 @@ class _RuntimeDiffDialogState extends State<_RuntimeDiffDialog> {
                       DataColumn(label: Text('发布')),
                       DataColumn(label: Text('编号')),
                       DataColumn(label: Text('环境')),
+                      DataColumn(label: Text('数据库')),
                       DataColumn(label: Text('状态')),
                       DataColumn(label: Text('当前版本')),
                       DataColumn(label: Text('采集版本')),
@@ -756,6 +761,7 @@ class _RuntimeDiffDialogState extends State<_RuntimeDiffDialog> {
         ),
         DataCell(Text('${result.eNo}')),
         DataCell(Text(result.eName ?? '-')),
+        DataCell(Text(_dbTypeLabel(result.dbType))),
         DataCell(_status(result.status)),
         DataCell(
           _diffText(result.current.eVersion, result.diff.versionChanged),
@@ -821,10 +827,21 @@ class _RuntimeDiffDialogState extends State<_RuntimeDiffDialog> {
       'changed' => ('变更', Colors.orange),
       'unchanged' => ('无变化', Colors.green),
       'skipped' => ('跳过', Colors.grey),
+      'unsupported' => ('不支持', Colors.blueGrey),
       'failed' => ('失败', Colors.red),
       _ => (status, Colors.blueGrey),
     };
     return _chip(label, color);
+  }
+
+  String _dbTypeLabel(String? dbType) {
+    return switch (dbType) {
+      'oracle' => 'Oracle',
+      'dameng' => 'Dameng',
+      'oceanbase-oracle' => 'OceanBase Oracle',
+      null || '' => '-',
+      _ => dbType,
+    };
   }
 
   Widget _chip(String label, Color color) {

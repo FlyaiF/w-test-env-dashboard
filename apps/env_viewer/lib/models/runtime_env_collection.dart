@@ -39,6 +39,7 @@ class RuntimeEnvCollectionResult {
   final int eNo;
   final String? eName;
   final String status;
+  final String? dbType;
   final EnvInfo current;
   final RuntimeEnvFreshInfo? fresh;
   final RuntimeEnvDiff diff;
@@ -49,6 +50,7 @@ class RuntimeEnvCollectionResult {
     required this.eNo,
     this.eName,
     required this.status,
+    this.dbType,
     required this.current,
     this.fresh,
     required this.diff,
@@ -67,6 +69,7 @@ class RuntimeEnvCollectionResult {
       eNo: json['e_no'] as int,
       eName: _trim(json['e_name'] as String?),
       status: json['status'] as String? ?? 'failed',
+      dbType: _trim(json['db_type'] as String?),
       current: EnvInfo.fromJson(json['current'] as Map<String, dynamic>),
       fresh: json['fresh'] != null
           ? RuntimeEnvFreshInfo.fromJson(json['fresh'] as Map<String, dynamic>)

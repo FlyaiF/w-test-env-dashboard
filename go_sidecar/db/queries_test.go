@@ -78,6 +78,11 @@ func TestBuildRuntimeSkippedAndFailedResults(t *testing.T) {
 	if failed.Status != "failed" || failed.Error != "boom" {
 		t.Fatalf("failed result = %#v", failed)
 	}
+
+	unsupported := BuildRuntimeUnsupportedResult(env, "not supported", time.Now())
+	if unsupported.Status != "unsupported" || unsupported.Error != "not supported" {
+		t.Fatalf("unsupported result = %#v", unsupported)
+	}
 }
 
 func TestNormalizeOracleDSN(t *testing.T) {
@@ -135,6 +140,25 @@ func TestNormalizeOracleDSN(t *testing.T) {
 				t.Fatalf("normalizeOracleDSN() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestNormalizeRuntimeDBType(t *testing.T) {
+	tests := map[string]string{
+		"":                 RuntimeDBOracle,
+		"oracle":           RuntimeDBOracle,
+		"dm":               RuntimeDBDameng,
+		"Dameng":           RuntimeDBDameng,
+		"oceanbase":        RuntimeDBOceanBaseOracle,
+		"oceanbase_oracle": RuntimeDBOceanBaseOracle,
+		"OceanBase Oracle": RuntimeDBOceanBaseOracle,
+		"custom-db":        "custom-db",
+	}
+
+	for input, want := range tests {
+		if got := NormalizeRuntimeDBType(input); got != want {
+			t.Fatalf("NormalizeRuntimeDBType(%q) = %q, want %q", input, got, want)
+		}
 	}
 }
 

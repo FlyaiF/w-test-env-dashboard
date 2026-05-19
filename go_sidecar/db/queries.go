@@ -1,23 +1,12 @@
 package db
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"log"
-	"net"
-	"net/url"
-	"regexp"
-	"strconv"
 	"strings"
 	"test-env-dashboard/go_sidecar/model"
 	"time"
-)
-
-var (
-	jdbcWithCredsRe = regexp.MustCompile(`(?i)^jdbc:oracle:thin:([^/\s]+)/([^@\s]+)@(.+)$`)
-	jdbcNoCredsRe   = regexp.MustCompile(`(?i)^jdbc:oracle:thin:@(.+)$`)
-	plainCredsRe    = regexp.MustCompile(`^([^/\s]+)/([^@\s]+)@(.+)$`)
 )
 
 func scanEnv(row interface{ Scan(...any) error }) (model.EnvInfo, error) {
@@ -40,7 +29,7 @@ func scanEnv(row interface{ Scan(...any) error }) (model.EnvInfo, error) {
 const selectColumns = `E_NO, E_NAME, E_YWDB, E_ZJDB, E_URL, E_VERSION,
 	E_UPDATETIME, E_SEEURL, E_WEBSERVERADDR, E_WEBLOGPATH, E_MEMO, E_DBTYPE`
 
-func ListEnvs(search string, page, pageSize int) ([]model.EnvInfo, int, error) {
+func (OracleConfigRepository) ListEnvs(search string, page, pageSize int) ([]model.EnvInfo, int, error) {
 	where := ""
 	var args []any
 	if search != "" {
@@ -82,7 +71,7 @@ func ListEnvs(search string, page, pageSize int) ([]model.EnvInfo, int, error) {
 	return list, total, rows.Err()
 }
 
-func ListAllEnvs() ([]model.EnvInfo, error) {
+func (OracleConfigRepository) ListAllEnvs() ([]model.EnvInfo, error) {
 	rows, err := pool.Query(fmt.Sprintf("SELECT %s FROM TENVINFO ORDER BY E_NO", selectColumns))
 	if err != nil {
 		return nil, fmt.Errorf("query all: %w", err)
@@ -100,13 +89,13 @@ func ListAllEnvs() ([]model.EnvInfo, error) {
 	return list, rows.Err()
 }
 
-func GetEnv(id int64) (model.EnvInfo, error) {
+func (OracleConfigRepository) GetEnv(id int64) (model.EnvInfo, error) {
 	q := fmt.Sprintf("SELECT %s FROM TENVINFO WHERE E_NO = :1", selectColumns)
 	row := pool.QueryRow(q, id)
 	return scanEnv(row)
 }
 
-func CreateEnv(e model.EnvInfo) error {
+func (OracleConfigRepository) CreateEnv(e model.EnvInfo) error {
 	q := `INSERT INTO TENVINFO (E_NO, E_NAME, E_YWDB, E_ZJDB, E_URL, E_VERSION,
 		E_UPDATETIME, E_SEEURL, E_WEBSERVERADDR, E_WEBLOGPATH, E_MEMO, E_DBTYPE)
 		VALUES (:1, :2, :3, :4, :5, :6, SYSDATE, :7, :8, :9, :10, :11)`
@@ -117,7 +106,7 @@ func CreateEnv(e model.EnvInfo) error {
 	return err
 }
 
-func UpdateEnv(id int64, e model.EnvInfo) error {
+func (OracleConfigRepository) UpdateEnv(id int64, e model.EnvInfo) error {
 	var setClauses []string
 	var args []any
 	idx := 1
@@ -181,7 +170,7 @@ func UpdateEnv(id int64, e model.EnvInfo) error {
 	return nil
 }
 
-func PublishCollectedEnvInfo(item model.RuntimePublishItem) error {
+func (OracleConfigRepository) PublishCollectedEnvInfo(item model.RuntimePublishItem) error {
 	if item.SystemVersion == nil && item.BeginTime == nil && item.BeginTimeText == nil {
 		return nil
 	}
@@ -279,7 +268,7 @@ func buildPublishCollectedSQL(item model.RuntimePublishItem) (string, []any) {
 	return q, args
 }
 
-func DeleteEnv(id int64) error {
+func (OracleConfigRepository) DeleteEnv(id int64) error {
 	result, err := pool.Exec("DELETE FROM TENVINFO WHERE E_NO = :1", id)
 	if err != nil {
 		return err
@@ -289,146 +278,6 @@ func DeleteEnv(id int64) error {
 		return sql.ErrNoRows
 	}
 	return nil
-}
-
-func CollectRuntimeEnvInfo(dsn string) (model.RuntimeEnvFreshInfo, error) {
-	var fresh model.RuntimeEnvFreshInfo
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-
-	normalizedDSN, err := normalizeOracleDSN(dsn)
-	if err != nil {
-		return fresh, err
-	}
-
-	runtimeDB, err := sql.Open("oracle", normalizedDSN)
-	if err != nil {
-		return fresh, err
-	}
-	defer runtimeDB.Close()
-	runtimeDB.SetMaxOpenConns(1)
-	runtimeDB.SetMaxIdleConns(0)
-	runtimeDB.SetConnMaxLifetime(30 * time.Second)
-
-	if err := runtimeDB.PingContext(ctx); err != nil {
-		return fresh, fmt.Errorf("connect runtime db: %w", err)
-	}
-
-	var systemVersion sql.NullString
-	err = runtimeDB.QueryRowContext(ctx,
-		"select param_value from tsys_parameter where param_code = 'SystemVersion'",
-	).Scan(&systemVersion)
-	if err != nil {
-		return fresh, fmt.Errorf("query SystemVersion: %w", err)
-	}
-	if systemVersion.Valid {
-		v := strings.TrimSpace(systemVersion.String)
-		if v != "" {
-			fresh.SystemVersion = &v
-		}
-	}
-
-	var beginTime sql.NullTime
-	var subsystemVer sql.NullString
-	err = runtimeDB.QueryRowContext(ctx,
-		"select * from (select begin_time, subsystem_ver from jres_subsystem_rc order by begin_time desc) where rownum = 1",
-	).Scan(&beginTime, &subsystemVer)
-	if err != nil {
-		return fresh, fmt.Errorf("query subsystem version: %w", err)
-	}
-	if beginTime.Valid {
-		t := beginTime.Time
-		fresh.BeginTime = &t
-	}
-	if subsystemVer.Valid {
-		v := strings.TrimSpace(subsystemVer.String)
-		if v != "" {
-			fresh.SubsystemVer = &v
-		}
-	}
-
-	return fresh, nil
-}
-
-func normalizeOracleDSN(raw string) (string, error) {
-	value := strings.TrimSpace(raw)
-	if value == "" {
-		return "", fmt.Errorf("E_YWDB is empty")
-	}
-	if strings.HasPrefix(strings.ToLower(value), "oracle://") {
-		return value, nil
-	}
-
-	if match := jdbcWithCredsRe.FindStringSubmatch(value); match != nil {
-		return buildOracleDSN(match[1], match[2], normalizeOracleAddress(match[3])), nil
-	}
-	if match := plainCredsRe.FindStringSubmatch(value); match != nil {
-		return buildOracleDSN(match[1], match[2], normalizeOracleAddress(match[3])), nil
-	}
-
-	address := value
-	if match := jdbcNoCredsRe.FindStringSubmatch(value); match != nil {
-		address = match[1]
-	}
-	username, password, ok := dashboardCredentials()
-	if !ok {
-		return "", fmt.Errorf("E_YWDB has no credentials and dashboard DSN credentials are unavailable")
-	}
-	return buildOracleDSN(username, password, normalizeOracleAddress(address)), nil
-}
-
-func normalizeOracleAddress(address string) string {
-	value := strings.TrimSpace(address)
-	value = strings.TrimPrefix(value, "//")
-	value = strings.TrimPrefix(value, "@")
-	value = strings.TrimPrefix(value, "//")
-	if strings.Count(value, ":") >= 2 && !strings.Contains(value, "/") {
-		lastColon := strings.LastIndex(value, ":")
-		value = value[:lastColon] + "/" + value[lastColon+1:]
-	}
-	value = ensureOraclePort(value)
-	return value
-}
-
-func buildOracleDSN(username, password, address string) string {
-	u := url.URL{
-		Scheme: "oracle",
-		User:   url.UserPassword(strings.TrimSpace(username), strings.TrimSpace(password)),
-		Host:   address,
-	}
-	if slash := strings.Index(address, "/"); slash >= 0 {
-		u.Host = address[:slash]
-		u.Path = "/" + strings.TrimPrefix(address[slash+1:], "/")
-	}
-	return u.String()
-}
-
-func ensureOraclePort(address string) string {
-	hostPart := address
-	servicePart := ""
-	if slash := strings.Index(address, "/"); slash >= 0 {
-		hostPart = address[:slash]
-		servicePart = address[slash:]
-	}
-
-	if hostPart == "" {
-		return address
-	}
-	if host, port, err := net.SplitHostPort(hostPart); err == nil {
-		if port == "" {
-			return net.JoinHostPort(host, "1521") + servicePart
-		}
-		return hostPart + servicePart
-	}
-
-	// IPv6 literals without brackets are out of scope for legacy config values.
-	if strings.Contains(hostPart, ":") {
-		lastColon := strings.LastIndex(hostPart, ":")
-		if _, err := strconv.Atoi(hostPart[lastColon+1:]); err == nil {
-			return hostPart + servicePart
-		}
-	}
-	return hostPart + ":1521" + servicePart
 }
 
 func BuildRuntimeCollectionResult(env model.EnvInfo, fresh model.RuntimeEnvFreshInfo, collectedAt time.Time) model.RuntimeEnvCollectionResult {
@@ -444,6 +293,7 @@ func BuildRuntimeCollectionResult(env model.EnvInfo, fresh model.RuntimeEnvFresh
 		ENo:         env.ENo,
 		EName:       env.EName,
 		Status:      status,
+		DbType:      NormalizeRuntimeDBType(pointerValue(env.EDbtype)),
 		Current:     env,
 		Fresh:       &fresh,
 		Diff:        diff,
@@ -456,6 +306,19 @@ func BuildRuntimeSkippedResult(env model.EnvInfo, reason string, collectedAt tim
 		ENo:         env.ENo,
 		EName:       env.EName,
 		Status:      "skipped",
+		DbType:      NormalizeRuntimeDBType(pointerValue(env.EDbtype)),
+		Current:     env,
+		Error:       reason,
+		CollectedAt: collectedAt,
+	}
+}
+
+func BuildRuntimeUnsupportedResult(env model.EnvInfo, reason string, collectedAt time.Time) model.RuntimeEnvCollectionResult {
+	return model.RuntimeEnvCollectionResult{
+		ENo:         env.ENo,
+		EName:       env.EName,
+		Status:      "unsupported",
+		DbType:      NormalizeRuntimeDBType(pointerValue(env.EDbtype)),
 		Current:     env,
 		Error:       reason,
 		CollectedAt: collectedAt,
@@ -467,10 +330,18 @@ func BuildRuntimeFailedResult(env model.EnvInfo, err error, collectedAt time.Tim
 		ENo:         env.ENo,
 		EName:       env.EName,
 		Status:      "failed",
+		DbType:      NormalizeRuntimeDBType(pointerValue(env.EDbtype)),
 		Current:     env,
 		Error:       err.Error(),
 		CollectedAt: collectedAt,
 	}
+}
+
+func pointerValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 func sameString(a, b *string) bool {

@@ -55,6 +55,7 @@ func main() {
 	mux.HandleFunc("/api/envs", handler.Envs)
 	mux.HandleFunc("/api/envs/", handler.EnvByID)
 	mux.HandleFunc("/api/db/test", handler.TestDB)
+	mux.HandleFunc("/api/db/types", handler.DBTypes)
 
 	// Listen on specified address
 	ln, err := net.Listen("tcp", *listen)

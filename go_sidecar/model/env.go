@@ -52,6 +52,7 @@ type RuntimeEnvCollectionResult struct {
 	ENo         int64                `json:"e_no"`
 	EName       *string              `json:"e_name"`
 	Status      string               `json:"status"`
+	DbType      string               `json:"db_type,omitempty"`
 	Current     EnvInfo              `json:"current"`
 	Fresh       *RuntimeEnvFreshInfo `json:"fresh,omitempty"`
 	Diff        RuntimeEnvDiff       `json:"diff"`
@@ -78,6 +79,16 @@ type RuntimePublishResponse struct {
 	Updated int       `json:"updated"`
 	Skipped []int64   `json:"skipped"`
 	Data    []EnvInfo `json:"data"`
+}
+
+type DBTypeInfo struct {
+	Type                       string `json:"type"`
+	Label                      string `json:"label"`
+	RuntimeCollectionSupported bool   `json:"runtime_collection_supported"`
+}
+
+type DBTypesResponse struct {
+	Data []DBTypeInfo `json:"data"`
 }
 
 type HealthResponse struct {

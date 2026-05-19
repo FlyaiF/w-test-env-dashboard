@@ -208,8 +208,16 @@ func CollectPreview(w http.ResponseWriter, r *http.Request) {
 					continue
 				}
 
-				fresh, err := db.CollectRuntimeEnvInfo(dsn)
+				dbType := ""
+				if env.EDbtype != nil {
+					dbType = *env.EDbtype
+				}
+				fresh, err := db.CollectRuntimeEnvInfo(dbType, dsn)
 				if err != nil {
+					if db.IsUnsupportedRuntimeDBType(err) {
+						results[i] = db.BuildRuntimeUnsupportedResult(env, err.Error(), collectedAt)
+						continue
+					}
 					results[i] = db.BuildRuntimeFailedResult(env, err, collectedAt)
 					continue
 				}
@@ -279,16 +287,34 @@ func TestDB(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		DSN string `json:"dsn"`
+		DSN    string `json:"dsn"`
+		Type   string `json:"type"`
+		DBType string `json:"db_type"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.DSN == "" {
 		writeError(w, http.StatusBadRequest, "dsn is required")
 		return
 	}
 
-	if err := db.TestConnection(body.DSN); err != nil {
+	dbType := body.DBType
+	if dbType == "" {
+		dbType = body.Type
+	}
+	if dbType == "" {
+		dbType = db.RuntimeDBOracle
+	}
+	if err := db.TestRuntimeConnection(dbType, body.DSN); err != nil {
 		writeErrorDetail(w, http.StatusBadRequest, "connection failed", err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, model.MessageResponse{Message: "connection successful"})
+}
+
+// DBTypes handles GET /api/db/types.
+func DBTypes(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	writeJSON(w, http.StatusOK, model.DBTypesResponse{Data: db.RuntimeDBTypes()})
 }
