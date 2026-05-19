@@ -197,6 +197,50 @@ func TestNormalizeDamengDSN(t *testing.T) {
 	}
 }
 
+func TestNormalizeOceanBaseOracleDSN(t *testing.T) {
+	fallback := RuntimeDBCredentials{Username: "dash@oracle_tenant", Password: "secret"}
+	adapter := oceanBaseOracleRuntimeAdapter{}
+
+	tests := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{
+			name: "already jdbc url",
+			raw:  "jdbc:oceanbase:oracle://10.0.0.1:2881/ob?user=u&password=p",
+			want: "jdbc:oceanbase:oracle://10.0.0.1:2881/ob?user=u&password=p",
+		},
+		{
+			name: "plain credentials",
+			raw:  "obfz@oracle_tenant/handsome@10.20.161.98:2881/obfz",
+			want: "jdbc:oceanbase:oracle://10.20.161.98:2881/obfz?connectTimeout=5000&socketTimeout=15000&user=obfz@oracle_tenant&password=handsome",
+		},
+		{
+			name: "plain credentials default port",
+			raw:  "obfz@oracle_tenant/handsome@10.20.161.98/obfz",
+			want: "jdbc:oceanbase:oracle://10.20.161.98:2881/obfz?connectTimeout=5000&socketTimeout=15000&user=obfz@oracle_tenant&password=handsome",
+		},
+		{
+			name: "plain address with fallback credentials",
+			raw:  "10.20.161.98:2881/obfz",
+			want: "jdbc:oceanbase:oracle://10.20.161.98:2881/obfz?connectTimeout=5000&socketTimeout=15000&user=dash@oracle_tenant&password=secret",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := adapter.normalizeDSN(tt.raw, fallback)
+			if err != nil {
+				t.Fatalf("normalizeDSN() error = %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("normalizeDSN() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestNormalizeRuntimeDBType(t *testing.T) {
 	tests := map[string]string{
 		"":                 RuntimeDBOracle,
@@ -216,6 +260,17 @@ func TestNormalizeRuntimeDBType(t *testing.T) {
 		if got := NormalizeRuntimeDBType(input); got != want {
 			t.Fatalf("NormalizeRuntimeDBType(%q) = %q, want %q", input, got, want)
 		}
+	}
+}
+
+func TestParseJDBCTime(t *testing.T) {
+	got, err := parseJDBCTime("2026-05-18 09:55:01.0")
+	if err != nil {
+		t.Fatalf("parseJDBCTime() error = %v", err)
+	}
+	if got.Year() != 2026 || got.Month() != 5 || got.Day() != 18 ||
+		got.Hour() != 9 || got.Minute() != 55 || got.Second() != 1 {
+		t.Fatalf("parseJDBCTime() = %s", got)
 	}
 }
 

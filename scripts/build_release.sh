@@ -6,6 +6,15 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 BUILD_DIR="$PROJECT_DIR/build"
 PLATFORM=${1:-macos}
 
+copy_sidecar_jdbc() {
+    local dest="$1"
+    if [ -d "$BUILD_DIR/sidecar/jdbc" ]; then
+        mkdir -p "$dest/jdbc"
+        cp "$BUILD_DIR/sidecar/jdbc/runtime-info-helper.jar" "$dest/jdbc/" 2>/dev/null || true
+        cp "$BUILD_DIR/sidecar/jdbc/oceanbase-client.jar" "$dest/jdbc/" 2>/dev/null || true
+    fi
+}
+
 echo "=== Release build for $PLATFORM ==="
 
 # Step 0: Sync shared assets (fonts) into each app's local assets/
@@ -30,6 +39,7 @@ case "$PLATFORM" in
         APP="$PROJECT_DIR/apps/env_viewer/build/macos/Build/Products/Release/env_viewer.app"
         cp "$BUILD_DIR/sidecar/go_sidecar" "$APP/Contents/Resources/go_sidecar"
         chmod +x "$APP/Contents/Resources/go_sidecar"
+        copy_sidecar_jdbc "$APP/Contents/Resources"
         echo "  Created $APP"
         ;;
     windows)
@@ -37,6 +47,7 @@ case "$PLATFORM" in
         RUNNER_DIR="$PROJECT_DIR/apps/env_viewer/build/windows/x64/runner/Release"
         mkdir -p "$RUNNER_DIR/data"
         cp "$BUILD_DIR/sidecar/go_sidecar" "$RUNNER_DIR/data/go_sidecar.exe"
+        copy_sidecar_jdbc "$RUNNER_DIR/data"
         echo "  Created $RUNNER_DIR/env_viewer.exe"
         ;;
     linux)
@@ -45,6 +56,7 @@ case "$PLATFORM" in
         mkdir -p "$BUNDLE_DIR/data"
         cp "$BUILD_DIR/sidecar/go_sidecar" "$BUNDLE_DIR/data/go_sidecar"
         chmod +x "$BUNDLE_DIR/data/go_sidecar"
+        copy_sidecar_jdbc "$BUNDLE_DIR/data"
         echo "  Created $BUNDLE_DIR/env_viewer"
         ;;
     *)

@@ -5,6 +5,9 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 SIDECAR_DIR="$PROJECT_DIR/go_sidecar"
 BUILD_DIR="$PROJECT_DIR/build/sidecar"
+JDBC_HELPER_DIR="$SIDECAR_DIR/jdbc_helper"
+JDBC_BUILD_DIR="$BUILD_DIR/jdbc"
+OCEANBASE_DRIVER_SRC="${OCEANBASE_JDBC_JAR:-$HOME/.m2/repository/com/oceanbase/oceanbase-client/2.4.7.1/oceanbase-client-2.4.7.1.jar}"
 
 echo "=== Building Go sidecar ==="
 cd "$SIDECAR_DIR"
@@ -38,6 +41,24 @@ else
     # Also copy to go_sidecar/ for dev mode
     cp "$BUILD_DIR/go_sidecar" "$SIDECAR_DIR/go_sidecar"
     echo "  done: $BUILD_DIR/go_sidecar"
+fi
+
+echo ""
+echo "=== Building JDBC helper ==="
+mkdir -p "$JDBC_BUILD_DIR/classes"
+if command -v javac >/dev/null 2>&1 && command -v jar >/dev/null 2>&1; then
+    javac -source 8 -target 8 -d "$JDBC_BUILD_DIR/classes" "$JDBC_HELPER_DIR/RuntimeInfoHelper.java"
+    jar cf "$JDBC_BUILD_DIR/runtime-info-helper.jar" -C "$JDBC_BUILD_DIR/classes" RuntimeInfoHelper.class
+    if [ -f "$OCEANBASE_DRIVER_SRC" ]; then
+        cp "$OCEANBASE_DRIVER_SRC" "$JDBC_BUILD_DIR/oceanbase-client.jar"
+        echo "  copied OceanBase JDBC driver"
+    else
+        echo "  warning: OceanBase JDBC driver not found: $OCEANBASE_DRIVER_SRC"
+        echo "  set OCEANBASE_JDBC_JAR=/path/to/oceanbase-client.jar to include it"
+    fi
+    echo "  done: $JDBC_BUILD_DIR/runtime-info-helper.jar"
+else
+    echo "  warning: javac/jar not found; OceanBase Oracle JDBC helper was not built"
 fi
 
 echo "=== Sidecar build complete ==="

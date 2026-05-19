@@ -30,6 +30,12 @@ jobs:
           go-version: '1.22'
           cache-dependency-path: go_sidecar/go.sum
 
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '8'
+          cache: maven
+
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -67,6 +73,15 @@ jobs:
           lipo -create -output go_sidecar go_sidecar_arm64 go_sidecar_amd64
           file go_sidecar
 
+      - name: Build JDBC helper
+        shell: bash
+        run: |
+          mvn -q dependency:get -Dartifact=com.oceanbase:oceanbase-client:2.4.7.1
+          mkdir -p build/sidecar/jdbc/classes
+          javac -source 8 -target 8 -d build/sidecar/jdbc/classes go_sidecar/jdbc_helper/RuntimeInfoHelper.java
+          jar cf build/sidecar/jdbc/runtime-info-helper.jar -C build/sidecar/jdbc/classes RuntimeInfoHelper.class
+          cp "$HOME/.m2/repository/com/oceanbase/oceanbase-client/2.4.7.1/oceanbase-client-2.4.7.1.jar" build/sidecar/jdbc/oceanbase-client.jar
+
       - name: Build env_viewer
         working-directory: apps/env_viewer
         env:
@@ -85,6 +100,9 @@ jobs:
           APP="$RELEASE_DIR/env_viewer.app"
           cp go_sidecar/go_sidecar "$APP/Contents/Resources/go_sidecar"
           chmod +x "$APP/Contents/Resources/go_sidecar"
+          mkdir -p "$APP/Contents/Resources/jdbc"
+          cp build/sidecar/jdbc/runtime-info-helper.jar "$APP/Contents/Resources/jdbc/"
+          cp build/sidecar/jdbc/oceanbase-client.jar "$APP/Contents/Resources/jdbc/"
           (cd "$RELEASE_DIR" && zip -r -y "env_viewer-macos.zip" "env_viewer.app")
 
       - uses: actions/upload-artifact@v7
@@ -174,6 +192,12 @@ jobs:
           go-version: '1.22'
           cache-dependency-path: go_sidecar/go.sum
 
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '8'
+          cache: maven
+
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -209,6 +233,15 @@ jobs:
           LDFLAGS="-s -w -X $PKG.Version=$VERSION -X $PKG.Commit=$COMMIT -X $PKG.BuildTime=$BUILD_TIME"
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="$LDFLAGS" -o go_sidecar.exe .
 
+      - name: Build JDBC helper
+        shell: bash
+        run: |
+          mvn -q dependency:get -Dartifact=com.oceanbase:oceanbase-client:2.4.7.1
+          mkdir -p build/sidecar/jdbc/classes
+          javac -source 8 -target 8 -d build/sidecar/jdbc/classes go_sidecar/jdbc_helper/RuntimeInfoHelper.java
+          jar cf build/sidecar/jdbc/runtime-info-helper.jar -C build/sidecar/jdbc/classes RuntimeInfoHelper.class
+          cp "$HOME/.m2/repository/com/oceanbase/oceanbase-client/2.4.7.1/oceanbase-client-2.4.7.1.jar" build/sidecar/jdbc/oceanbase-client.jar
+
       - name: Build env_viewer
         working-directory: apps/env_viewer
         shell: bash
@@ -228,6 +261,9 @@ jobs:
           RELEASE_DIR="apps/env_viewer/build/windows/x64/runner/Release"
           mkdir -p "$RELEASE_DIR/data"
           cp go_sidecar/go_sidecar.exe "$RELEASE_DIR/data/go_sidecar.exe"
+          mkdir -p "$RELEASE_DIR/data/jdbc"
+          cp build/sidecar/jdbc/runtime-info-helper.jar "$RELEASE_DIR/data/jdbc/"
+          cp build/sidecar/jdbc/oceanbase-client.jar "$RELEASE_DIR/data/jdbc/"
           (cd "$RELEASE_DIR" && 7z a -tzip "../env_viewer-windows.zip" ./*)
 
       - uses: actions/upload-artifact@v7
