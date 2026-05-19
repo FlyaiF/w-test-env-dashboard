@@ -33,7 +33,7 @@ jobs:
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: '8'
+          java-version: '11'
           cache: maven
 
       - uses: subosito/flutter-action@v2
@@ -195,7 +195,7 @@ jobs:
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: '8'
+          java-version: '11'
           cache: maven
 
       - uses: subosito/flutter-action@v2
