@@ -10,6 +10,12 @@ class ArchiveTreePanel extends StatefulWidget {
   final ValueChanged<String>? onExtract;
   final ValueChanged<String>? onReplace;
   final ValueChanged<String>? onDelete;
+  /// Invoked when the user opens a lazy nested-archive node and its
+  /// children haven't been loaded yet. The provided `zipExpr` is the
+  /// nested archive's full expression (e.g. `app.war!/inner.jar`).
+  final ValueChanged<String>? onExpandArchive;
+  /// Zip expressions currently being expanded (loading spinner shown).
+  final Set<String> expandingArchives;
 
   const ArchiveTreePanel({
     super.key,
@@ -18,6 +24,8 @@ class ArchiveTreePanel extends StatefulWidget {
     this.onExtract,
     this.onReplace,
     this.onDelete,
+    this.onExpandArchive,
+    this.expandingArchives = const {},
   });
 
   @override
@@ -25,7 +33,8 @@ class ArchiveTreePanel extends StatefulWidget {
 }
 
 class _ArchiveTreePanelState extends State<ArchiveTreePanel> {
-  late List<TreeNode> _tree;
+  List<TreeNode> _tree = const [];
+  bool _buildingTree = false;
   final Set<String> _expanded = {};
   String? _selectedExpr;
   final TextEditingController _filterController = TextEditingController();
@@ -33,18 +42,47 @@ class _ArchiveTreePanelState extends State<ArchiveTreePanel> {
   final Set<String> _filterCollapsed = {};
   Set<String> _effectiveExpanded = {};
 
+  // Memo cache for flatten output. Invalidated when state affecting the
+  // visible tree changes; reused across parent rebuilds.
+  List<_FlatNode>? _flatCache;
+  List<TreeNode>? _flatCacheTreeRef;
+  String? _flatCacheFilter;
+  int _expandedVersion = 0;
+  int? _flatCacheExpandedVersion;
+
   @override
   void initState() {
     super.initState();
-    _tree = buildTree(widget.entries);
+    _scheduleInitialBuild(widget.entries);
     _filterController.addListener(() {
       final newFilter = _filterController.text.toLowerCase();
       if (newFilter != _filterText) {
         setState(() {
           _filterText = newFilter;
           _filterCollapsed.clear();
+          _flatCache = null;
         });
       }
+    });
+  }
+
+  void _scheduleInitialBuild(List<ArchiveEntry> entries) {
+    // For small archives, build synchronously to avoid a flash of empty UI.
+    if (entries.length < 2000) {
+      _tree = buildTree(entries);
+      return;
+    }
+    _buildingTree = true;
+    // Yield once so the spinner can paint, then run the heavy build.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await Future<void>.delayed(Duration.zero);
+      final tree = buildTree(entries);
+      if (!mounted) return;
+      setState(() {
+        _tree = tree;
+        _buildingTree = false;
+        _flatCache = null;
+      });
     });
   }
 
@@ -52,8 +90,25 @@ class _ArchiveTreePanelState extends State<ArchiveTreePanel> {
   void didUpdateWidget(ArchiveTreePanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.entries != oldWidget.entries) {
-      _tree = buildTree(widget.entries);
-      _filterController.clear();
+      // If the new entry list is a superset of the old one (i.e. lazy
+      // expansion just added children), keep the user's filter and expanded
+      // state; otherwise treat it as a brand-new archive open and reset.
+      final isExtension = widget.entries.length >= oldWidget.entries.length &&
+          widget.entries.isNotEmpty &&
+          oldWidget.entries.isNotEmpty &&
+          widget.entries.first.expr == oldWidget.entries.first.expr;
+      if (!isExtension) {
+        _filterController.clear();
+        _expanded.clear();
+        _filterCollapsed.clear();
+        _selectedExpr = null;
+      }
+      _flatCache = null;
+      _expandedVersion++;
+      _scheduleInitialBuild(widget.entries);
+    } else if (widget.expandingArchives != oldWidget.expandingArchives) {
+      // A node is loading/has loaded — just trigger a row repaint.
+      _expandedVersion++;
     }
   }
 
@@ -92,6 +147,19 @@ class _ArchiveTreePanelState extends State<ArchiveTreePanel> {
 
   @override
   Widget build(BuildContext context) {
+    if (_buildingTree) {
+      return const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 12),
+            Text('正在构建归档索引...', style: TextStyle(fontSize: 12)),
+          ],
+        ),
+      );
+    }
+
     List<TreeNode> displayTree;
     Set<String> effectiveExpanded;
 
@@ -106,8 +174,23 @@ class _ArchiveTreePanelState extends State<ArchiveTreePanel> {
     }
 
     _effectiveExpanded = effectiveExpanded;
-    final flatNodes = <_FlatNode>[];
-    _flattenWith(displayTree, 0, flatNodes, effectiveExpanded);
+
+    // Memoize the flatten output across parent rebuilds.
+    final cacheValid = _flatCache != null &&
+        identical(_flatCacheTreeRef, displayTree) &&
+        _flatCacheFilter == _filterText &&
+        _flatCacheExpandedVersion == _expandedVersion;
+    final List<_FlatNode> flatNodes;
+    if (cacheValid) {
+      flatNodes = _flatCache!;
+    } else {
+      flatNodes = <_FlatNode>[];
+      _flattenWith(displayTree, 0, flatNodes, effectiveExpanded);
+      _flatCache = flatNodes;
+      _flatCacheTreeRef = displayTree;
+      _flatCacheFilter = _filterText;
+      _flatCacheExpandedVersion = _expandedVersion;
+    }
 
     return Column(
       children: [
@@ -131,9 +214,14 @@ class _ArchiveTreePanelState extends State<ArchiveTreePanel> {
 
   Widget _buildRow(_FlatNode flat) {
     final node = flat.node;
-    final hasChildren = node.children.isNotEmpty;
+    // A node is expandable if it has children OR it's a lazy nested archive
+    // whose children have not been loaded yet (entry.isArchive && empty).
+    final isLazyArchive = node.entry?.isArchive == true && node.children.isEmpty;
+    final hasChildren = node.children.isNotEmpty || isLazyArchive;
     final isExpanded = _effectiveExpanded.contains(node.fullExpr);
     final isSelected = _selectedExpr == node.fullExpr;
+    final isLoading =
+        node.entry != null && widget.expandingArchives.contains(node.entry!.expr);
 
     return GestureDetector(
       onSecondaryTapUp: (details) {
@@ -152,7 +240,12 @@ class _ArchiveTreePanelState extends State<ArchiveTreePanel> {
               } else {
                 _expanded.add(node.fullExpr);
                 _filterCollapsed.remove(node.fullExpr);
+                // Lazy: ask the host to load the children if needed.
+                if (isLazyArchive && !isLoading) {
+                  widget.onExpandArchive?.call(node.entry!.expr);
+                }
               }
+              _expandedVersion++;
             }
           });
           if (node.entry != null) {
@@ -188,6 +281,15 @@ class _ArchiveTreePanelState extends State<ArchiveTreePanel> {
                   style: const TextStyle(fontSize: 13),
                 ),
               ),
+              if (isLoading)
+                const Padding(
+                  padding: EdgeInsets.only(right: 6),
+                  child: SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(strokeWidth: 1.5),
+                  ),
+                ),
               if (node.entry != null)
                 Text(
                   _formatSize(node.entry!.size.toInt()),

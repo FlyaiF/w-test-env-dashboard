@@ -2,11 +2,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:zipr_tool/pages/archive_tool/archive_tree_builder.dart';
 import 'package:zipr_tool/src/rust/api/zipr_api.dart';
 
-ArchiveEntry _entry(String expr, {int size = 100, int compressed = 50}) {
+ArchiveEntry _entry(
+  String expr, {
+  int size = 100,
+  int compressed = 50,
+  bool isArchive = false,
+}) {
   return ArchiveEntry(
     expr: expr,
     size: BigInt.from(size),
     compressedSize: BigInt.from(compressed),
+    isArchive: isArchive,
   );
 }
 

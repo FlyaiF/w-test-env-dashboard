@@ -12,6 +12,9 @@ concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  PUB_CACHE: ${{ github.workspace }}/.pub-cache
+
 jobs:
   env-viewer-macos:
     runs-on: macos-latest
@@ -31,6 +34,14 @@ jobs:
         with:
           channel: stable
           flutter-version: '3.41.6'
+          cache: true
+
+      - name: Cache Flutter pub packages
+        uses: actions/cache@v5
+        with:
+          path: .pub-cache
+          key: ${{ runner.os }}-flutter-pub-${{ hashFiles('apps/**/pubspec.lock', 'packages/**/pubspec.yaml') }}
+          restore-keys: ${{ runner.os }}-flutter-pub-
 
       - name: Compute build metadata
         id: meta
@@ -109,6 +120,14 @@ jobs:
         with:
           channel: stable
           flutter-version: '3.41.6'
+          cache: true
+
+      - name: Cache Flutter pub packages
+        uses: actions/cache@v5
+        with:
+          path: .pub-cache
+          key: ${{ runner.os }}-flutter-pub-${{ hashFiles('apps/**/pubspec.lock', 'packages/**/pubspec.yaml') }}
+          restore-keys: ${{ runner.os }}-flutter-pub-
 
       - name: Compute build metadata
         id: meta
@@ -159,6 +178,14 @@ jobs:
         with:
           channel: stable
           flutter-version: '3.41.6'
+          cache: true
+
+      - name: Cache Flutter pub packages
+        uses: actions/cache@v5
+        with:
+          path: .pub-cache
+          key: ${{ runner.os }}-flutter-pub-${{ hashFiles('apps/**/pubspec.lock', 'packages/**/pubspec.yaml') }}
+          restore-keys: ${{ runner.os }}-flutter-pub-
 
       - name: Compute build metadata
         id: meta
@@ -234,6 +261,14 @@ jobs:
         with:
           channel: stable
           flutter-version: '3.41.6'
+          cache: true
+
+      - name: Cache Flutter pub packages
+        uses: actions/cache@v5
+        with:
+          path: .pub-cache
+          key: ${{ runner.os }}-flutter-pub-${{ hashFiles('apps/**/pubspec.lock', 'packages/**/pubspec.yaml') }}
+          restore-keys: ${{ runner.os }}-flutter-pub-
 
       - name: Compute build metadata
         id: meta

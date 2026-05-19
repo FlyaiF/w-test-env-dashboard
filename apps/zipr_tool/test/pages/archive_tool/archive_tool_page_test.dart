@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -43,13 +45,15 @@ void main() {
       expect(find.text('归档工具'), findsOneWidget);
     });
 
-    testWidgets('shows tree and detail panel after archive loaded',
-        (tester) async {
+    testWidgets('shows tree and detail panel after archive loaded', (
+      tester,
+    ) async {
       mock.listResult = [
         ArchiveEntry(
           expr: 'Main.class',
           size: BigInt.from(1024),
           compressedSize: BigInt.from(512),
+          isArchive: false,
         ),
       ];
       await service.listArchive('/test.jar');
@@ -77,6 +81,20 @@ void main() {
       expect(loadingStates, contains(true));
     });
 
+    testWidgets('shows operation message while loading', (tester) async {
+      mock.listArchiveCompleter = Completer<List<ArchiveEntry>>();
+      final future = service.listArchive('/slow.jar');
+
+      await tester.pumpWidget(_wrapWithProviders(service));
+      await tester.pump();
+
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.text('正在读取归档: /slow.jar'), findsOneWidget);
+
+      mock.listArchiveCompleter!.complete([]);
+      await future;
+    });
+
     testWidgets('shows error bar on failure', (tester) async {
       mock.errorToThrow = Exception('test error');
       await service.listArchive('/bad.jar');
@@ -88,13 +106,15 @@ void main() {
       expect(find.byIcon(Icons.error_outline), findsOneWidget);
     });
 
-    testWidgets('shows batch replace button after archive loaded',
-        (tester) async {
+    testWidgets('shows batch replace button after archive loaded', (
+      tester,
+    ) async {
       mock.listResult = [
         ArchiveEntry(
           expr: 'file.txt',
           size: BigInt.from(10),
           compressedSize: BigInt.from(5),
+          isArchive: false,
         ),
       ];
       await service.listArchive('/test.jar');

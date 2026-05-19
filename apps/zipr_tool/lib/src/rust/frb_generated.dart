@@ -64,7 +64,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => -309109281;
+  int get rustContentHash => 2041068788;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -83,12 +83,20 @@ abstract class RustLibApi extends BaseApi {
     required String right,
   });
 
+  Future<List<String>> crateApiZiprApiEnumerateArchivePaths({
+    required String path,
+  });
+
   Future<Uint8List> crateApiZiprApiExtractEntry({
     required String zipExpr,
     required String outputPath,
   });
 
   Future<List<ArchiveEntry>> crateApiZiprApiListArchive({required String path});
+
+  Future<List<ArchiveEntry>> crateApiZiprApiListArchiveSegment({
+    required String zipExpr,
+  });
 
   Future<ApplySummary> crateApiZiprApiPatchApply({
     required String archive,
@@ -102,6 +110,12 @@ abstract class RustLibApi extends BaseApi {
     required String output,
   });
 
+  Future<DraftSummary> crateApiZiprApiPatchDraftExtend({
+    required String archive,
+    required String specPath,
+    required List<String> additionalSources,
+  });
+
   Future<DraftSummary> crateApiZiprApiPatchResolve({
     required String specPath,
     required List<Resolution> resolutions,
@@ -112,6 +126,11 @@ abstract class RustLibApi extends BaseApi {
   Future<void> crateApiZiprApiReplaceEntry({
     required String zipExpr,
     required String sourcePath,
+  });
+
+  Future<void> crateApiZiprApiRestoreArchiveBackup({
+    required String archive,
+    required String backup,
   });
 
   Future<RustBuildInfo> crateApiZiprApiRustBuildInfo();
@@ -189,6 +208,39 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<List<String>> crateApiZiprApiEnumerateArchivePaths({
+    required String path,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(path, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 3,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_String,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiZiprApiEnumerateArchivePathsConstMeta,
+        argValues: [path],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiZiprApiEnumerateArchivePathsConstMeta =>
+      const TaskConstMeta(
+        debugName: "enumerate_archive_paths",
+        argNames: ["path"],
+      );
+
+  @override
   Future<Uint8List> crateApiZiprApiExtractEntry({
     required String zipExpr,
     required String outputPath,
@@ -202,7 +254,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 3,
+            funcId: 4,
             port: port_,
           );
         },
@@ -235,7 +287,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 4,
+            funcId: 5,
             port: port_,
           );
         },
@@ -254,6 +306,39 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "list_archive", argNames: ["path"]);
 
   @override
+  Future<List<ArchiveEntry>> crateApiZiprApiListArchiveSegment({
+    required String zipExpr,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(zipExpr, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 6,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_archive_entry,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiZiprApiListArchiveSegmentConstMeta,
+        argValues: [zipExpr],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiZiprApiListArchiveSegmentConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_archive_segment",
+        argNames: ["zipExpr"],
+      );
+
+  @override
   Future<ApplySummary> crateApiZiprApiPatchApply({
     required String archive,
     required String spec,
@@ -269,7 +354,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 5,
+            funcId: 7,
             port: port_,
           );
         },
@@ -305,7 +390,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 6,
+            funcId: 8,
             port: port_,
           );
         },
@@ -326,6 +411,43 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   );
 
   @override
+  Future<DraftSummary> crateApiZiprApiPatchDraftExtend({
+    required String archive,
+    required String specPath,
+    required List<String> additionalSources,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(archive, serializer);
+          sse_encode_String(specPath, serializer);
+          sse_encode_list_String(additionalSources, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 9,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_draft_summary,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiZiprApiPatchDraftExtendConstMeta,
+        argValues: [archive, specPath, additionalSources],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiZiprApiPatchDraftExtendConstMeta =>
+      const TaskConstMeta(
+        debugName: "patch_draft_extend",
+        argNames: ["archive", "specPath", "additionalSources"],
+      );
+
+  @override
   Future<DraftSummary> crateApiZiprApiPatchResolve({
     required String specPath,
     required List<Resolution> resolutions,
@@ -339,7 +461,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 7,
+            funcId: 10,
             port: port_,
           );
         },
@@ -372,7 +494,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 8,
+            funcId: 11,
             port: port_,
           );
         },
@@ -404,7 +526,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 9,
+            funcId: 12,
             port: port_,
           );
         },
@@ -426,6 +548,41 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<void> crateApiZiprApiRestoreArchiveBackup({
+    required String archive,
+    required String backup,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(archive, serializer);
+          sse_encode_String(backup, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 13,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiZiprApiRestoreArchiveBackupConstMeta,
+        argValues: [archive, backup],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiZiprApiRestoreArchiveBackupConstMeta =>
+      const TaskConstMeta(
+        debugName: "restore_archive_backup",
+        argNames: ["archive", "backup"],
+      );
+
+  @override
   Future<RustBuildInfo> crateApiZiprApiRustBuildInfo() {
     return handler.executeNormal(
       NormalTask(
@@ -434,7 +591,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 10,
+            funcId: 14,
             port: port_,
           );
         },
@@ -468,11 +625,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ApplySummary dco_decode_apply_summary(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 2)
-      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
     return ApplySummary(
       replaced: dco_decode_usize(arr[0]),
       deleted: dco_decode_usize(arr[1]),
+      backupPath: dco_decode_opt_String(arr[2]),
     );
   }
 
@@ -480,12 +638,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ArchiveEntry dco_decode_archive_entry(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 3)
-      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
     return ArchiveEntry(
       expr: dco_decode_String(arr[0]),
       size: dco_decode_u_64(arr[1]),
       compressedSize: dco_decode_u_64(arr[2]),
+      isArchive: dco_decode_bool(arr[3]),
     );
   }
 
@@ -557,6 +716,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   List<UnresolvedEntry> dco_decode_list_unresolved_entry(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_unresolved_entry).toList();
+  }
+
+  @protected
+  String? dco_decode_opt_String(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_String(raw);
   }
 
   @protected
@@ -640,7 +805,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_replaced = sse_decode_usize(deserializer);
     var var_deleted = sse_decode_usize(deserializer);
-    return ApplySummary(replaced: var_replaced, deleted: var_deleted);
+    var var_backupPath = sse_decode_opt_String(deserializer);
+    return ApplySummary(
+      replaced: var_replaced,
+      deleted: var_deleted,
+      backupPath: var_backupPath,
+    );
   }
 
   @protected
@@ -649,10 +819,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_expr = sse_decode_String(deserializer);
     var var_size = sse_decode_u_64(deserializer);
     var var_compressedSize = sse_decode_u_64(deserializer);
+    var var_isArchive = sse_decode_bool(deserializer);
     return ArchiveEntry(
       expr: var_expr,
       size: var_size,
       compressedSize: var_compressedSize,
+      isArchive: var_isArchive,
     );
   }
 
@@ -764,6 +936,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  String? sse_decode_opt_String(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_String(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   Resolution sse_decode_resolution(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_source = sse_decode_String(deserializer);
@@ -849,6 +1032,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_usize(self.replaced, serializer);
     sse_encode_usize(self.deleted, serializer);
+    sse_encode_opt_String(self.backupPath, serializer);
   }
 
   @protected
@@ -857,6 +1041,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.expr, serializer);
     sse_encode_u_64(self.size, serializer);
     sse_encode_u_64(self.compressedSize, serializer);
+    sse_encode_bool(self.isArchive, serializer);
   }
 
   @protected
@@ -947,6 +1132,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_unresolved_entry(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_String(String? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_String(self, serializer);
     }
   }
 

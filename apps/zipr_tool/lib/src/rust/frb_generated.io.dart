@@ -58,6 +58,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<UnresolvedEntry> dco_decode_list_unresolved_entry(dynamic raw);
 
   @protected
+  String? dco_decode_opt_String(dynamic raw);
+
+  @protected
   Resolution dco_decode_resolution(dynamic raw);
 
   @protected
@@ -120,6 +123,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<UnresolvedEntry> sse_decode_list_unresolved_entry(
     SseDeserializer deserializer,
   );
+
+  @protected
+  String? sse_decode_opt_String(SseDeserializer deserializer);
 
   @protected
   Resolution sse_decode_resolution(SseDeserializer deserializer);
@@ -201,6 +207,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     List<UnresolvedEntry> self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_opt_String(String? self, SseSerializer serializer);
 
   @protected
   void sse_encode_resolution(Resolution self, SseSerializer serializer);

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -12,6 +13,7 @@ class MockZiprBridge implements ZiprBridgeInterface {
   DraftSummary? draftResult;
   ApplySummary? applyResult;
   Object? errorToThrow;
+  Completer<List<ArchiveEntry>>? listArchiveCompleter;
 
   // Call tracking
   final calls = <String>[];
@@ -25,7 +27,27 @@ class MockZiprBridge implements ZiprBridgeInterface {
   Future<List<ArchiveEntry>> listArchive({required String path}) async {
     calls.add('listArchive:$path');
     if (errorToThrow != null) throw errorToThrow!;
+    if (listArchiveCompleter != null) return listArchiveCompleter!.future;
     return listResult;
+  }
+
+  List<ArchiveEntry> segmentResult = [];
+  List<String> enumerateResult = [];
+
+  @override
+  Future<List<ArchiveEntry>> listArchiveSegment({
+    required String zipExpr,
+  }) async {
+    calls.add('listArchiveSegment:$zipExpr');
+    if (errorToThrow != null) throw errorToThrow!;
+    return segmentResult;
+  }
+
+  @override
+  Future<List<String>> enumerateArchivePaths({required String path}) async {
+    calls.add('enumerateArchivePaths:$path');
+    if (errorToThrow != null) throw errorToThrow!;
+    return enumerateResult;
   }
 
   @override
@@ -101,6 +123,28 @@ class MockZiprBridge implements ZiprBridgeInterface {
     if (errorToThrow != null) throw errorToThrow!;
     return draftResult!;
   }
+
+  @override
+  Future<DraftSummary> patchDraftExtend({
+    required String archive,
+    required String specPath,
+    required List<String> additionalSources,
+  }) async {
+    calls.add(
+      'patchDraftExtend:$archive:$specPath:${additionalSources.join(",")}',
+    );
+    if (errorToThrow != null) throw errorToThrow!;
+    return draftResult!;
+  }
+
+  @override
+  Future<void> restoreArchiveBackup({
+    required String archive,
+    required String backup,
+  }) async {
+    calls.add('restoreArchiveBackup:$archive:$backup');
+    if (errorToThrow != null) throw errorToThrow!;
+  }
 }
 
 void main() {
@@ -113,11 +157,13 @@ void main() {
         expr: 'app.jar!/Main.class',
         size: BigInt.from(1024),
         compressedSize: BigInt.from(512),
+        isArchive: false,
       ),
       ArchiveEntry(
         expr: 'app.jar!/lib.jar!/Util.class',
         size: BigInt.from(2048),
         compressedSize: BigInt.from(1024),
+        isArchive: false,
       ),
     ];
 
@@ -132,6 +178,7 @@ void main() {
       expect(service.diffEntries, isEmpty);
       expect(service.loading, false);
       expect(service.error, isNull);
+      expect(service.operationMessage, isNull);
     });
 
     test('listArchive sets entries and notifies listeners', () async {
@@ -146,6 +193,7 @@ void main() {
       expect(service.loading, false);
       expect(service.error, isNull);
       expect(notified, true);
+      expect(service.operationMessage, isNull);
     });
 
     test('listArchive sets loading=true during call', () async {
@@ -159,6 +207,21 @@ void main() {
       expect(loadingStates, [true, false]);
     });
 
+    test('listArchive exposes operation message while running', () async {
+      mock.listArchiveCompleter = Completer<List<ArchiveEntry>>();
+
+      final future = service.listArchive('/slow.jar');
+
+      expect(service.loading, true);
+      expect(service.operationMessage, '正在读取归档: /slow.jar');
+
+      mock.listArchiveCompleter!.complete(testEntries);
+      await future;
+
+      expect(service.loading, false);
+      expect(service.operationMessage, isNull);
+    });
+
     test('listArchive sets error on bridge failure', () async {
       mock.errorToThrow = Exception('file not found');
 
@@ -167,6 +230,7 @@ void main() {
       expect(service.error, contains('file not found'));
       expect(service.entries, isEmpty);
       expect(service.loading, false);
+      expect(service.operationMessage, isNull);
     });
 
     test('extractEntry calls bridge with correct arguments', () async {
@@ -287,6 +351,75 @@ void main() {
 
       // Only patchApply called, no listArchive refresh
       expect(mock.calls, ['patchApply:/app.jar:/spec.toml:true']);
+    });
+
+    test('patchApply clears archive-derived caches after mutation', () async {
+      final archiveEntry = ArchiveEntry(
+        expr: '/app.jar!/lib/inner.jar',
+        size: BigInt.from(12),
+        compressedSize: BigInt.from(8),
+        isArchive: true,
+      );
+      final childEntry = ArchiveEntry(
+        expr: '/app.jar!/lib/inner.jar!/Foo.class',
+        size: BigInt.from(20),
+        compressedSize: BigInt.from(10),
+        isArchive: false,
+      );
+      mock.listResult = [archiveEntry];
+      await service.listArchive('/app.jar');
+      mock.segmentResult = [childEntry];
+      await service.expandArchive(archiveEntry.expr);
+      mock.enumerateResult = [childEntry.expr];
+      await service.loadAllArchivePaths();
+      expect(service.expandedArchives, contains(archiveEntry.expr));
+      expect(service.allArchivePaths, isNotNull);
+
+      mock.reset();
+      mock.applyResult = ApplySummary(
+        replaced: BigInt.one,
+        deleted: BigInt.zero,
+        backupPath: '/app.jar.bak-test',
+      );
+      mock.listResult = [archiveEntry];
+
+      await service.patchApply('/app.jar', '/spec.toml');
+
+      expect(service.expandedArchives, isEmpty);
+      expect(service.expandingArchivesView, isEmpty);
+      expect(service.allArchivePaths, isNull);
+      expect(service.lastBackupPath, '/app.jar.bak-test');
+    });
+
+    test('restoreArchiveBackup clears archive-derived caches', () async {
+      final archiveEntry = ArchiveEntry(
+        expr: '/app.jar!/lib/inner.jar',
+        size: BigInt.from(12),
+        compressedSize: BigInt.from(8),
+        isArchive: true,
+      );
+      final childEntry = ArchiveEntry(
+        expr: '/app.jar!/lib/inner.jar!/Foo.class',
+        size: BigInt.from(20),
+        compressedSize: BigInt.from(10),
+        isArchive: false,
+      );
+      mock.listResult = [archiveEntry];
+      await service.listArchive('/app.jar');
+      mock.segmentResult = [childEntry];
+      await service.expandArchive(archiveEntry.expr);
+      mock.enumerateResult = [childEntry.expr];
+      await service.loadAllArchivePaths();
+
+      mock.reset();
+      mock.listResult = [archiveEntry];
+      final ok = await service.restoreArchiveBackup('/app.jar', '/app.jar.bak');
+
+      expect(ok, true);
+      expect(service.expandedArchives, isEmpty);
+      expect(service.expandingArchivesView, isEmpty);
+      expect(service.allArchivePaths, isNull);
+      expect(service.lastBackupPath, isNull);
     });
 
     test('clearError clears the error state', () async {

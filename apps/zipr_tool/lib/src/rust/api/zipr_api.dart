@@ -6,15 +6,30 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `default_config`
+// These functions are ignored because they are not marked as `pub`: `default_config`, `to_archive_entry`
 
 /// Build info for the embedded zipr_lib Rust crate.
 Future<RustBuildInfo> rustBuildInfo() =>
     RustLib.instance.api.crateApiZiprApiRustBuildInfo();
 
-/// List all entries in an archive recursively (including nested archives).
+/// List only the top-level entries of an archive. Nested archives are
+/// flagged via `is_archive` and their children must be requested separately
+/// via `list_archive_segment`. This avoids opening every nested archive on
+/// initial load.
 Future<List<ArchiveEntry>> listArchive({required String path}) =>
     RustLib.instance.api.crateApiZiprApiListArchive(path: path);
+
+/// List the top-level entries inside a nested archive identified by its
+/// zip expression (e.g. `outer.war!/BOOT-INF/lib/spring.jar`).
+Future<List<ArchiveEntry>> listArchiveSegment({required String zipExpr}) =>
+    RustLib.instance.api.crateApiZiprApiListArchiveSegment(zipExpr: zipExpr);
+
+/// Walk the entire archive (including all nested archives) and return only
+/// the full zip expressions of every leaf entry. Used by the Flutter side as
+/// a one-time cache so subsequent draft extends can match new input files
+/// without crossing the FFI boundary again.
+Future<List<String>> enumerateArchivePaths({required String path}) =>
+    RustLib.instance.api.crateApiZiprApiEnumerateArchivePaths(path: path);
 
 /// Extract a single entry from an archive (supports nested paths with `!/`).
 /// If `output_path` is provided, writes to that file; otherwise returns bytes.
@@ -58,6 +73,18 @@ Future<DraftSummary> patchDraft({
   output: output,
 );
 
+/// Extend an existing patch draft spec with additional source files/directories.
+/// Existing entries and unresolved items in the spec are preserved.
+Future<DraftSummary> patchDraftExtend({
+  required String archive,
+  required String specPath,
+  required List<String> additionalSources,
+}) => RustLib.instance.api.crateApiZiprApiPatchDraftExtend(
+  archive: archive,
+  specPath: specPath,
+  additionalSources: additionalSources,
+);
+
 /// Apply a patch spec to an archive.
 /// Set `dry_run` to true to preview without modifying.
 Future<ApplySummary> patchApply({
@@ -68,6 +95,16 @@ Future<ApplySummary> patchApply({
   archive: archive,
   spec: spec,
   dryRun: dryRun,
+);
+
+/// Restore an archive from a previously-created backup file produced by `patch_apply`.
+/// The backup is moved over the archive and removed on success.
+Future<void> restoreArchiveBackup({
+  required String archive,
+  required String backup,
+}) => RustLib.instance.api.crateApiZiprApiRestoreArchiveBackup(
+  archive: archive,
+  backup: backup,
 );
 
 /// Read a patch spec file leniently (no validation) and return its summary.
@@ -90,10 +127,18 @@ class ApplySummary {
   final BigInt replaced;
   final BigInt deleted;
 
-  const ApplySummary({required this.replaced, required this.deleted});
+  /// Path to the pre-apply archive backup. `None` on dry-run.
+  final String? backupPath;
+
+  const ApplySummary({
+    required this.replaced,
+    required this.deleted,
+    this.backupPath,
+  });
 
   @override
-  int get hashCode => replaced.hashCode ^ deleted.hashCode;
+  int get hashCode =>
+      replaced.hashCode ^ deleted.hashCode ^ backupPath.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -101,7 +146,8 @@ class ApplySummary {
       other is ApplySummary &&
           runtimeType == other.runtimeType &&
           replaced == other.replaced &&
-          deleted == other.deleted;
+          deleted == other.deleted &&
+          backupPath == other.backupPath;
 }
 
 class ArchiveEntry {
@@ -109,14 +155,23 @@ class ArchiveEntry {
   final BigInt size;
   final BigInt compressedSize;
 
+  /// True if this entry is itself an archive (zip/jar/war/ear). Its
+  /// children are loaded lazily via `list_archive_segment(expr)`.
+  final bool isArchive;
+
   const ArchiveEntry({
     required this.expr,
     required this.size,
     required this.compressedSize,
+    required this.isArchive,
   });
 
   @override
-  int get hashCode => expr.hashCode ^ size.hashCode ^ compressedSize.hashCode;
+  int get hashCode =>
+      expr.hashCode ^
+      size.hashCode ^
+      compressedSize.hashCode ^
+      isArchive.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -125,7 +180,8 @@ class ArchiveEntry {
           runtimeType == other.runtimeType &&
           expr == other.expr &&
           size == other.size &&
-          compressedSize == other.compressedSize;
+          compressedSize == other.compressedSize &&
+          isArchive == other.isArchive;
 }
 
 class DiffEntry {

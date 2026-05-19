@@ -8,6 +8,8 @@ build/
 **/.flutter-plugins
 **/.flutter-plugins-dependencies
 **/.packages
+**/devtools_options.yaml
+.pub-cache/
 # Lock files only for library packages, not apps
 packages/*/pubspec.lock
 

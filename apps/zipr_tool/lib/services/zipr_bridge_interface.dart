@@ -8,6 +8,10 @@ import '../src/rust/api/zipr_api.dart';
 abstract class ZiprBridgeInterface {
   Future<List<ArchiveEntry>> listArchive({required String path});
 
+  Future<List<ArchiveEntry>> listArchiveSegment({required String zipExpr});
+
+  Future<List<String>> enumerateArchivePaths({required String path});
+
   Future<Uint8List> extractEntry({
     required String zipExpr,
     required String outputPath,
@@ -31,10 +35,21 @@ abstract class ZiprBridgeInterface {
     required String output,
   });
 
+  Future<DraftSummary> patchDraftExtend({
+    required String archive,
+    required String specPath,
+    required List<String> additionalSources,
+  });
+
   Future<ApplySummary> patchApply({
     required String archive,
     required String spec,
     required bool dryRun,
+  });
+
+  Future<void> restoreArchiveBackup({
+    required String archive,
+    required String backup,
   });
 
   Future<DraftSummary> readPatchSpec({required String specPath});
@@ -50,6 +65,14 @@ class RealZiprBridge implements ZiprBridgeInterface {
   @override
   Future<List<ArchiveEntry>> listArchive({required String path}) =>
       zipr_api.listArchive(path: path);
+
+  @override
+  Future<List<ArchiveEntry>> listArchiveSegment({required String zipExpr}) =>
+      zipr_api.listArchiveSegment(zipExpr: zipExpr);
+
+  @override
+  Future<List<String>> enumerateArchivePaths({required String path}) =>
+      zipr_api.enumerateArchivePaths(path: path);
 
   @override
   Future<Uint8List> extractEntry({
@@ -81,11 +104,28 @@ class RealZiprBridge implements ZiprBridgeInterface {
   }) => zipr_api.patchDraft(archive: archive, fromDir: fromDir, output: output);
 
   @override
+  Future<DraftSummary> patchDraftExtend({
+    required String archive,
+    required String specPath,
+    required List<String> additionalSources,
+  }) => zipr_api.patchDraftExtend(
+    archive: archive,
+    specPath: specPath,
+    additionalSources: additionalSources,
+  );
+
+  @override
   Future<ApplySummary> patchApply({
     required String archive,
     required String spec,
     required bool dryRun,
   }) => zipr_api.patchApply(archive: archive, spec: spec, dryRun: dryRun);
+
+  @override
+  Future<void> restoreArchiveBackup({
+    required String archive,
+    required String backup,
+  }) => zipr_api.restoreArchiveBackup(archive: archive, backup: backup);
 
   @override
   Future<DraftSummary> readPatchSpec({required String specPath}) =>

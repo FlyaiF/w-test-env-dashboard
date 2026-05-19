@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_ui/shared_ui.dart';
 import 'package:window_manager/window_manager.dart';
+
 import 'pages/archive_tool/archive_tool_page.dart';
 import 'pages/about/about_page.dart';
 import 'services/zipr_service.dart';
@@ -33,9 +34,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => ZiprService()),
-      ],
+      providers: [ChangeNotifierProvider(create: (_) => ZiprService())],
       child: MaterialApp(
         title: '归档差异与补丁工具',
         debugShowCheckedModeBanner: false,
@@ -46,50 +45,26 @@ class MyApp extends StatelessWidget {
   }
 }
 
-const _archiveItem = NavItem(
-  index: 0,
-  label: '归档',
-  icon: Icons.inventory_2_outlined,
-  selectedIcon: Icons.inventory_2,
-);
-
-const _aboutItem = NavItem(
-  index: 1,
-  label: '关于',
-  icon: Icons.info_outline,
-  selectedIcon: Icons.info,
-);
-
-class HomePage extends StatefulWidget {
+class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
-  @override
-  State<HomePage> createState() => _HomePageState();
-}
-
-class _HomePageState extends State<HomePage> {
-  int _selectedIndex = 0;
+  void _openAbout(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => Scaffold(
+          appBar: AppBar(title: const Text('关于')),
+          body: const AboutPage(),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return AppScaffold(
-      groups: const [
-        NavGroup(
-          label: '工具',
-          icon: Icons.build_outlined,
-          items: [_archiveItem],
-        ),
-      ],
-      footerItems: const [_aboutItem],
-      selectedIndex: _selectedIndex,
-      onDestinationSelected: (i) => setState(() => _selectedIndex = i),
-      title: '归档工具',
-      child: IndexedStack(
-        index: _selectedIndex,
-        children: const [
-          ArchiveToolPage(),
-          AboutPage(),
-        ],
+    return Scaffold(
+      body: SafeArea(
+        top: false,
+        child: ArchiveToolPage(onAbout: () => _openAbout(context)),
       ),
     );
   }

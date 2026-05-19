@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:desktop_drop/desktop_drop.dart';
 
 import '../../../src/rust/api/zipr_api.dart';
 
@@ -10,13 +11,17 @@ class DetailPanel extends StatefulWidget {
   final List<DiffEntry> diffEntries;
   final String? patchSpecToml;
   final List<UnresolvedEntry> unresolvedEntries;
-  final VoidCallback? onPatchDraft;
+  final VoidCallback? onPatchDraftExtend;
+  final VoidCallback? onPatchDiscard;
+  final ValueChanged<List<String>>? onPatchSourcesDropped;
   final VoidCallback? onPatchDryRun;
   final VoidCallback? onPatchApply;
   final VoidCallback? onOpenInEditor;
   final VoidCallback? onReload;
   final VoidCallback? onRestoreOriginal;
+  final VoidCallback? onRollbackArchive;
   final Future<void> Function(List<Resolution> resolutions)? onResolve;
+  final bool canRollback;
 
   const DetailPanel({
     super.key,
@@ -25,13 +30,17 @@ class DetailPanel extends StatefulWidget {
     this.diffEntries = const [],
     this.patchSpecToml,
     this.unresolvedEntries = const [],
-    this.onPatchDraft,
+    this.onPatchDraftExtend,
+    this.onPatchDiscard,
+    this.onPatchSourcesDropped,
     this.onPatchDryRun,
     this.onPatchApply,
     this.onOpenInEditor,
     this.onReload,
     this.onRestoreOriginal,
+    this.onRollbackArchive,
     this.onResolve,
+    this.canRollback = false,
   });
 
   @override
@@ -41,6 +50,7 @@ class DetailPanel extends StatefulWidget {
 class _DetailPanelState extends State<DetailPanel> {
   // Map from source path -> chosen target (null means ignore)
   final Map<String, String?> _resolutions = {};
+  bool _isPatchDropHover = false;
 
   @override
   void didUpdateWidget(DetailPanel oldWidget) {
@@ -195,6 +205,11 @@ class _DetailPanelState extends State<DetailPanel> {
 
   Widget _buildPatchView(BuildContext context) {
     final hasUnresolved = widget.unresolvedEntries.isNotEmpty;
+    final hasSpec = widget.patchSpecToml != null;
+    final entryCount = _patchEntryCount(widget.patchSpecToml);
+    final summary = hasSpec
+        ? '清单：$entryCount 项匹配 · ${widget.unresolvedEntries.length} 项未解析'
+        : '拖入文件或目录，生成替换清单后再 dry-run、替换';
 
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -202,88 +217,204 @@ class _DetailPanelState extends State<DetailPanel> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('批量替换', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          Text(summary, style: _mutedTextStyle(context)),
           const SizedBox(height: 12),
-          // Action buttons row
-          Row(
+          _buildPatchDropZone(context, hasSpec),
+          const SizedBox(height: 12),
+          _buildPatchActionBar(context, hasSpec, hasUnresolved),
+          const SizedBox(height: 12),
+          Expanded(
+            child: ListView(
+              padding: EdgeInsets.zero,
+              children: [
+                if (hasUnresolved) ...[
+                  _buildUnresolvedSection(context),
+                  const SizedBox(height: 12),
+                ],
+                if (widget.patchSpecToml != null)
+                  _buildPatchSpecDisclosure(context, widget.patchSpecToml!),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPatchActionBar(
+    BuildContext context,
+    bool hasSpec,
+    bool hasUnresolved,
+  ) {
+    final canRun = hasSpec && !hasUnresolved;
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        if (hasSpec) ...[
+          OutlinedButton.icon(
+            onPressed: canRun ? widget.onPatchDryRun : null,
+            icon: const Icon(Icons.preview, size: 18),
+            label: const Text('dry-run'),
+          ),
+          FilledButton.tonalIcon(
+            onPressed: canRun ? widget.onPatchApply : null,
+            icon: const Icon(Icons.bolt, size: 18),
+            label: const Text('替换'),
+          ),
+          OutlinedButton.icon(
+            onPressed: widget.onPatchDiscard,
+            icon: const Icon(Icons.delete_outline, size: 18),
+            label: const Text('取消'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+          ),
+          IconButton(
+            onPressed: widget.onOpenInEditor,
+            icon: const Icon(Icons.edit_note, size: 18),
+            tooltip: '在编辑器中打开清单',
+          ),
+          IconButton(
+            onPressed: widget.onReload,
+            icon: const Icon(Icons.refresh, size: 18),
+            tooltip: '从磁盘重新加载清单',
+          ),
+          IconButton(
+            onPressed: widget.onRestoreOriginal,
+            icon: const Icon(Icons.restore_page, size: 18),
+            tooltip: '恢复清单到生成时状态（不影响归档）',
+          ),
+          if (widget.canRollback)
+            IconButton(
+              onPressed: widget.onRollbackArchive,
+              icon: const Icon(Icons.undo, size: 18),
+              tooltip: '回滚归档到上次备份',
+              color: Theme.of(context).colorScheme.error,
+            ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildPatchDropZone(BuildContext context, bool hasSpec) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final borderColor = _isPatchDropHover
+        ? colorScheme.primary
+        : colorScheme.outlineVariant;
+    final background = _isPatchDropHover
+        ? colorScheme.primary.withValues(alpha: 0.06)
+        : colorScheme.surfaceContainerHighest.withValues(alpha: 0.45);
+    final title = _isPatchDropHover ? '松开以添加到清单' : '拖入替换文件或目录';
+    final subtitle = hasSpec ? '文件、多个文件、目录都会追加到当前清单' : '首次添加会自动生成清单';
+
+    return DropTarget(
+      onDragEntered: (_) => setState(() => _isPatchDropHover = true),
+      onDragExited: (_) => setState(() => _isPatchDropHover = false),
+      onDragDone: (details) {
+        setState(() => _isPatchDropHover = false);
+        final paths = [
+          for (final file in details.files)
+            if (file.path.isNotEmpty) file.path,
+        ];
+        if (paths.isNotEmpty) {
+          widget.onPatchSourcesDropped?.call(paths);
+        }
+      },
+      child: InkWell(
+        onTap: widget.onPatchDraftExtend,
+        borderRadius: BorderRadius.circular(8),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: background,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: borderColor,
+              width: _isPatchDropHover ? 2 : 1,
+            ),
+          ),
+          child: Row(
             children: [
-              FilledButton.icon(
-                onPressed: widget.onPatchDraft,
-                icon: const Icon(Icons.description, size: 18),
-                label: const Text('生成清单'),
+              Icon(
+                _isPatchDropHover ? Icons.file_download : Icons.upload_file,
+                color: _isPatchDropHover
+                    ? colorScheme.primary
+                    : colorScheme.onSurfaceVariant,
+                size: 24,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: _isPatchDropHover
+                            ? colorScheme.primary
+                            : colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(width: 8),
               OutlinedButton.icon(
-                onPressed: widget.patchSpecToml != null && !hasUnresolved
-                    ? widget.onPatchDryRun
-                    : null,
-                icon: const Icon(Icons.preview, size: 18),
-                label: const Text('预演'),
-              ),
-              const SizedBox(width: 8),
-              FilledButton.tonal(
-                onPressed: widget.patchSpecToml != null && !hasUnresolved
-                    ? widget.onPatchApply
-                    : null,
-                child: const Text('应用替换'),
+                onPressed: widget.onPatchDraftExtend,
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('选择文件'),
               ),
             ],
           ),
-          if (widget.patchSpecToml != null) ...[
-            const SizedBox(height: 8),
-            // Secondary action buttons
-            Row(
-              children: [
-                OutlinedButton.icon(
-                  onPressed: widget.onOpenInEditor,
-                  icon: const Icon(Icons.edit_note, size: 18),
-                  label: const Text('在编辑器中打开'),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  onPressed: widget.onReload,
-                  icon: const Icon(Icons.refresh, size: 18),
-                  tooltip: '重新加载',
-                ),
-                const SizedBox(width: 4),
-                IconButton(
-                  onPressed: widget.onRestoreOriginal,
-                  icon: const Icon(Icons.restore, size: 18),
-                  tooltip: '恢复原始清单',
-                ),
-              ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPatchSpecDisclosure(BuildContext context, String toml) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+      ),
+      child: ExpansionTile(
+        tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+        childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        title: const Text('替换清单', style: TextStyle(fontSize: 13)),
+        subtitle: Text('展开查看 TOML 内容', style: _mutedTextStyle(context)),
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey.shade300),
             ),
-          ],
-          const SizedBox(height: 12),
-          // Unresolved entries section
-          if (hasUnresolved) ...[
-            _buildUnresolvedSection(context),
-            const SizedBox(height: 12),
-          ],
-          // TOML display
-          if (widget.patchSpecToml != null) ...[
-            const Text('替换清单:', style: TextStyle(fontSize: 13)),
-            const SizedBox(height: 8),
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: SingleChildScrollView(
-                  child: SelectableText(
-                    widget.patchSpecToml!,
-                    style: const TextStyle(
-                      fontFamily: 'Sarasa Mono SC',
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
+            child: SelectableText(
+              toml,
+              style: const TextStyle(
+                fontFamily: 'Sarasa Mono SC',
+                fontSize: 12,
               ),
             ),
-          ],
+          ),
         ],
       ),
     );
@@ -336,7 +467,7 @@ class _DetailPanelState extends State<DetailPanel> {
           ),
           const Divider(height: 1),
           ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 240),
+            constraints: const BoxConstraints(maxHeight: 180),
             child: ListView.separated(
               shrinkWrap: true,
               padding: const EdgeInsets.all(8),
@@ -349,6 +480,21 @@ class _DetailPanelState extends State<DetailPanel> {
         ],
       ),
     );
+  }
+
+  TextStyle _mutedTextStyle(BuildContext context) {
+    return TextStyle(
+      fontSize: 12,
+      color: Theme.of(context).colorScheme.outline,
+    );
+  }
+
+  int _patchEntryCount(String? toml) {
+    if (toml == null) return 0;
+    return RegExp(
+      r'^\s*\[\[entry\]\]',
+      multiLine: true,
+    ).allMatches(toml).length;
   }
 
   Widget _buildUnresolvedItem(UnresolvedEntry entry) {
@@ -444,9 +590,8 @@ class _DetailPanelState extends State<DetailPanel> {
 
   Widget _buildCandidateDropdown(UnresolvedEntry entry, String? chosen) {
     final commonPrefix = _commonPathPrefix(entry.candidates);
-    String stripped(String path) => commonPrefix.isNotEmpty
-        ? path.substring(commonPrefix.length)
-        : path;
+    String stripped(String path) =>
+        commonPrefix.isNotEmpty ? path.substring(commonPrefix.length) : path;
 
     final dropdown = DropdownButton<String>(
       value: chosen,

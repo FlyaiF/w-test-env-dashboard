@@ -13,6 +13,9 @@ pub struct ArchiveEntry {
     pub expr: String,
     pub size: u64,
     pub compressed_size: u64,
+    /// True if this entry is itself an archive (zip/jar/war/ear). Its
+    /// children are loaded lazily via `list_archive_segment(expr)`.
+    pub is_archive: bool,
 }
 
 pub struct DiffEntry {
@@ -49,6 +52,8 @@ pub struct Resolution {
 pub struct ApplySummary {
     pub replaced: usize,
     pub deleted: usize,
+    /// Path to the pre-apply archive backup. `None` on dry-run.
+    pub backup_path: Option<String>,
 }
 
 pub struct RustBuildInfo {
@@ -72,18 +77,42 @@ pub fn rust_build_info() -> RustBuildInfo {
     }
 }
 
-/// List all entries in an archive recursively (including nested archives).
+/// List only the top-level entries of an archive. Nested archives are
+/// flagged via `is_archive` and their children must be requested separately
+/// via `list_archive_segment`. This avoids opening every nested archive on
+/// initial load.
 pub fn list_archive(path: String) -> Result<Vec<ArchiveEntry>> {
     let config = default_config()?;
+    let items = archive::list_top_level(Path::new(&path), &config)?;
+    Ok(items.into_iter().map(to_archive_entry).collect())
+}
+
+/// List the top-level entries inside a nested archive identified by its
+/// zip expression (e.g. `outer.war!/BOOT-INF/lib/spring.jar`).
+pub fn list_archive_segment(zip_expr: String) -> Result<Vec<ArchiveEntry>> {
+    let config = default_config()?;
+    let parsed = parse_zip_expr(&zip_expr)?;
+    let items = archive::list_segment(&parsed, &config)?;
+    Ok(items.into_iter().map(to_archive_entry).collect())
+}
+
+/// Walk the entire archive (including all nested archives) and return only
+/// the full zip expressions of every leaf entry. Used by the Flutter side as
+/// a one-time cache so subsequent draft extends can match new input files
+/// without crossing the FFI boundary again.
+pub fn enumerate_archive_paths(path: String) -> Result<Vec<String>> {
+    let config = default_config()?;
     let items = archive::list_recursive(Path::new(&path), &config)?;
-    Ok(items
-        .into_iter()
-        .map(|e| ArchiveEntry {
-            expr: e.expr,
-            size: e.size,
-            compressed_size: e.compressed_size,
-        })
-        .collect())
+    Ok(items.into_iter().map(|e| e.expr).collect())
+}
+
+fn to_archive_entry(e: zipr_lib::archive::ListedEntry) -> ArchiveEntry {
+    ArchiveEntry {
+        expr: e.expr,
+        size: e.size,
+        compressed_size: e.compressed_size,
+        is_archive: e.is_archive,
+    }
 }
 
 /// Extract a single entry from an archive (supports nested paths with `!/`).
@@ -171,6 +200,40 @@ pub fn patch_draft(archive: String, from_dir: String, output: String) -> Result<
     })
 }
 
+/// Extend an existing patch draft spec with additional source files/directories.
+/// Existing entries and unresolved items in the spec are preserved.
+pub fn patch_draft_extend(
+    archive: String,
+    spec_path: String,
+    additional_sources: Vec<String>,
+) -> Result<DraftSummary> {
+    let config = default_config()?;
+    let paths: Vec<PathBuf> = additional_sources.iter().map(PathBuf::from).collect();
+    let summary = archive::patch_draft_extend(
+        Path::new(&archive),
+        Path::new(&spec_path),
+        &paths,
+        &config,
+    )?;
+    let spec_toml = std::fs::read_to_string(&spec_path).unwrap_or_default();
+    let spec = zipr_lib::patch_spec::PatchSpec::read_from_file_lenient(Path::new(&spec_path))?;
+    let unresolved_entries = spec
+        .unresolved
+        .iter()
+        .map(|u| UnresolvedEntry {
+            source: u.source.clone(),
+            reason: u.reason.clone(),
+            candidates: u.candidates.clone(),
+        })
+        .collect();
+    Ok(DraftSummary {
+        matched: summary.matched,
+        unresolved: summary.unresolved,
+        spec_toml,
+        unresolved_entries,
+    })
+}
+
 /// Apply a patch spec to an archive.
 /// Set `dry_run` to true to preview without modifying.
 pub fn patch_apply(archive: String, spec: String, dry_run: bool) -> Result<ApplySummary> {
@@ -179,7 +242,14 @@ pub fn patch_apply(archive: String, spec: String, dry_run: bool) -> Result<Apply
     Ok(ApplySummary {
         replaced: summary.replaced,
         deleted: summary.deleted,
+        backup_path: summary.backup_path,
     })
+}
+
+/// Restore an archive from a previously-created backup file produced by `patch_apply`.
+/// The backup is moved over the archive and removed on success.
+pub fn restore_archive_backup(archive: String, backup: String) -> Result<()> {
+    archive::restore_backup(Path::new(&archive), Path::new(&backup))
 }
 
 /// Read a patch spec file leniently (no validation) and return its summary.

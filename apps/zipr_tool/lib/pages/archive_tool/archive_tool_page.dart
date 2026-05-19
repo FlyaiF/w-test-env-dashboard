@@ -8,12 +8,15 @@ import 'package:provider/provider.dart';
 
 import '../../services/zipr_service.dart';
 import '../../src/rust/api/zipr_api.dart';
+import 'local_draft_extender.dart';
 import 'widgets/archive_tree_panel.dart';
 import 'widgets/detail_panel.dart';
 import 'widgets/diff_tree_panel.dart';
 
 class ArchiveToolPage extends StatefulWidget {
-  const ArchiveToolPage({super.key});
+  final VoidCallback? onAbout;
+
+  const ArchiveToolPage({super.key, this.onAbout});
 
   @override
   State<ArchiveToolPage> createState() => _ArchiveToolPageState();
@@ -26,13 +29,103 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
   String? _patchSpecPath;
   List<UnresolvedEntry> _unresolvedEntries = [];
   bool _isDragging = false;
+  bool _isPickingPatchSources = false;
   StreamSubscription<FileSystemEvent>? _fileWatcher;
+  // Set by local Dart-side spec writes so the watcher's reload doesn't bounce
+  // back into Rust just to re-read what we already have in memory.
+  bool _suppressNextWatcherReload = false;
 
   static const _archiveExtensions = ['.zip', '.jar', '.war', '.ear'];
 
   bool _isValidArchiveFile(String path) {
     final lower = path.toLowerCase();
     return _archiveExtensions.any((ext) => lower.endsWith(ext));
+  }
+
+  String _dragOverlayLabel(ZiprService service) {
+    if (service.currentArchivePath == null) return '松开以打开归档文件';
+    if (_detailMode == DetailMode.patch || _patchSpecPath != null) {
+      return '松开以添加到批量替换';
+    }
+    return '松开以添加替换文件或打开归档';
+  }
+
+  Widget _buildDragOverlay(BuildContext context, ZiprService service) {
+    return Positioned.fill(
+      child: Container(
+        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
+        child: Center(
+          child: Text(
+            _dragOverlayLabel(service),
+            style: TextStyle(
+              fontSize: 16,
+              color: Theme.of(context).colorScheme.primary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOperationStatus(BuildContext context, ZiprService service) {
+    final message = service.operationMessage;
+    if (message == null || message.isEmpty) return const SizedBox.shrink();
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      color: colorScheme.primaryContainer.withValues(alpha: 0.45),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: colorScheme.primary,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 12, color: colorScheme.primary),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoadingView(BuildContext context, ZiprService service) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 640),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text(
+                service.operationMessage ?? '处理中...',
+                textAlign: TextAlign.center,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Theme.of(context).colorScheme.outline,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -50,12 +143,18 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
     _disposeFileWatcher();
     final file = File(specPath);
     _fileWatcher = file.watch(events: FileSystemEvent.modify).listen((_) {
+      if (_suppressNextWatcherReload) {
+        _suppressNextWatcherReload = false;
+        return;
+      }
       _reloadSpec();
     });
   }
 
   Future<void> _reloadSpec() async {
     if (_patchSpecPath == null || !mounted) return;
+    await _sanitizePatchSpecForUnresolvedTables();
+    if (!mounted) return;
     final service = context.read<ZiprService>();
     final summary = await service.readPatchSpec(_patchSpecPath!);
     if (summary != null && mounted) {
@@ -237,11 +336,17 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
       _showArchiveActionError(failurePrefix, service);
       return;
     }
+    final backup = summary.backupPath;
+    final lines = <String>[
+      '$successPrefix: 替换=${summary.replaced}, 删除=${summary.deleted}',
+      if (backup != null && backup.isNotEmpty) '已备份: $backup（可点击"回滚"撤销）',
+    ];
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          '$successPrefix: 替换=${summary.replaced}, 删除=${summary.deleted}',
-        ),
+        content: Text(lines.join('\n')),
+        duration: backup != null
+            ? const Duration(seconds: 6)
+            : const Duration(seconds: 4),
       ),
     );
   }
@@ -276,18 +381,6 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
     }
   }
 
-  Future<void> _patchDraft() async {
-    final service = context.read<ZiprService>();
-    if (service.currentArchivePath == null) return;
-
-    final fromDir = await FilePicker.platform.getDirectoryPath(
-      dialogTitle: '选择补丁源文件目录',
-    );
-    if (fromDir == null) return;
-
-    await _patchDraftFromDir(fromDir);
-  }
-
   Future<void> _patchDraftFromDir(String fromDir) async {
     if (!mounted) return;
     final service = context.read<ZiprService>();
@@ -320,6 +413,20 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
     }
   }
 
+  void _discardPatchDraft() {
+    _disposeFileWatcher();
+    setState(() {
+      _patchSpecToml = null;
+      _patchSpecPath = null;
+      _unresolvedEntries = [];
+      _suppressNextWatcherReload = false;
+      _detailMode = DetailMode.patch;
+    });
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('已丢弃当前替换清单')));
+  }
+
   Future<void> _patchDryRun() async {
     if (_patchSpecPath == null) return;
     final service = context.read<ZiprService>();
@@ -338,19 +445,286 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
   Future<void> _patchApply() async {
     if (_patchSpecPath == null) return;
     final service = context.read<ZiprService>();
-    if (service.currentArchivePath == null) return;
+    final archive = service.currentArchivePath;
+    if (archive == null) return;
 
-    final summary = await service.patchApply(
-      service.currentArchivePath!,
-      _patchSpecPath!,
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('确认应用替换'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('此操作会直接修改归档文件。应用前会先在同目录写入一个 .bak- 时间戳备份，可随后点击"回滚"撤销。'),
+            const SizedBox(height: 12),
+            _confirmRow('归档', archive),
+            _confirmRow('清单', _patchSpecPath!),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(Icons.bolt),
+            label: const Text('确认应用'),
+          ),
+        ],
+      ),
     );
+    if (confirmed != true) return;
+
+    final summary = await service.patchApply(archive, _patchSpecPath!);
     if (mounted) {
       _showPatchSummary('已应用', '应用失败', summary, service);
     }
   }
 
+  Future<void> _patchDraftExtend() async {
+    if (_isPickingPatchSources) return;
+    final service = context.read<ZiprService>();
+    if (service.currentArchivePath == null) return;
+
+    _isPickingPatchSources = true;
+    try {
+      final fileResult = await FilePicker.platform.pickFiles(
+        dialogTitle: '选择要追加到清单的文件',
+        allowMultiple: true,
+      );
+      if (fileResult == null || fileResult.files.isEmpty) return;
+
+      final List<String> sources = [];
+      for (final f in fileResult.files) {
+        if (f.path != null) sources.add(f.path!);
+      }
+      if (sources.isEmpty) return;
+      await _handlePatchSources(sources);
+    } finally {
+      _isPickingPatchSources = false;
+    }
+  }
+
+  Future<void> _handlePatchSources(List<String> sources) async {
+    final service = context.read<ZiprService>();
+    if (service.currentArchivePath == null || sources.isEmpty) return;
+
+    if (_patchSpecPath != null) {
+      await _extendDraftLocally(sources);
+      return;
+    }
+
+    if (sources.length == 1 && Directory(sources.single).existsSync()) {
+      await _patchDraftFromDir(sources.single);
+      return;
+    }
+
+    await _createLocalDraftFromSources(sources);
+  }
+
+  Future<void> _createLocalDraftFromSources(List<String> sources) async {
+    if (!mounted) return;
+    final service = context.read<ZiprService>();
+    final archive = service.currentArchivePath;
+    if (archive == null || sources.isEmpty) return;
+
+    final specDir = await _specDirectoryForSources(sources);
+    if (specDir == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('未找到可写入清单的位置')));
+      return;
+    }
+
+    final specPath = '${specDir.path}${Platform.pathSeparator}patch.draft.toml';
+    final header = StringBuffer()
+      ..writeln('version = 1')
+      ..writeln('archive = ${_toml(archive.replaceAll('\\', '/'))}')
+      ..writeln(
+        'generated_at = ${_toml(DateTime.now().toUtc().toIso8601String())}',
+      );
+    await File(specPath).writeAsString(header.toString(), flush: true);
+
+    _setupFileWatcher(specPath);
+    setState(() {
+      _detailMode = DetailMode.patch;
+      _patchSpecToml = header.toString();
+      _patchSpecPath = specPath;
+      _unresolvedEntries = [];
+    });
+
+    await _extendDraftLocally(sources);
+    if (_patchSpecPath == null) return;
+    final origPath = _patchSpecPath!.replaceAll(
+      '.draft.toml',
+      '.draft.orig.toml',
+    );
+    await File(_patchSpecPath!).copy(origPath);
+  }
+
+  Future<Directory?> _specDirectoryForSources(List<String> sources) async {
+    for (final source in sources) {
+      final type = await FileSystemEntity.type(source);
+      if (type == FileSystemEntityType.directory) {
+        return Directory(source);
+      }
+      if (type == FileSystemEntityType.file) {
+        return File(source).parent;
+      }
+    }
+    return null;
+  }
+
+  /// Match new sources against the cached archive path list and append the
+  /// resulting entries directly to the on-disk TOML — no FFI round-trip.
+  Future<void> _extendDraftLocally(List<String> sources) async {
+    if (_patchSpecPath == null) return;
+    final service = context.read<ZiprService>();
+    final messenger = ScaffoldMessenger.of(context);
+
+    // Make sure the path cache is populated. Cheap if already loaded.
+    if (service.allArchivePaths == null) {
+      await service.loadAllArchivePaths();
+    }
+    final paths = service.allArchivePaths;
+    if (paths == null) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('归档路径缓存未就绪: ${service.error ?? ""}')),
+      );
+      return;
+    }
+
+    final existingSources = _extractExistingSources(_patchSpecToml ?? '');
+    _suppressNextWatcherReload = true;
+    final LocalExtendResult result;
+    try {
+      result = await LocalDraftExtender.extend(
+        specPath: _patchSpecPath!,
+        sourceRoots: sources,
+        allArchivePaths: paths,
+        existingSources: existingSources,
+      );
+    } catch (e) {
+      _suppressNextWatcherReload = false;
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text('本地追加失败: $e')));
+      return;
+    }
+
+    // Mirror the on-disk append in our in-memory state so we don't bounce
+    // back into Rust just to re-parse the spec.
+    final appended = _renderAppendedToml(result);
+    final newToml = LocalDraftExtender.sanitizeUnresolvedTables(
+      (_patchSpecToml ?? '') + appended,
+    );
+    final mergedUnresolved = [..._unresolvedEntries, ...result.newUnresolved];
+    if (!mounted) return;
+    setState(() {
+      _patchSpecToml = newToml;
+      _unresolvedEntries = mergedUnresolved;
+    });
+
+    final parts = <String>[
+      '已追加: 匹配=${result.newEntries.length}, 未解析=${result.newUnresolved.length}',
+    ];
+    if (result.skippedDuplicates > 0) {
+      parts.add('跳过重复=${result.skippedDuplicates}');
+    }
+    messenger.showSnackBar(SnackBar(content: Text(parts.join('，'))));
+  }
+
+  Set<String> _extractExistingSources(String toml) {
+    final sources = <String>{};
+    final re = RegExp(
+      r'^\s*source\s*=\s*"((?:\\.|[^"\\])*)"\s*$',
+      multiLine: true,
+    );
+    for (final m in re.allMatches(toml)) {
+      final raw = m.group(1)!;
+      sources.add(raw.replaceAll(r'\\', r'\').replaceAll(r'\"', '"'));
+    }
+    return sources;
+  }
+
+  String _renderAppendedToml(LocalExtendResult result) {
+    final buf = StringBuffer();
+    for (final e in result.newEntries) {
+      buf
+        ..writeln()
+        ..writeln('[[entry]]')
+        ..writeln('target = ${_toml(e.target)}')
+        ..writeln('source = ${_toml(e.source)}')
+        ..writeln('action = "replace"')
+        ..writeln('method = "inherit"')
+        ..writeln('level = "inherit"')
+        ..writeln('mtime = "source"')
+        ..writeln('comment = "inherit"');
+    }
+    for (final u in result.newUnresolved) {
+      buf
+        ..writeln()
+        ..writeln('[[unresolved]]')
+        ..writeln('source = ${_toml(u.source)}')
+        ..writeln('reason = ${_toml(u.reason)}')
+        ..writeln('candidates = [${u.candidates.map(_toml).join(', ')}]');
+    }
+    return buf.toString();
+  }
+
+  String _toml(String s) {
+    final esc = s.replaceAll(r'\', r'\\').replaceAll('"', r'\"');
+    return '"$esc"';
+  }
+
+  Future<void> _rollbackArchive() async {
+    final service = context.read<ZiprService>();
+    final archive = service.currentArchivePath;
+    final backup = service.lastBackupPath;
+    if (archive == null || backup == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('回滚归档到上次备份'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('此操作会用备份覆盖当前归档，备份文件随后被移除。'),
+            const SizedBox(height: 12),
+            _confirmRow('归档', archive),
+            _confirmRow('备份', backup),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(Icons.undo),
+            label: const Text('确认回滚'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    final ok = await service.restoreArchiveBackup(archive, backup);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(ok ? '已回滚到备份状态' : '回滚失败: ${service.error ?? ""}')),
+    );
+  }
+
   Future<void> _patchResolve(List<Resolution> resolutions) async {
     if (_patchSpecPath == null) return;
+    await _sanitizePatchSpecForUnresolvedTables();
+    if (!mounted) return;
     final service = context.read<ZiprService>();
     final summary = await service.patchResolve(_patchSpecPath!, resolutions);
     if (summary != null && mounted) {
@@ -359,6 +733,20 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
         _unresolvedEntries = summary.unresolvedEntries;
       });
     }
+  }
+
+  Future<void> _sanitizePatchSpecForUnresolvedTables() async {
+    final specPath = _patchSpecPath;
+    if (specPath == null) return;
+    final file = File(specPath);
+    if (!await file.exists()) return;
+    final raw = await file.readAsString();
+    final sanitized = LocalDraftExtender.sanitizeUnresolvedTables(raw);
+    if (sanitized == raw) return;
+    _suppressNextWatcherReload = true;
+    await file.writeAsString(sanitized, flush: true);
+    if (!mounted) return;
+    setState(() => _patchSpecToml = sanitized);
   }
 
   Future<void> _openInEditor() async {
@@ -400,42 +788,65 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
         // Toolbar
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('归档工具', style: Theme.of(context).textTheme.titleLarge),
+              Row(
+                children: [
+                  Text('归档工具', style: Theme.of(context).textTheme.titleLarge),
+                  const Spacer(),
+                  if (widget.onAbout != null) ...[
+                    IconButton(
+                      onPressed: widget.onAbout,
+                      icon: const Icon(Icons.info_outline, size: 20),
+                      tooltip: '关于',
+                    ),
+                    const SizedBox(width: 4),
+                  ],
+                  FilledButton.icon(
+                    onPressed: _openArchive,
+                    icon: const Icon(Icons.folder_open, size: 18),
+                    label: const Text('打开归档文件'),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: _diffArchives,
+                    icon: const Icon(Icons.compare_arrows, size: 18),
+                    label: const Text('对比归档'),
+                  ),
+                  if (service.currentArchivePath != null) ...[
+                    const SizedBox(width: 8),
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        setState(() => _detailMode = DetailMode.patch);
+                      },
+                      icon: const Icon(Icons.build, size: 18),
+                      label: const Text('批量替换'),
+                    ),
+                  ],
+                ],
+              ),
               if (service.currentArchivePath != null) ...[
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    service.currentArchivePath!,
-                    style: TextStyle(
-                      fontSize: 12,
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.archive_outlined,
+                      size: 14,
                       color: Theme.of(context).colorScheme.outline,
                     ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ] else
-                const Spacer(),
-              FilledButton.icon(
-                onPressed: _openArchive,
-                icon: const Icon(Icons.folder_open, size: 18),
-                label: const Text('打开归档文件'),
-              ),
-              const SizedBox(width: 8),
-              OutlinedButton.icon(
-                onPressed: _diffArchives,
-                icon: const Icon(Icons.compare_arrows, size: 18),
-                label: const Text('对比归档'),
-              ),
-              if (service.currentArchivePath != null) ...[
-                const SizedBox(width: 8),
-                OutlinedButton.icon(
-                  onPressed: () {
-                    setState(() => _detailMode = DetailMode.patch);
-                  },
-                  icon: const Icon(Icons.build, size: 18),
-                  label: const Text('批量替换'),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        service.currentArchivePath!,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(context).colorScheme.outline,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ],
@@ -450,15 +861,28 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
             onDragDone: (details) {
               setState(() => _isDragging = false);
               if (details.files.isEmpty) return;
-              final path = details.files.first.path;
+              final paths = [
+                for (final file in details.files)
+                  if (file.path.isNotEmpty) file.path,
+              ];
+              if (paths.isEmpty) return;
+              final service = context.read<ZiprService>();
+              if (service.currentArchivePath != null &&
+                  _detailMode == DetailMode.patch) {
+                _handlePatchSources(paths);
+                return;
+              }
+              final path = paths.first;
               if (Directory(path).existsSync()) {
-                final service = context.read<ZiprService>();
-                if (service.currentArchivePath != null) {
-                  _patchDraftFromDir(path);
-                } else {
+                if (service.currentArchivePath == null) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('请先打开归档文件，再拖入目录进行批量替换')),
                   );
+                } else if (_patchSpecPath != null) {
+                  // Draft already exists — append locally rather than overwrite.
+                  _handlePatchSources(paths);
+                } else {
+                  _patchDraftFromDir(path);
                 }
               } else if (_isValidArchiveFile(path)) {
                 _openArchiveFromPath(path);
@@ -471,7 +895,7 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
               }
             },
             child: service.loading
-                ? const Center(child: CircularProgressIndicator())
+                ? _buildLoadingView(context, service)
                 : service.currentArchivePath == null &&
                       service.diffEntries.isEmpty
                 ? Center(
@@ -530,24 +954,8 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
                           setState(() => _detailMode = DetailMode.entry);
                         },
                       ),
-                      if (_isDragging)
-                        Positioned.fill(
-                          child: Container(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.primary.withValues(alpha: 0.08),
-                            child: Center(
-                              child: Text(
-                                '松开以切换归档文件',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  color: Theme.of(context).colorScheme.primary,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
+                      if (_isDragging && _detailMode != DetailMode.patch)
+                        _buildDragOverlay(context, service),
                     ],
                   )
                 : Stack(
@@ -558,6 +966,7 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
                             flex: 3,
                             child: ArchiveTreePanel(
                               entries: service.entries,
+                              expandingArchives: service.expandingArchivesView,
                               onEntrySelected: (entry) {
                                 setState(() {
                                   _selectedEntry = entry;
@@ -567,6 +976,9 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
                               onExtract: _extractEntry,
                               onReplace: _replaceEntry,
                               onDelete: _deleteEntry,
+                              onExpandArchive: (zipExpr) {
+                                service.expandArchive(zipExpr);
+                              },
                             ),
                           ),
                           const VerticalDivider(width: 1),
@@ -578,39 +990,28 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
                               diffEntries: service.diffEntries,
                               patchSpecToml: _patchSpecToml,
                               unresolvedEntries: _unresolvedEntries,
-                              onPatchDraft: _patchDraft,
+                              onPatchDraftExtend: _patchDraftExtend,
+                              onPatchDiscard: _discardPatchDraft,
+                              onPatchSourcesDropped: _handlePatchSources,
                               onPatchDryRun: _patchDryRun,
                               onPatchApply: _patchApply,
                               onOpenInEditor: _openInEditor,
                               onReload: _reloadSpec,
                               onRestoreOriginal: _restoreOriginal,
+                              onRollbackArchive: _rollbackArchive,
+                              canRollback: service.lastBackupPath != null,
                               onResolve: _patchResolve,
                             ),
                           ),
                         ],
                       ),
-                      if (_isDragging)
-                        Positioned.fill(
-                          child: Container(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.primary.withValues(alpha: 0.08),
-                            child: Center(
-                              child: Text(
-                                '松开以切换归档文件',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  color: Theme.of(context).colorScheme.primary,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
+                      if (_isDragging) _buildDragOverlay(context, service),
                     ],
                   ),
           ),
         ),
+        if (service.operationMessage != null && !service.loading)
+          _buildOperationStatus(context, service),
         // Error bar
         if (service.error != null)
           Container(
