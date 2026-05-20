@@ -179,6 +179,7 @@ void main() {
       expect(service.loading, false);
       expect(service.error, isNull);
       expect(service.operationMessage, isNull);
+      expect(service.lastPatchApplyDuration, isNull);
     });
 
     test('listArchive sets entries and notifies listeners', () async {
@@ -336,6 +337,7 @@ void main() {
 
       expect(summary!.replaced, BigInt.from(5));
       expect(summary.deleted, BigInt.from(2));
+      expect(service.lastPatchApplyDuration, isNotNull);
     });
 
     test('patchApply dry-run does not refresh list', () async {

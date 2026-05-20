@@ -19,6 +19,7 @@ class ZiprService extends ChangeNotifier {
   String? _error;
   String? _operationMessage;
   String? _lastBackupPath;
+  Duration? _lastPatchApplyDuration;
   // Zip expressions of nested archives whose children have already been
   // merged into `_entries` (used by the tree to know which nodes are loaded).
   final Set<String> _expandedArchives = {};
@@ -38,6 +39,7 @@ class ZiprService extends ChangeNotifier {
   String? get error => _error;
   String? get operationMessage => _operationMessage;
   String? get lastBackupPath => _lastBackupPath;
+  Duration? get lastPatchApplyDuration => _lastPatchApplyDuration;
   Set<String> get expandedArchives => _expandedArchives;
   // Live view of in-flight expansions for the tree panel; not a snapshot.
   Set<String> get expandingArchivesView => _expandingArchives;
@@ -234,11 +236,14 @@ class ZiprService extends ChangeNotifier {
     _beginOperation(dryRun ? '正在 dry-run: $spec' : '正在替换归档: $spec -> $archive');
 
     try {
+      final stopwatch = Stopwatch()..start();
       final summary = await _bridge.patchApply(
         archive: archive,
         spec: spec,
         dryRun: dryRun,
       );
+      stopwatch.stop();
+      _lastPatchApplyDuration = stopwatch.elapsed;
       // Refresh list after apply (unless dry-run)
       if (!dryRun && _currentArchivePath != null) {
         _clearArchiveDerivedCaches();
@@ -249,6 +254,7 @@ class ZiprService extends ChangeNotifier {
       return summary;
     } catch (e) {
       _error = e.toString();
+      _lastPatchApplyDuration = null;
       return null;
     } finally {
       _finishOperation();

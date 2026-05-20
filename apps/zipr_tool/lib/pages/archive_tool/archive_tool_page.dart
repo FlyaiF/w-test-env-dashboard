@@ -337,8 +337,10 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
       return;
     }
     final backup = summary.backupPath;
+    final elapsed = service.lastPatchApplyDuration;
     final lines = <String>[
       '$successPrefix: 替换=${summary.replaced}, 删除=${summary.deleted}',
+      if (elapsed != null) '耗时: ${_formatDuration(elapsed)}',
       if (backup != null && backup.isNotEmpty) '已备份: $backup（可点击"回滚"撤销）',
     ];
     ScaffoldMessenger.of(context).showSnackBar(
@@ -349,6 +351,13 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
             : const Duration(seconds: 4),
       ),
     );
+  }
+
+  String _formatDuration(Duration duration) {
+    if (duration.inSeconds >= 1) {
+      return '${(duration.inMilliseconds / 1000).toStringAsFixed(2)} 秒';
+    }
+    return '${duration.inMilliseconds} 毫秒';
   }
 
   Future<void> _deleteEntry(String zipExpr) async {
