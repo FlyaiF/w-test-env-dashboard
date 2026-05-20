@@ -180,7 +180,7 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
   }
 
   Future<void> _openArchive() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['zip', 'jar', 'war', 'ear'],
     );
@@ -191,7 +191,7 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
   }
 
   Future<void> _diffArchives() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       dialogTitle: '选择要对比的两个归档文件（按住 Ctrl/Cmd 多选）',
       type: FileType.custom,
       allowedExtensions: ['zip', 'jar', 'war', 'ear'],
@@ -207,7 +207,7 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
       rightPath = result.files[1].path!;
     } else {
       leftPath = result.files.first.path!;
-      final second = await FilePicker.platform.pickFiles(
+      final second = await FilePicker.pickFiles(
         dialogTitle: '已选择左侧文件，请选择右侧归档文件',
         type: FileType.custom,
         allowedExtensions: ['zip', 'jar', 'war', 'ear'],
@@ -224,7 +224,7 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
 
   Future<void> _extractEntry(String zipExpr) async {
     final name = zipExpr.split('/').last.split('!').first;
-    final outputPath = await FilePicker.platform.saveFile(
+    final outputPath = await FilePicker.saveFile(
       dialogTitle: '保存提取的文件',
       fileName: name,
     );
@@ -249,7 +249,7 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
   }
 
   Future<void> _replaceEntry(String zipExpr) async {
-    final result = await FilePicker.platform.pickFiles();
+    final result = await FilePicker.pickFiles();
     final sourcePath = result?.files.single.path;
     if (sourcePath == null) return;
 
@@ -499,7 +499,7 @@ class _ArchiveToolPageState extends State<ArchiveToolPage> {
 
     _isPickingPatchSources = true;
     try {
-      final fileResult = await FilePicker.platform.pickFiles(
+      final fileResult = await FilePicker.pickFiles(
         dialogTitle: '选择要追加到清单的文件',
         allowMultiple: true,
       );

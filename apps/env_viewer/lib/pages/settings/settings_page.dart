@@ -499,7 +499,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _pickToolPath(SshTool tool) async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       dialogTitle: '选择 ${tool.displayName} 可执行文件',
     );
     if (result == null) return;
