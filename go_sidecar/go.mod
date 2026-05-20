@@ -3,7 +3,7 @@ module test-env-dashboard/go_sidecar
 go 1.22
 
 require (
-	github.com/sijms/go-ora/v2 v2.8.24
+	github.com/sijms/go-ora/v2 v2.9.0
 	github.com/ywhking/gorm-dameng v1.0.1
 )
 
