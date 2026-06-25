@@ -16,6 +16,25 @@ env:
   PUB_CACHE: ${{ github.workspace }}/.pub-cache
 
 jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      # Default build: unit/integration tests against H2 (Oracle mode).
+      # The Oracle Testcontainers test is tagged "oracle-it" and excluded here;
+      # run it on demand with -Dgroups=oracle-it -DexcludedGroups=.
+      - name: Build and test backend
+        run: mvn -B -f backend/pom.xml verify
+
   env-viewer-macos:
     runs-on: macos-latest
     steps:

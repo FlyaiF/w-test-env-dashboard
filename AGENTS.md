@@ -43,6 +43,12 @@ cd apps/zipr_tool && flutter test
 # Go sidecar (used only by env_viewer)
 cd go_sidecar && go build -o ../build/sidecar/go_sidecar .
 
+# backend — new Spring Boot service for the redesign (see docs/PRD-redesign.md).
+# Java 21 + Maven. Local dev uses H2 (Oracle compatibility mode) with seed data.
+scripts/dev_backend.sh run                 # boot on localhost:8080 (local profile)
+mvn -f backend/pom.xml verify              # full test suite (H2; Oracle IT excluded)
+mvn -f backend/pom.xml test -Dgroups=oracle-it -DexcludedGroups=   # optional Oracle 11g Testcontainers check
+
 # Release builds — builds both apps, embeds go_sidecar in env_viewer only
 ./scripts/build_release.sh macos    # also: windows, linux
 ./scripts/build_sidecar.sh          # current platform

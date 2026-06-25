@@ -1,0 +1,15 @@
+# Test datasource: H2 in Oracle compatibility mode, mirroring local dev so Flyway
+# migrations and JPA mappings are exercised against the same dialect surface.
+spring:
+  datasource:
+    url: jdbc:h2:mem:envdashboard-test;MODE=Oracle;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password: ""
+    driver-class-name: org.h2.Driver
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none

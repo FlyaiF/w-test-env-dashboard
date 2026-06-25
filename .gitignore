@@ -20,6 +20,9 @@ apps/*/assets/
 go_sidecar/go_sidecar
 apps/env_viewer/go_sidecar/
 
+# Java/Maven build output (backend)
+backend/target/
+
 # IDE / tools
 .idea/
 .vscode/

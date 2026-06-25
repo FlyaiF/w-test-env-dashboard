@@ -1,0 +1,11 @@
+# Local development: in-memory H2 in Oracle compatibility mode to shrink dialect
+# drift versus the real Oracle 11g target. Seed loader (CommandLineRunner) is active.
+spring:
+  datasource:
+    url: jdbc:h2:mem:envdashboard;MODE=Oracle;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password: ""
+    driver-class-name: org.h2.Driver
+  h2:
+    console:
+      enabled: true
