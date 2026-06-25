@@ -126,13 +126,17 @@ Backend cutover is necessarily **big-bang** (Go→Java, new schema). Approach (A
 ## 9. Risks & open questions
 
 - **Native-image / JDBC driver compatibility** — Dameng/OceanBase drivers may need reachability config
-  or may not be native-image-clean. Mitigation: JVM default.
+  or may not be native-image-clean. Mitigation: JVM default. _Resolved (drivers):_ all three are on
+  Maven Central — `com.oracle.database.jdbc:ojdbc8:19.21.0.0`, `com.dameng:DmJdbcDriver18:8.1.3.140`,
+  `com.oceanbase:oceanbase-client:2.4.7.1`. Backend's own store: H2 local, Oracle 11g prod.
 - **Import edge cases** — dirty composite strings, missing creds, ambiguous DB roles in legacy data.
   The import script must surface (not silently drop) rows it can't parse.
 - **Credential delivery surface** — brokering secrets to clients is the main security-sensitive path;
   encryption at rest + on-demand-only delivery, but the threat model deserves a focused review.
-- **Backend deployment/ops** — a service to run now exists where none did. Who owns it, where it runs.
+- **Backend deployment/ops** — a service to run now exists where none did. _Resolved:_ owned/operated
+  by the product maintainer.
 - **OceanBase via JDBC** — confirm a clean JDBC path replaces the current Go→Java-helper shellout.
+  _Resolved:_ `com.oceanbase:oceanbase-client:2.4.7.1` (Maven Central) provides the JDBC path.
 
 ## 10. Next step
 

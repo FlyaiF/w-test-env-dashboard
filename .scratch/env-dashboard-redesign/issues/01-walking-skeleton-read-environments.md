@@ -24,9 +24,20 @@ Endpoints:
 
 JVM mode is the default; do not let GraalVM native-image concerns block the build (ADR-0002).
 
+**Decisions (settled):**
+
+- **Location:** the backend lives **inside this monorepo** as a new top-level module (alongside
+  `apps/`, `go_sidecar/`, `zipr/`), not a separate repo.
+- **Persistence:** **H2** for local development, **Oracle** in production, targeting **Oracle 11g**.
+  Driver: `com.oracle.database.jdbc:ojdbc8:19.21.0.0` (Maven Central, 19.x connects to 11g). Keep
+  schema/migrations dialect-portable across H2 and Oracle 11g.
+- **Ops:** the deployed backend is owned/operated by the product maintainer.
+
 ## Acceptance criteria
 
 - [ ] Spring Boot backend boots locally and serves a `GET /health` (or equivalent) check
+- [ ] Backend module added inside this monorepo (not a separate repo)
+- [ ] Local dev runs on H2; production profile targets Oracle 11g via `ojdbc8:19.21.0.0`; migrations run on both
 - [ ] Normalized schema (migrations) exists for `Environment` and `Component` with the fields above; `TENVINFO` is not referenced
 - [ ] `GET /api/environments` returns seeded Environments each with their Components
 - [ ] `GET /api/environments/{id}` returns a single Environment with its Components, and 404s for an unknown id

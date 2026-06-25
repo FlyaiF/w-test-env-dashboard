@@ -23,6 +23,12 @@ depends on OS"), which connects using the Server/Database descriptors from slice
 Client surfaces a "refresh now" action per Environment and shows each Component's Version, deploy time,
 collection status, and last-collected time (apply `.toLocal()` before formatting per AGENTS.md).
 
+**Probe driver coordinates (settled, all on Maven Central):** db-query probes connect to target
+Databases using `com.oracle.database.jdbc:ojdbc8:19.21.0.0` (Oracle),
+`com.dameng:DmJdbcDriver18:8.1.3.140` (Dameng), and `com.oceanbase:oceanbase-client:2.4.7.1`
+(OceanBase). This retires the legacy Go→Java-helper shellout for OceanBase (ADR-0002). JVM mode first;
+do not gate on native-image driver compatibility.
+
 ## Acceptance criteria
 
 - [ ] Scheduled Collection runs on a configurable interval and writes Version / deploy time / status / last-collected onto Components
