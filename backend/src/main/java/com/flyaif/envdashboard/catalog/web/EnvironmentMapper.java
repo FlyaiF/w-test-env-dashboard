@@ -40,6 +40,8 @@ public final class EnvironmentMapper {
                 component.getListenPort(),
                 component.getProtocol(),
                 component.getUrl(),
+                component.getServerId(),
+                List.copyOf(component.getDatabaseIds()),
                 name(component.getVersionProbe()),
                 name(component.getCollectionStatus()),
                 component.getLastCollectedAt());

@@ -1,6 +1,8 @@
 package com.flyaif.envdashboard.catalog.domain;
 
+import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -14,6 +16,9 @@ import jakarta.persistence.SequenceGenerator;
 import jakarta.persistence.Table;
 
 import java.time.Instant;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 /**
  * One deployable part of an {@link Environment} (gateway, UI, app, private-protocol service).
@@ -33,6 +38,16 @@ public class Component {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "environment_id", nullable = false)
     private Environment environment;
+
+    /** The Server this Component runs on, referenced by ID (ADR-0003). Null if not yet linked. */
+    @Column(name = "server_id")
+    private Long serverId;
+
+    /** The Databases this Component uses, referenced by ID (0..N, ADR-0003). */
+    @ElementCollection
+    @CollectionTable(name = "component_database", joinColumns = @JoinColumn(name = "component_id"))
+    @Column(name = "database_id")
+    private Set<Long> databaseIds = new LinkedHashSet<>();
 
     @Enumerated(EnumType.STRING)
     @Column(name = "role", nullable = false, length = 40)
@@ -87,6 +102,24 @@ public class Component {
 
     public Environment getEnvironment() {
         return environment;
+    }
+
+    public Long getServerId() {
+        return serverId;
+    }
+
+    /** Link this Component to the Server it runs on (by ID), or null to unlink. */
+    public void setServerId(Long serverId) {
+        this.serverId = serverId;
+    }
+
+    public Set<Long> getDatabaseIds() {
+        return Collections.unmodifiableSet(databaseIds);
+    }
+
+    /** Replace the set of Databases this Component uses (by ID). */
+    public void setDatabaseIds(Set<Long> databaseIds) {
+        this.databaseIds = new LinkedHashSet<>(databaseIds);
     }
 
     public ComponentRole getRole() {
