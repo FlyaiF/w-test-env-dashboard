@@ -9,11 +9,13 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../catalog/environment_store.dart';
 import '../../catalog/environment_view.dart';
 import 'catalog_editors.dart';
+import 'component_access.dart';
 
 /// Browser + curation surface for the Environment Catalog. Lists Environments
 /// from the backend, shows the selected Environment's Components, and drives
-/// create/update/delete of both through the store (slice 03). Tool launching
-/// lands in slice 06.
+/// create/update/delete of both through the store (slice 03). Each Component
+/// also offers Local Desktop Integration — launch the user's own SSH/DB tool
+/// against its Server/Databases via brokered credentials (slice 06).
 class CatalogPage extends StatefulWidget {
   const CatalogPage({super.key});
 
@@ -503,6 +505,7 @@ class _EnvironmentDetail extends StatelessWidget {
                   padding: const EdgeInsets.only(bottom: 12),
                   child: _ComponentCard(
                     component: c,
+                    environmentName: env.name,
                     onOpenUrl: onOpenUrl,
                     onEdit: () => onEditComponent(c),
                     onDelete: () => onDeleteComponent(c),
@@ -520,12 +523,14 @@ class _ComponentCard extends StatelessWidget {
   static final _dateFmt = DateFormat('yyyy-MM-dd HH:mm');
 
   final ComponentView component;
+  final String environmentName;
   final Future<void> Function(String url) onOpenUrl;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   const _ComponentCard({
     required this.component,
+    required this.environmentName,
     required this.onOpenUrl,
     required this.onEdit,
     required this.onDelete,
@@ -624,6 +629,16 @@ class _ComponentCard extends StatelessWidget {
                   onPressed: () => onOpenUrl(c.url!),
                 ),
               ],
+            ),
+          ],
+          if (c.serverId != null || c.databaseIds.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            const Divider(height: 1),
+            const SizedBox(height: 10),
+            ComponentAccessBar(
+              serverId: c.serverId,
+              databaseIds: c.databaseIds,
+              connectionName: '$environmentName · ${c.roleLabel}',
             ),
           ],
         ],
