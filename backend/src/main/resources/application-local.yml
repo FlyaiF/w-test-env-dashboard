@@ -9,3 +9,9 @@ spring:
   h2:
     console:
       enabled: true
+
+# Local demo: keep the background sweep off (the seed hosts are fictional and unreachable) and
+# exercise Collection on demand via POST /api/environments/{id}/refresh.
+envdashboard:
+  collection:
+    scheduler-enabled: false

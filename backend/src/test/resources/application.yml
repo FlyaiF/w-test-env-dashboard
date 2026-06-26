@@ -13,3 +13,8 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: none
+
+# Tests drive Collection explicitly; the background scheduler stays off so it never races a test.
+envdashboard:
+  collection:
+    scheduler-enabled: false

@@ -3,6 +3,7 @@ package com.flyaif.envdashboard.catalog;
 import com.flyaif.envdashboard.catalog.domain.Component;
 import com.flyaif.envdashboard.catalog.domain.ComponentRole;
 import com.flyaif.envdashboard.catalog.domain.Environment;
+import com.flyaif.envdashboard.catalog.domain.VersionProbeKind;
 import com.flyaif.envdashboard.inventory.DatabaseRepository;
 import com.flyaif.envdashboard.inventory.ServerRepository;
 import com.flyaif.envdashboard.inventory.domain.ConnectionDescriptor;
@@ -67,6 +68,7 @@ public class LocalSeedData implements CommandLineRunner {
         alphaGateway.setProtocol("https");
         alphaGateway.setUrl("https://alpha-gw.test.internal/health");
         alphaGateway.setServerId(linuxHost.getId());
+        alphaGateway.setVersionProbe(VersionProbeKind.HTTP); // version read from its HTTP endpoint
         alpha.addComponent(alphaGateway);
 
         Component alphaApp = new Component(ComponentRole.APP);
@@ -77,6 +79,7 @@ public class LocalSeedData implements CommandLineRunner {
         alphaApp.setProtocol("http");
         alphaApp.setServerId(linuxHost.getId());
         alphaApp.setDatabaseIds(Set.of(businessDb.getId(), configDb.getId()));
+        alphaApp.setVersionProbe(VersionProbeKind.DB);       // version read from its business DB
         alpha.addComponent(alphaApp);
 
         Component alphaUi = new Component(ComponentRole.UI);
@@ -84,6 +87,7 @@ public class LocalSeedData implements CommandLineRunner {
         alphaUi.setListenPort(80);
         alphaUi.setProtocol("http");
         alphaUi.setServerId(windowsHost.getId());
+        alphaUi.setVersionProbe(VersionProbeKind.NONE);      // static UI, no version to collect
         alpha.addComponent(alphaUi);
 
         Environment beta = new Environment("测试环境 Beta", null);
@@ -95,11 +99,13 @@ public class LocalSeedData implements CommandLineRunner {
         betaApp.setProtocol("http");
         betaApp.setServerId(linuxHost.getId());
         betaApp.setDatabaseIds(Set.of(businessDb.getId()));
+        betaApp.setVersionProbe(VersionProbeKind.DB);
         beta.addComponent(betaApp);
 
         Component betaProto = new Component(ComponentRole.PRIVATE_PROTO);
         betaProto.setListenPort(9100);
         betaProto.setProtocol("tcp");
+        betaProto.setVersionProbe(VersionProbeKind.NONE);
         beta.addComponent(betaProto);
 
         environments.save(alpha);

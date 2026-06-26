@@ -10,6 +10,7 @@ set -euo pipefail
 # Once running:
 #   curl localhost:8080/api/environments
 #   curl localhost:8080/actuator/health
+#   curl -X POST localhost:8080/api/environments/1/refresh   # manual Version Collection (slice 05)
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"

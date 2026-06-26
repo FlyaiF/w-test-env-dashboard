@@ -43,3 +43,23 @@ do not gate on native-image driver compatibility.
 
 - 01 — Walking skeleton: read Environments (backend)
 - 04 — Resource Inventory (probes need Server/Database connection descriptors)
+
+## Implementation notes — scope landed & deferrals
+
+Backend implemented in a new `collection` bounded context: a pluggable `VersionProbe` extension point
+(HTTP + db-query strategies) discovered via `VersionProbeRegistry`, a shared `MachineAccess` capability
+as the single network seam, a `CollectionService` (scheduled `refreshAll` + manual `refresh`), a
+property-gated `CollectionScheduler`, and `POST /api/environments/{id}/refresh`.
+
+Three things are intentionally deferred (each recorded so it is not silently dropped):
+
+- **Client "refresh now" UI** (AC bullet 6) — the client is the pre-redesign Flutter app; its thin-client
+  rewrite is slice 02. The backend fully exposes the needed data (`ComponentDto` version / deployTime /
+  collectionStatus / lastCollectedAt + the refresh endpoint), so slice 02 only wires the UI.
+- **Dameng / OceanBase JDBC drivers** — settled coordinates ship as the off-by-default `probe-drivers`
+  Maven profile (this build environment cannot reach Maven Central). `MachineAccess` uses `java.sql`
+  only, so the extension point compiles and is fully tested without them.
+- **Deploy-time *output*** — `ProbeResult` carries a `deployTime` slot and `CollectionService` writes it
+  when present, but neither shipped probe (an HTTP `/version` body, a single-scalar DB query) has a
+  deploy-time source to fill it. The write path is wired; a richer probe whose source carries a deploy
+  timestamp populates it without touching existing code.

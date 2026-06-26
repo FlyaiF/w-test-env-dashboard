@@ -11,6 +11,14 @@ spring:
       # Flyway owns the schema; never let Hibernate touch DDL.
       ddl-auto: none
 
+# Version Collection (slice 05): the scheduled sweep cadence and on/off switch. Interval and delays
+# are ISO-8601 durations. Disabled in the local/test profiles (they drive Collection manually).
+envdashboard:
+  collection:
+    scheduler-enabled: true
+    interval: PT5M
+    initial-delay: PT30S
+
 # Liveness/readiness for the walking-skeleton health-check AC.
 management:
   endpoints:
