@@ -35,6 +35,17 @@ jobs:
       - name: Build and test backend
         run: mvn -B -f backend/pom.xml verify
 
+      # `verify` runs through the package phase, so spring-boot-maven-plugin has
+      # already repackaged the executable jar in backend/target/. Publish it so a
+      # PR run yields a deployable backend (run with --spring.profiles.active=local
+      # for an H2 try, or =prod against Oracle). The glob skips *.jar.original.
+      - name: Upload backend jar
+        uses: actions/upload-artifact@v7
+        with:
+          name: env-dashboard-backend-jar
+          path: backend/target/env-dashboard-backend-*.jar
+          if-no-files-found: error
+
   env-viewer-macos:
     runs-on: macos-latest
     steps:
