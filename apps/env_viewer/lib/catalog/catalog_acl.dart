@@ -29,9 +29,24 @@ class CatalogAcl {
   static List<EnvironmentView> toViews(Iterable<EnvironmentDto> dtos) =>
       dtos.map(toView).toList();
 
+  /// Selectable Component role enums, in display order, for the edit form. Pair
+  /// each with [roleLabel] for its localized label.
+  static const List<String> roleCodes = ['GATEWAY', 'UI', 'APP', 'PRIVATE_PROTO'];
+
+  /// Selectable version-probe enums, in display order, for the edit form. Pair
+  /// each with [versionProbeLabel] for its localized label.
+  static const List<String> versionProbeCodes = [
+    'DB',
+    'SSH_FILE',
+    'COMMAND',
+    'HTTP',
+    'NONE',
+  ];
+
   static ComponentView _componentToView(ComponentDto dto) {
     return ComponentView(
       id: dto.id,
+      roleCode: dto.role,
       roleLabel: roleLabel(dto.role),
       version: _blankToNull(dto.version),
       deployTime: dto.deployTime,
@@ -41,6 +56,7 @@ class CatalogAcl {
       url: _blankToNull(dto.url),
       serverId: dto.serverId,
       databaseIds: List.unmodifiable(dto.databaseIds),
+      versionProbeCode: dto.versionProbe,
       versionProbeLabel: versionProbeLabel(dto.versionProbe),
       collectionState: _collectionState(dto.collectionStatus),
       collectionStatusLabel: collectionStatusLabel(dto.collectionStatus),

@@ -8,10 +8,12 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../catalog/environment_store.dart';
 import '../../catalog/environment_view.dart';
+import 'catalog_editors.dart';
 
-/// Read-only browser for the Environment Catalog. Lists Environments from the
-/// backend and shows the selected Environment's Components. No editing, no
-/// launching — curation lands in slice 03 and tool launching in slice 06.
+/// Browser + curation surface for the Environment Catalog. Lists Environments
+/// from the backend, shows the selected Environment's Components, and drives
+/// create/update/delete of both through the store (slice 03). Tool launching
+/// lands in slice 06.
 class CatalogPage extends StatefulWidget {
   const CatalogPage({super.key});
 
@@ -111,6 +113,12 @@ class _CatalogPageState extends State<CatalogPage> {
             ),
           ),
           const SizedBox(width: 8),
+          FilledButton.icon(
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('新建环境'),
+            onPressed: store.loading ? null : _createEnv,
+          ),
+          const SizedBox(width: 8),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: store.loading ? null : store.load,
@@ -169,7 +177,15 @@ class _CatalogPageState extends State<CatalogPage> {
         ),
       );
     }
-    return _EnvironmentDetail(env: env, onOpenUrl: _launchUrl);
+    return _EnvironmentDetail(
+      env: env,
+      onOpenUrl: _launchUrl,
+      onEdit: () => _editEnv(env),
+      onDelete: () => _deleteEnv(env),
+      onAddComponent: () => _addComponent(env),
+      onEditComponent: (c) => _editComponent(env, c),
+      onDeleteComponent: (c) => _deleteComponent(env, c),
+    );
   }
 
   Widget _buildEmptyState(EnvironmentStore store) {
@@ -214,6 +230,89 @@ class _CatalogPageState extends State<CatalogPage> {
     if (uri != null) {
       await launchUrl(uri);
     }
+  }
+
+  // ---- Curation (slice 03) ----------------------------------------------
+
+  Future<void> _createEnv() async {
+    final input = await showEnvironmentEditor(context);
+    if (input == null || !mounted) return;
+    final store = context.read<EnvironmentStore>();
+    final ok = await store.createEnvironment(input);
+    _report(store, ok, '环境已创建');
+  }
+
+  Future<void> _editEnv(EnvironmentView env) async {
+    final input = await showEnvironmentEditor(context, existing: env);
+    if (input == null || !mounted) return;
+    final store = context.read<EnvironmentStore>();
+    final ok = await store.updateEnvironment(env.id, input);
+    _report(store, ok, '环境已更新');
+  }
+
+  Future<void> _deleteEnv(EnvironmentView env) async {
+    final confirmed = await _confirm('删除环境', '确定删除环境「${env.name}」及其组件？此操作不可撤销。');
+    if (!confirmed || !mounted) return;
+    final store = context.read<EnvironmentStore>();
+    final ok = await store.deleteEnvironment(env.id);
+    if (!mounted) return;
+    if (ok) setState(() => _selectedId = null);
+    _report(store, ok, '环境已删除');
+  }
+
+  Future<void> _addComponent(EnvironmentView env) async {
+    final input = await showComponentEditor(context);
+    if (input == null || !mounted) return;
+    final store = context.read<EnvironmentStore>();
+    final ok = await store.addComponent(env.id, input);
+    _report(store, ok, '组件已添加');
+  }
+
+  Future<void> _editComponent(EnvironmentView env, ComponentView component) async {
+    final input = await showComponentEditor(context, existing: component);
+    if (input == null || !mounted) return;
+    final store = context.read<EnvironmentStore>();
+    final ok = await store.updateComponent(env.id, component.id, input);
+    _report(store, ok, '组件已更新');
+  }
+
+  Future<void> _deleteComponent(EnvironmentView env, ComponentView component) async {
+    final confirmed = await _confirm('删除组件', '确定删除组件「${component.roleLabel}」？');
+    if (!confirmed || !mounted) return;
+    final store = context.read<EnvironmentStore>();
+    final ok = await store.removeComponent(env.id, component.id);
+    _report(store, ok, '组件已删除');
+  }
+
+  Future<bool> _confirm(String title, String message) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
+  /// Surface the outcome of a store mutation. On success show a confirmation; on
+  /// failure show the store's localized error (which it already captured).
+  void _report(EnvironmentStore store, bool ok, String successMessage) {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      SnackBar(content: Text(ok ? successMessage : (store.error ?? '操作失败'))),
+    );
   }
 }
 
@@ -307,8 +406,21 @@ class _EnvListTile extends StatelessWidget {
 class _EnvironmentDetail extends StatelessWidget {
   final EnvironmentView env;
   final Future<void> Function(String url) onOpenUrl;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  final VoidCallback onAddComponent;
+  final void Function(ComponentView component) onEditComponent;
+  final void Function(ComponentView component) onDeleteComponent;
 
-  const _EnvironmentDetail({required this.env, required this.onOpenUrl});
+  const _EnvironmentDetail({
+    required this.env,
+    required this.onOpenUrl,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onAddComponent,
+    required this.onEditComponent,
+    required this.onDeleteComponent,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -344,6 +456,16 @@ class _EnvironmentDetail extends StatelessWidget {
                 Expanded(
                   child: Text(env.name, style: theme.textTheme.headlineSmall),
                 ),
+                IconButton(
+                  icon: const Icon(Icons.edit_outlined),
+                  tooltip: '编辑环境',
+                  onPressed: onEdit,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline),
+                  tooltip: '删除环境',
+                  onPressed: onDelete,
+                ),
               ],
             ),
             if (env.memo != null) ...[
@@ -351,11 +473,21 @@ class _EnvironmentDetail extends StatelessWidget {
               SelectableText(env.memo!, style: theme.textTheme.bodyMedium),
             ],
             const SizedBox(height: 20),
-            Text(
-              '组件（${env.componentCount}）',
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
+            Row(
+              children: [
+                Text(
+                  '组件（${env.componentCount}）',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const Spacer(),
+                TextButton.icon(
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('添加组件'),
+                  onPressed: onAddComponent,
+                ),
+              ],
             ),
             const SizedBox(height: 10),
             if (env.components.isEmpty)
@@ -369,7 +501,12 @@ class _EnvironmentDetail extends StatelessWidget {
               ...env.components.map(
                 (c) => Padding(
                   padding: const EdgeInsets.only(bottom: 12),
-                  child: _ComponentCard(component: c, onOpenUrl: onOpenUrl),
+                  child: _ComponentCard(
+                    component: c,
+                    onOpenUrl: onOpenUrl,
+                    onEdit: () => onEditComponent(c),
+                    onDelete: () => onDeleteComponent(c),
+                  ),
                 ),
               ),
           ],
@@ -384,8 +521,15 @@ class _ComponentCard extends StatelessWidget {
 
   final ComponentView component;
   final Future<void> Function(String url) onOpenUrl;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
-  const _ComponentCard({required this.component, required this.onOpenUrl});
+  const _ComponentCard({
+    required this.component,
+    required this.onOpenUrl,
+    required this.onEdit,
+    required this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -415,6 +559,19 @@ class _ComponentCard extends StatelessWidget {
               _CollectionStatusChip(
                 state: c.collectionState,
                 label: c.collectionStatusLabel,
+              ),
+              const SizedBox(width: 4),
+              IconButton(
+                icon: const Icon(Icons.edit_outlined, size: 18),
+                tooltip: '编辑组件',
+                visualDensity: VisualDensity.compact,
+                onPressed: onEdit,
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline, size: 18),
+                tooltip: '删除组件',
+                visualDensity: VisualDensity.compact,
+                onPressed: onDelete,
               ),
             ],
           ),

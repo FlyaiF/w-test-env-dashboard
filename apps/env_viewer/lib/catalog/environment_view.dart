@@ -12,6 +12,10 @@ enum CollectionState { ok, failed, unsupported, notCollected }
 class ComponentView {
   final int id;
 
+  /// Raw backend role enum (e.g. GATEWAY), or null. Kept alongside the label so
+  /// the edit form can preselect it and round-trip without reverse-mapping.
+  final String? roleCode;
+
   /// Localized role label (e.g. 网关). Falls back to the raw value for an
   /// unrecognized role rather than hiding it.
   final String roleLabel;
@@ -34,6 +38,9 @@ class ComponentView {
   /// uses. Not resolved in this slice.
   final List<int> databaseIds;
 
+  /// Raw backend version-probe enum (e.g. HTTP), or null. Kept for the edit form.
+  final String? versionProbeCode;
+
   /// Localized version-probe label (e.g. HTTP接口).
   final String versionProbeLabel;
 
@@ -45,6 +52,7 @@ class ComponentView {
 
   const ComponentView({
     required this.id,
+    this.roleCode,
     required this.roleLabel,
     this.version,
     this.deployTime,
@@ -54,6 +62,7 @@ class ComponentView {
     this.url,
     this.serverId,
     this.databaseIds = const [],
+    this.versionProbeCode,
     required this.versionProbeLabel,
     required this.collectionState,
     required this.collectionStatusLabel,

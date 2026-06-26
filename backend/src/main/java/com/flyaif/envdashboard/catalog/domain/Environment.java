@@ -13,6 +13,7 @@ import jakarta.persistence.Table;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * One test deployment of the system — the aggregate root. It owns its {@link Component}s; they are
@@ -50,6 +51,21 @@ public class Environment {
     public void addComponent(Component component) {
         components.add(component);
         component.setEnvironment(this);
+    }
+
+    /**
+     * Remove an owned Component. Orphan removal deletes it on flush; no shared Server/Database it
+     * referenced is touched (ADR-0003) — those are referenced by ID and owned elsewhere.
+     */
+    public void removeComponent(Component component) {
+        components.remove(component);
+    }
+
+    /** The owned Component with this id, or empty if no Component under this Environment matches. */
+    public Optional<Component> findComponent(Long componentId) {
+        return components.stream()
+                .filter(c -> c.getId() != null && c.getId().equals(componentId))
+                .findFirst();
     }
 
     public Long getId() {
