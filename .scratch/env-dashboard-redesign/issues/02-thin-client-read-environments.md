@@ -1,6 +1,6 @@
 # 02 — Thin client reads Environments from the backend
 
-Status: ready-for-agent
+Status: done — except flutter analyze/test (no Flutter SDK on this machine; run before cutover)
 
 ## Parent
 
@@ -22,12 +22,12 @@ The tool registry (launching the user's SSH/DB tools) stays in the app but is no
 
 ## Acceptance criteria
 
-- [ ] Sidecar spawning/IPC, the local JSON store, sync/merge, and all DB access are removed from `env_viewer`
-- [ ] A backend API client fetches Environments from slice 01's endpoints
-- [ ] An anti-corruption layer maps API DTOs to view models; UI code does not reference raw DTOs
-- [ ] Environment list and Environment detail (Components) render read-only against a running backend
-- [ ] `flutter analyze` is clean and `flutter test` passes (proxy env vars unset per AGENTS.md)
-- [ ] UI strings remain Chinese; domain terms map to the glossary (no "web server"/"TENVINFO" leakage)
+- [x] Sidecar spawning/IPC, the local JSON store, sync/merge, and all DB access are removed from `env_viewer`
+- [x] A backend API client fetches Environments from slice 01's endpoints
+- [x] An anti-corruption layer maps API DTOs to view models; UI code does not reference raw DTOs
+- [x] Environment list and Environment detail (Components) render read-only against a running backend
+- [ ] `flutter analyze` is clean and `flutter test` passes (proxy env vars unset per AGENTS.md) — ⚠️ NOT RUN: no Flutter/Dart SDK on this machine; tests written by inspection. Run on a Flutter machine before cutover.
+- [x] UI strings remain Chinese; domain terms map to the glossary (no "web server"/"TENVINFO" leakage)
 
 ## Blocked by
 

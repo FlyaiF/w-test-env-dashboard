@@ -1,6 +1,6 @@
 # 07 — One-time TENVINFO import script
 
-Status: ready-for-agent
+Status: done
 
 ## Parent
 
@@ -22,12 +22,12 @@ executed after the new schema (slices 01 + 04) is ready and before cutover.
 
 ## Acceptance criteria
 
-- [ ] Script reads `TENVINFO` and populates Environment / Component / Server / Database rows in the new schema
-- [ ] `E_WEBSERVERADDR` composite strings and the fixed DB slots are parsed into proper normalized rows
-- [ ] Dirty-but-usable fields are left blank (not invented); rows that cannot fit the new shape are dropped and logged — never silently discarded
-- [ ] Unparseable / ambiguous / incomplete rows are reported with reasons
-- [ ] The script is idempotent or safely re-runnable against a fresh target schema
-- [ ] A dry-run / report mode lists what would be imported and what would be skipped, with reasons
+- [x] Script reads `TENVINFO` and populates Environment / Component / Server / Database rows in the new schema
+- [x] `E_WEBSERVERADDR` composite strings and the fixed DB slots are parsed into proper normalized rows
+- [x] Dirty-but-usable fields are left blank (not invented); rows that cannot fit the new shape are dropped and logged — never silently discarded
+- [x] Unparseable / ambiguous / incomplete rows are reported with reasons
+- [x] The script is idempotent or safely re-runnable against a fresh target schema
+- [x] A dry-run / report mode lists what would be imported and what would be skipped, with reasons
 
 ## Blocked by
 

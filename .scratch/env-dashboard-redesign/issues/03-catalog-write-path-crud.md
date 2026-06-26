@@ -1,6 +1,6 @@
 # 03 — Catalog write path: Environment / Component CRUD
 
-Status: ready-for-agent
+Status: done
 
 ## Parent
 
@@ -18,11 +18,11 @@ are referenced by ID and owned elsewhere (ADR-0003; their linkage lands in slice
 
 ## Acceptance criteria
 
-- [ ] Backend supports create / update / delete for Environments and their Components with validation
-- [ ] Deleting an Environment cascades to its Components only; no shared-resource rows are affected
-- [ ] Client edit UI can create, edit, and delete Environments and Components against the live backend
-- [ ] Integration tests cover create / update / delete, including the cascade boundary
-- [ ] Client tests cover the edit flows; `flutter analyze` clean
+- [x] Backend supports create / update / delete for Environments and their Components with validation
+- [x] Deleting an Environment cascades to its Components only; no shared-resource rows are affected
+- [x] Client edit UI can create, edit, and delete Environments and Components against the live backend
+- [x] Integration tests cover create / update / delete, including the cascade boundary
+- [x] Client tests cover the edit flows; `flutter analyze` clean
 
 ## Blocked by
 

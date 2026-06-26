@@ -1,6 +1,6 @@
 # 05 — Collection + Version probes
 
-Status: ready-for-agent
+Status: backend done — client "refresh now" action outstanding (see AC 6)
 
 ## Parent
 
@@ -31,13 +31,13 @@ do not gate on native-image driver compatibility.
 
 ## Acceptance criteria
 
-- [ ] Scheduled Collection runs on a configurable interval and writes Version / deploy time / status / last-collected onto Components
-- [ ] Manual "refresh now" per Environment triggers Collection on demand
-- [ ] Per-Component status is one of ok / failed / unsupported; a failing probe does not blank sibling Components
-- [ ] At least two probe strategies exist behind one named extension point (e.g. db-query + http), pluggable without editing existing probes
-- [ ] Probes reach machines via the shared Machine Access capability using slice-04 descriptors
-- [ ] Client shows "refresh now" and per-Component Version / deploy time / status / last-collected
-- [ ] Tests cover the probe extension point and graceful per-Component degradation
+- [x] Scheduled Collection runs on a configurable interval and writes Version / deploy time / status / last-collected onto Components
+- [x] Manual "refresh now" per Environment triggers Collection on demand (`POST /api/environments/{id}/refresh`)
+- [x] Per-Component status is one of ok / failed / unsupported; a failing probe does not blank sibling Components
+- [x] At least two probe strategies exist behind one named extension point (e.g. db-query + http), pluggable without editing existing probes
+- [x] Probes reach machines via the shared Machine Access capability using slice-04 descriptors
+- [ ] Client shows "refresh now" and per-Component Version / deploy time / status / last-collected — ⚠️ PARTIAL: per-Component data renders (`CatalogPage`), but the client has no "refresh now" action wired to the refresh endpoint (no `refresh` method on `BackendClient`/`EnvironmentStore`; the toolbar 刷新 only re-fetches). Needs a small client slice.
+- [x] Tests cover the probe extension point and graceful per-Component degradation (`VersionProbeRegistryTest`, `CollectionServiceTest`)
 
 ## Blocked by
 

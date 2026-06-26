@@ -1,6 +1,6 @@
 # 01 — Walking skeleton: read Environments (backend)
 
-Status: ready-for-agent
+Status: done
 
 ## Parent
 
@@ -35,14 +35,14 @@ JVM mode is the default; do not let GraalVM native-image concerns block the buil
 
 ## Acceptance criteria
 
-- [ ] Spring Boot backend boots locally and serves a `GET /health` (or equivalent) check
-- [ ] Backend module added inside this monorepo (not a separate repo)
-- [ ] Local dev runs on H2; production profile targets Oracle 11g via `ojdbc8:19.21.0.0`; migrations run on both
-- [ ] Normalized schema (migrations) exists for `Environment` and `Component` with the fields above; `TENVINFO` is not referenced
-- [ ] `GET /api/environments` returns seeded Environments each with their Components
-- [ ] `GET /api/environments/{id}` returns a single Environment with its Components, and 404s for an unknown id
-- [ ] Integration tests cover both endpoints against a real (or testcontainer) database
-- [ ] API field names use glossary vocabulary (Environment, Component, Version, deploy time) — not legacy terms
+- [x] Spring Boot backend boots locally and serves a `GET /health` (or equivalent) check
+- [x] Backend module added inside this monorepo (not a separate repo)
+- [x] Local dev runs on H2; production profile targets Oracle 11g via `ojdbc8:19.21.0.0`; migrations run on both
+- [x] Normalized schema (migrations) exists for `Environment` and `Component` with the fields above; `TENVINFO` is not referenced
+- [x] `GET /api/environments` returns seeded Environments each with their Components
+- [x] `GET /api/environments/{id}` returns a single Environment with its Components, and 404s for an unknown id
+- [x] Integration tests cover both endpoints against a real (or testcontainer) database
+- [x] API field names use glossary vocabulary (Environment, Component, Version, deploy time) — not legacy terms
 
 ## Blocked by
 

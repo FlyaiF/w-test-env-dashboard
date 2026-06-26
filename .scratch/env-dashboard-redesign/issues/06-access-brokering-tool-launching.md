@@ -1,6 +1,6 @@
 # 06 — Access Brokering + tool launching
 
-Status: ready-for-agent
+Status: done
 
 ## Parent
 
@@ -24,11 +24,11 @@ on-demand-only delivery.
 
 ## Acceptance criteria
 
-- [ ] Server/Database secrets are stored encrypted at rest, not in plaintext
-- [ ] An on-demand endpoint delivers credentials + connection descriptor for a resource; nothing is cached durably on the client
-- [ ] Client launches the user's own SSH tool and DB tool, fed by brokered credentials
-- [ ] No in-app DB browser or SSH log viewer is introduced
-- [ ] Tests cover encryption-at-rest and the on-demand delivery path; client tests cover tool launching
+- [x] Server/Database secrets are stored encrypted at rest, not in plaintext
+- [x] An on-demand endpoint delivers credentials + connection descriptor for a resource; nothing is cached durably on the client
+- [x] Client launches the user's own SSH tool and DB tool, fed by brokered credentials
+- [x] No in-app DB browser or SSH log viewer is introduced
+- [x] Tests cover encryption-at-rest and the on-demand delivery path; client tests cover tool launching
 
 ## Blocked by
 
