@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_ui/shared_ui.dart' as ui;
 
-import '../sidecar/sidecar_manager.dart';
+import '../catalog/environment_store.dart';
 
 const _envGroup = ui.NavGroup(
   label: '环境',
@@ -14,33 +14,14 @@ const _envGroup = ui.NavGroup(
       icon: Icons.dashboard_outlined,
       selectedIcon: Icons.dashboard,
     ),
-    ui.NavItem(
-      index: 1,
-      label: '日志',
-      icon: Icons.article_outlined,
-      selectedIcon: Icons.article,
-    ),
-    ui.NavItem(
-      index: 2,
-      label: '管理',
-      icon: Icons.settings_applications_outlined,
-      selectedIcon: Icons.settings_applications,
-    ),
   ],
 );
 
 const _aboutItem = ui.NavItem(
-  index: 4,
+  index: 1,
   label: '关于',
   icon: Icons.info_outline,
   selectedIcon: Icons.info,
-);
-
-const _settingsItem = ui.NavItem(
-  index: 3,
-  label: '设置',
-  icon: Icons.settings_outlined,
-  selectedIcon: Icons.settings,
 );
 
 class AppScaffold extends StatelessWidget {
@@ -57,17 +38,19 @@ class AppScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sidecar = context.watch<SidecarManager>();
+    final connected = context.select<EnvironmentStore, bool>(
+      (s) => s.connected,
+    );
 
     return ui.AppScaffold(
       groups: const [_envGroup],
-      footerItems: const [_aboutItem, _settingsItem],
+      footerItems: const [_aboutItem],
       selectedIndex: selectedIndex,
       onDestinationSelected: onDestinationSelected,
       title: '环境速查',
       headerTrailing: Icon(
-        sidecar.connected ? Icons.cloud_done : Icons.cloud_off,
-        color: sidecar.connected ? Colors.green : Colors.red,
+        connected ? Icons.cloud_done : Icons.cloud_off,
+        color: connected ? Colors.green : Colors.red,
         size: 16,
       ),
       child: child,

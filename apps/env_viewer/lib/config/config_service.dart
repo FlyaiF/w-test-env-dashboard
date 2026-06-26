@@ -1,79 +1,32 @@
 import 'dart:convert';
 import 'dart:io';
 
+/// Thin-client persisted config. The backend now owns all environment data and
+/// database access, so this holds only what Local Desktop Integration needs:
+/// defaults and per-tool preferences for launching the user's own SSH/DB tools.
+/// Credentials are brokered on demand (slice 06) and never stored here.
 class AppConfig {
-  OracleConfig oracle;
   SshConfig ssh;
   SshToolsConfig sshTools;
 
   AppConfig({
-    required this.oracle,
     required this.ssh,
     required this.sshTools,
   });
 
   factory AppConfig.empty() => AppConfig(
-    oracle: OracleConfig(
-      host: '',
-      port: 1521,
-      service: '',
-      username: '',
-      password: '',
-    ),
     ssh: SshConfig(defaultUsername: '', defaultPassword: ''),
     sshTools: SshToolsConfig.empty(),
   );
 
   factory AppConfig.fromJson(Map<String, dynamic> json) => AppConfig(
-    oracle: OracleConfig.fromJson(json['oracle'] ?? {}),
     ssh: SshConfig.fromJson(json['ssh'] ?? {}),
     sshTools: SshToolsConfig.fromJson(json['ssh_tools'] ?? {}),
   );
 
   Map<String, dynamic> toJson() => {
-    'oracle': oracle.toJson(),
     'ssh': ssh.toJson(),
     'ssh_tools': sshTools.toJson(),
-  };
-
-  String get dsn =>
-      'oracle://${oracle.username}:${oracle.password}@${oracle.host}:${oracle.port}/${oracle.service}';
-
-  bool get isOracleConfigured =>
-      oracle.host.isNotEmpty &&
-      oracle.service.isNotEmpty &&
-      oracle.username.isNotEmpty;
-}
-
-class OracleConfig {
-  String host;
-  int port;
-  String service;
-  String username;
-  String password;
-
-  OracleConfig({
-    required this.host,
-    required this.port,
-    required this.service,
-    required this.username,
-    required this.password,
-  });
-
-  factory OracleConfig.fromJson(Map<String, dynamic> json) => OracleConfig(
-    host: json['host'] ?? '',
-    port: json['port'] ?? 1521,
-    service: json['service'] ?? '',
-    username: json['username'] ?? '',
-    password: json['password'] ?? '',
-  );
-
-  Map<String, dynamic> toJson() => {
-    'host': host,
-    'port': port,
-    'service': service,
-    'username': username,
-    'password': password,
   };
 }
 
