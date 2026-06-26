@@ -5,8 +5,10 @@ import 'package:http/http.dart' as http;
 
 import 'dto/component_dto.dart';
 import 'dto/component_input.dart';
+import 'dto/database_credential.dart';
 import 'dto/environment_dto.dart';
 import 'dto/environment_input.dart';
+import 'dto/server_credential.dart';
 
 /// Raised when the backend cannot be reached or returns a non-2xx response.
 /// Carries a human-readable, already-localized message for the UI.
@@ -109,6 +111,27 @@ class BackendClient {
       'DELETE',
       '/api/environments/$environmentId/components/$componentId',
     );
+  }
+
+  /// Fetch an SSH credential bundle for a Server on demand (Access Brokering,
+  /// ADR-0005). Returned to the caller to launch a tool with and then dropped;
+  /// the client never persists it.
+  Future<ServerCredential> getServerCredentials(int serverId) async {
+    final body = await _getJson('/api/servers/$serverId/credentials');
+    if (body is! Map<String, dynamic>) {
+      throw const BackendException('后端返回了无法识别的服务器凭据');
+    }
+    return ServerCredential.fromJson(body);
+  }
+
+  /// Fetch a DB credential bundle for a Database on demand (Access Brokering,
+  /// ADR-0005). Used to launch the user's own DB tool; nothing is persisted.
+  Future<DatabaseCredential> getDatabaseCredentials(int databaseId) async {
+    final body = await _getJson('/api/databases/$databaseId/credentials');
+    if (body is! Map<String, dynamic>) {
+      throw const BackendException('后端返回了无法识别的数据库凭据');
+    }
+    return DatabaseCredential.fromJson(body);
   }
 
   EnvironmentDto _asEnvironment(dynamic body) {

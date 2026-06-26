@@ -1,5 +1,6 @@
 package com.flyaif.envdashboard.catalog;
 
+import com.flyaif.envdashboard.access.SecretStore;
 import com.flyaif.envdashboard.catalog.domain.Component;
 import com.flyaif.envdashboard.catalog.domain.ComponentRole;
 import com.flyaif.envdashboard.catalog.domain.Environment;
@@ -33,13 +34,16 @@ public class LocalSeedData implements CommandLineRunner {
     private final EnvironmentRepository environments;
     private final ServerRepository servers;
     private final DatabaseRepository databases;
+    private final SecretStore secrets;
 
     public LocalSeedData(EnvironmentRepository environments,
                          ServerRepository servers,
-                         DatabaseRepository databases) {
+                         DatabaseRepository databases,
+                         SecretStore secrets) {
         this.environments = environments;
         this.servers = servers;
         this.databases = databases;
+        this.secrets = secrets;
     }
 
     @Override
@@ -58,6 +62,13 @@ public class LocalSeedData implements CommandLineRunner {
                 new ConnectionDescriptor("10.0.2.5", 1521, "ORCL", "app")));
         Database configDb = databases.save(new Database("config", DatabaseType.DAMENG,
                 new ConnectionDescriptor("10.0.2.6", 5236, "CFG", "cfg")));
+
+        // Demo secrets, stored encrypted at rest (ADR-0005) so the credential-brokering endpoints
+        // return something to launch a tool with on a fresh local H2.
+        secrets.putServerSecret(linuxHost.getId(), "deploy-pw");
+        secrets.putServerSecret(windowsHost.getId(), "Admin-pw");
+        secrets.putDatabaseSecret(businessDb.getId(), "app-pw");
+        secrets.putDatabaseSecret(configDb.getId(), "cfg-pw");
 
         Environment alpha = new Environment("测试环境 Alpha", "QA 主测试环境");
         Component alphaGateway = new Component(ComponentRole.GATEWAY);

@@ -15,3 +15,7 @@ spring:
 envdashboard:
   collection:
     scheduler-enabled: false
+  # Fixed dev passphrase for secret encryption at rest (ADR-0005). Local-only; prod supplies a
+  # high-entropy value via an env var (see application-prod.yml).
+  access:
+    secret-key: local-dev-secret-key-not-for-production

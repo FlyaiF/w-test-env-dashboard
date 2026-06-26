@@ -1,5 +1,7 @@
 package com.flyaif.envdashboard.collection.machine;
 
+import com.flyaif.envdashboard.access.SecretStore;
+import com.flyaif.envdashboard.inventory.JdbcUrlBuilder;
 import com.flyaif.envdashboard.inventory.domain.ConnectionDescriptor;
 import com.flyaif.envdashboard.inventory.domain.Database;
 import com.flyaif.envdashboard.inventory.domain.DatabaseType;
@@ -21,8 +23,8 @@ import java.time.Duration;
  *
  * <p>Drivers are loaded at runtime by coordinate (ojdbc8 / Dameng / OceanBase, PRD §9); there is no
  * compile-time dependency on driver classes here — only {@code java.sql}. The connection password is
- * not yet supplied (credential brokering is slice 06, ADR-0005), so connections use the descriptor's
- * username with an empty password for now.
+ * brokered from the encrypted {@link SecretStore} (ADR-0005, slice 06); a Database with no stored
+ * secret connects with an empty password (e.g. trust auth) rather than failing the probe outright.
  */
 @Component
 public class JdbcHttpMachineAccess implements MachineAccess {
@@ -30,6 +32,12 @@ public class JdbcHttpMachineAccess implements MachineAccess {
     private final HttpClient http = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5))
             .build();
+
+    private final SecretStore secrets;
+
+    public JdbcHttpMachineAccess(SecretStore secrets) {
+        this.secrets = secrets;
+    }
 
     @Override
     public String httpGet(String url) {
@@ -55,10 +63,16 @@ public class JdbcHttpMachineAccess implements MachineAccess {
 
     @Override
     public String queryScalar(Database database, String sql) {
-        String url = jdbcUrl(database);
+        String url = JdbcUrlBuilder.forDatabase(database);
+        if (url == null) {
+            throw new MachineAccessException(
+                    "No JDBC URL for database " + database.getId()
+                            + " (missing connection descriptor or unsupported type)");
+        }
         ConnectionDescriptor conn = database.getConnection();
         String username = conn == null ? null : conn.getUsername();
-        try (Connection connection = DriverManager.getConnection(url, username, "");
+        String password = secrets.databaseSecret(database.getId()).orElse("");
+        try (Connection connection = DriverManager.getConnection(url, username, password);
              Statement statement = connection.createStatement();
              ResultSet rows = statement.executeQuery(sql)) {
             if (!rows.next()) {
@@ -71,24 +85,5 @@ public class JdbcHttpMachineAccess implements MachineAccess {
             throw new MachineAccessException(
                     "Failed querying database " + database.getId() + ": " + e.getMessage(), e);
         }
-    }
-
-    /** Build the JDBC URL for the database's engine from its non-secret connection descriptor. */
-    private static String jdbcUrl(Database database) {
-        ConnectionDescriptor c = database.getConnection();
-        if (c == null) {
-            throw new MachineAccessException("Database " + database.getId() + " has no connection descriptor");
-        }
-        DatabaseType type = database.getType();
-        String host = c.getHost();
-        Integer port = c.getPort();
-        String service = c.getServiceName();
-        return switch (type == null ? DatabaseType.OTHER : type) {
-            case ORACLE -> "jdbc:oracle:thin:@//" + host + ":" + port + "/" + service;
-            case DAMENG -> "jdbc:dm://" + host + ":" + port;
-            case OCEANBASE -> "jdbc:oceanbase://" + host + ":" + port + "/" + service;
-            case OTHER -> throw new MachineAccessException(
-                    "No JDBC driver mapping for database type OTHER (database " + database.getId() + ")");
-        };
     }
 }

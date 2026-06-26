@@ -7,6 +7,7 @@ import 'package:window_manager/window_manager.dart';
 import 'api/backend_client.dart';
 import 'catalog/environment_store.dart';
 import 'pages/about/about_page.dart';
+import 'services/access/access_launcher.dart';
 import 'pages/catalog/catalog_page.dart';
 import 'widgets/app_scaffold.dart';
 
@@ -40,6 +41,9 @@ class MyApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => AppThemeController()..load()),
         Provider<BackendClient>.value(value: backendClient),
+        // Brokers Server/Database credentials on demand and launches the user's
+        // own SSH/DB tools with them (ADR-0005); persists no secrets.
+        Provider<AccessLauncher>(create: (_) => AccessLauncher(backendClient)),
         ChangeNotifierProvider(create: (_) => EnvironmentStore(backendClient)),
       ],
       child: Consumer<AppThemeController>(

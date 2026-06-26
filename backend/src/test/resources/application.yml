@@ -18,3 +18,6 @@ spring:
 envdashboard:
   collection:
     scheduler-enabled: false
+  # Fixed passphrase so secret encryption (ADR-0005) is exercised deterministically under test.
+  access:
+    secret-key: test-secret-key
