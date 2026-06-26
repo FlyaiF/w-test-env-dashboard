@@ -49,6 +49,12 @@ scripts/dev_backend.sh run                 # boot on localhost:8080 (local profi
 mvn -f backend/pom.xml verify              # full test suite (H2; Oracle IT excluded)
 mvn -f backend/pom.xml test -Dgroups=oracle-it -DexcludedGroups=   # optional Oracle 11g Testcontainers check
 
+# One-time legacy TENVINFO -> new-schema import (slice 07; ADR-0004, PRD §8). Dry run by default;
+# --apply to write. Reads the old Oracle, writes into the backend's own datasource (APP_PROFILES).
+LEGACY_JDBC_URL=jdbc:oracle:thin:@oldhost:1521/ORCL LEGACY_DB_USERNAME=app LEGACY_DB_PASSWORD=secret \
+  scripts/import_tenvinfo.sh                # preview report, no writes
+LEGACY_JDBC_URL=... LEGACY_DB_USERNAME=... LEGACY_DB_PASSWORD=... scripts/import_tenvinfo.sh --apply
+
 # Release builds — builds both apps, embeds go_sidecar in env_viewer only
 ./scripts/build_release.sh macos    # also: windows, linux
 ./scripts/build_sidecar.sh          # current platform
