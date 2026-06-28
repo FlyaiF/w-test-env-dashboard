@@ -8,26 +8,45 @@ import 'dart:io';
 class AppConfig {
   SshConfig ssh;
   SshToolsConfig sshTools;
+  DbToolsConfig dbTools;
+
+  /// User-set backend base URL (Settings → 后端地址). Null when unset, in which
+  /// case the env var / localhost default applies. The env var, if present, wins
+  /// over this at startup (see main.dart) — this is the durable fallback.
+  String? backendBaseUrl;
 
   AppConfig({
     required this.ssh,
     required this.sshTools,
+    required this.dbTools,
+    this.backendBaseUrl,
   });
 
   factory AppConfig.empty() => AppConfig(
     ssh: SshConfig(defaultUsername: '', defaultPassword: ''),
     sshTools: SshToolsConfig.empty(),
+    dbTools: DbToolsConfig.empty(),
   );
 
   factory AppConfig.fromJson(Map<String, dynamic> json) => AppConfig(
     ssh: SshConfig.fromJson(json['ssh'] ?? {}),
     sshTools: SshToolsConfig.fromJson(json['ssh_tools'] ?? {}),
+    dbTools: DbToolsConfig.fromJson(json['db_tools'] ?? {}),
+    backendBaseUrl: _nullableString((json['backend'] ?? {})['base_url']),
   );
 
   Map<String, dynamic> toJson() => {
     'ssh': ssh.toJson(),
     'ssh_tools': sshTools.toJson(),
+    'db_tools': dbTools.toJson(),
+    if (backendBaseUrl != null && backendBaseUrl!.isNotEmpty)
+      'backend': {'base_url': backendBaseUrl},
   };
+
+  static String? _nullableString(dynamic v) {
+    if (v is String && v.trim().isNotEmpty) return v.trim();
+    return null;
+  }
 }
 
 class SshConfig {
@@ -93,6 +112,41 @@ class SshToolsConfig {
     if (v is String && v.isNotEmpty) return v;
     return null;
   }
+}
+
+/// Per-tool preferences for launching the user's own DB tools. Mirrors
+/// [SshToolsConfig] and the `DbToolRegistry`; kept in its own `db_tools` section
+/// rather than overloading `ssh_tools` so the persisted schema stays symmetric.
+class DbToolsConfig {
+  String? defaultToolId;
+  Map<String, String> executablePaths;
+
+  DbToolsConfig({this.defaultToolId, Map<String, String>? executablePaths})
+    : executablePaths = executablePaths ?? {};
+
+  factory DbToolsConfig.empty() => DbToolsConfig();
+
+  factory DbToolsConfig.fromJson(Map<String, dynamic> json) {
+    final raw = json['executable_paths'];
+    final paths = <String, String>{};
+    if (raw is Map) {
+      for (final entry in raw.entries) {
+        final v = entry.value;
+        if (v is String && v.isNotEmpty) {
+          paths[entry.key.toString()] = v;
+        }
+      }
+    }
+    return DbToolsConfig(
+      defaultToolId: SshToolsConfig._nullableString(json['default_tool_id']),
+      executablePaths: paths,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    if (defaultToolId != null) 'default_tool_id': defaultToolId,
+    'executable_paths': executablePaths,
+  };
 }
 
 class ConfigService {

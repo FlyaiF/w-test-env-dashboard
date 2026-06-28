@@ -70,6 +70,74 @@ class ComponentView {
   });
 }
 
+/// A resolved Server reference, ready to render. Built by [CatalogAcl] from a
+/// `ServerDto` so a Component's `serverId` shows a host instead of a bare `#id`.
+class ServerRefView {
+  final int id;
+  final String? host;
+
+  const ServerRefView({required this.id, this.host});
+
+  /// Label for the component card's 运行主机 field — the host, or `#id` if blank.
+  String get cardLabel => (host != null && host!.trim().isNotEmpty)
+      ? host!.trim()
+      : '#$id';
+}
+
+/// A resolved Database reference, ready to render. Built by [CatalogAcl] from a
+/// `DatabaseDto`. Carries two label forms: a full one for the card and a short
+/// one (role + host) to disambiguate a multi-database launch menu.
+class DatabaseRefView {
+  final int id;
+
+  /// Localized role label (e.g. 业务库), or the raw role for an unknown value.
+  final String roleLabel;
+
+  /// Localized engine label (e.g. Oracle), or the raw type for an unknown value.
+  final String typeLabel;
+  final String? host;
+  final int? port;
+  final String? serviceName;
+
+  const DatabaseRefView({
+    required this.id,
+    required this.roleLabel,
+    required this.typeLabel,
+    this.host,
+    this.port,
+    this.serviceName,
+  });
+
+  /// `host[:port][/serviceName]`, with any missing part omitted; empty if no host.
+  String get address {
+    final h = host?.trim();
+    if (h == null || h.isEmpty) return '';
+    final buf = StringBuffer(h);
+    if (port != null) buf.write(':$port');
+    final svc = serviceName?.trim();
+    if (svc != null && svc.isNotEmpty) buf.write('/$svc');
+    return buf.toString();
+  }
+
+  /// Full label for the card's 使用数据库 field: `role · type · address`,
+  /// dropping any blank segment.
+  String get cardLabel {
+    final parts = [roleLabel, typeLabel, address]
+        .where((p) => p.trim().isNotEmpty)
+        .toList();
+    return parts.isEmpty ? '#$id' : parts.join(' · ');
+  }
+
+  /// Short label for the launch menu: `role host` (host only), trimmed.
+  String get menuLabel {
+    final h = host?.trim();
+    final label = (h != null && h.isNotEmpty)
+        ? '$roleLabel $h'.trim()
+        : roleLabel.trim();
+    return label.isEmpty ? '#$id' : label;
+  }
+}
+
 /// One test deployment — the aggregate root, with its owned Components.
 class EnvironmentView {
   final int id;

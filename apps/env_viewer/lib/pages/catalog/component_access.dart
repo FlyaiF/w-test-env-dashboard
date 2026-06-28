@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../config/config_store.dart';
 import '../../services/access/access_launcher.dart';
 import '../../services/db_tools/db_tool.dart';
 import '../../services/db_tools/db_tool_registry.dart';
@@ -27,8 +28,15 @@ List<LaunchOption> sshLaunchOptions(
   List<SshTool>? tools,
   PasswordMode preferredMode = PasswordMode.argv,
   String? startPath,
+  Map<String, String>? executablePaths,
+  String? preferredToolId,
 }) {
-  final available = tools ?? SshToolRegistry.availableOnPlatform;
+  final available = [...(tools ?? SshToolRegistry.availableOnPlatform)];
+  // Surface the configured default tool first, preserving the rest of the order.
+  if (preferredToolId != null) {
+    final idx = available.indexWhere((t) => t.id == preferredToolId);
+    if (idx > 0) available.insert(0, available.removeAt(idx));
+  }
   return [
     for (final tool in available)
       LaunchOption(
@@ -38,6 +46,7 @@ List<LaunchOption> sshLaunchOptions(
           tool,
           preferredMode: preferredMode,
           startPath: startPath,
+          executableOverride: executablePaths?[tool.id],
         ),
       ),
   ];
@@ -51,6 +60,8 @@ List<LaunchOption> dbLaunchOptions(
   List<int> databaseIds, {
   List<DbTool>? tools,
   String? connectionName,
+  Map<int, String>? databaseLabels,
+  Map<String, String>? executablePaths,
 }) {
   final available = tools ?? DbToolRegistry.availableOnPlatform;
   final qualify = databaseIds.length > 1;
@@ -58,11 +69,14 @@ List<LaunchOption> dbLaunchOptions(
     for (final databaseId in databaseIds)
       for (final tool in available)
         LaunchOption(
-          qualify ? '#$databaseId · ${tool.displayName}' : tool.displayName,
+          qualify
+              ? '${databaseLabels?[databaseId] ?? '#$databaseId'} · ${tool.displayName}'
+              : tool.displayName,
           () => launcher.launchDb(
             databaseId,
             tool,
             name: connectionName,
+            executableOverride: executablePaths?[tool.id],
           ),
         ),
   ];
@@ -80,6 +94,11 @@ class ComponentAccessBar extends StatelessWidget {
   /// Databases this Component uses (by id); may be empty.
   final List<int> databaseIds;
 
+  /// Resolved short labels (role + host) per database id, used to disambiguate the
+  /// launch menu when a Component uses more than one database. Missing ids fall
+  /// back to `#id`.
+  final Map<int, String>? databaseLabels;
+
   /// Human label used to name launched connections (e.g. in DBeaver).
   final String? connectionName;
 
@@ -87,6 +106,7 @@ class ComponentAccessBar extends StatelessWidget {
     super.key,
     required this.serverId,
     required this.databaseIds,
+    this.databaseLabels,
     this.connectionName,
   });
 
@@ -97,6 +117,7 @@ class ComponentAccessBar extends StatelessWidget {
     if (!hasServer && !hasDb) return const SizedBox.shrink();
 
     final launcher = context.read<AccessLauncher>();
+    final config = context.watch<ConfigStore>();
     return Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -105,7 +126,13 @@ class ComponentAccessBar extends StatelessWidget {
           _LaunchButton(
             icon: Icons.terminal,
             label: 'SSH 连接',
-            options: sshLaunchOptions(launcher, serverId!),
+            options: sshLaunchOptions(
+              launcher,
+              serverId!,
+              preferredMode: config.passwordMode,
+              executablePaths: config.sshExecutablePaths,
+              preferredToolId: config.defaultTerminalToolId,
+            ),
             emptyTooltip: '当前平台没有可用的 SSH 工具',
           ),
         if (hasDb)
@@ -116,6 +143,8 @@ class ComponentAccessBar extends StatelessWidget {
               launcher,
               databaseIds,
               connectionName: connectionName,
+              databaseLabels: databaseLabels,
+              executablePaths: config.dbExecutablePaths,
             ),
             emptyTooltip: '当前平台没有可用的数据库工具',
           ),

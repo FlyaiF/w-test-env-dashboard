@@ -8,8 +8,12 @@ import 'package:flutter_test/flutter_test.dart';
 /// Records the brokered launches it is asked to perform instead of touching the
 /// backend, so the option builders can be asserted in isolation.
 class _FakeLauncher extends AccessLauncher {
-  final List<({int serverId, SshTool tool, PasswordMode mode})> sshCalls = [];
-  final List<({int databaseId, DbTool tool, String? name})> dbCalls = [];
+  final List<
+    ({int serverId, SshTool tool, PasswordMode mode, String? override})
+  >
+  sshCalls = [];
+  final List<({int databaseId, DbTool tool, String? name, String? override})>
+  dbCalls = [];
 
   _FakeLauncher() : super(BackendClient());
 
@@ -21,7 +25,12 @@ class _FakeLauncher extends AccessLauncher {
     String? executableOverride,
     String? startPath,
   }) async {
-    sshCalls.add((serverId: serverId, tool: tool, mode: preferredMode));
+    sshCalls.add((
+      serverId: serverId,
+      tool: tool,
+      mode: preferredMode,
+      override: executableOverride,
+    ));
     return const LaunchResult(ok: true, message: 'ssh');
   }
 
@@ -32,7 +41,12 @@ class _FakeLauncher extends AccessLauncher {
     String? executableOverride,
     String? name,
   }) async {
-    dbCalls.add((databaseId: databaseId, tool: tool, name: name));
+    dbCalls.add((
+      databaseId: databaseId,
+      tool: tool,
+      name: name,
+      override: executableOverride,
+    ));
     return const LaunchResult(ok: true, message: 'db');
   }
 }
@@ -112,6 +126,30 @@ void main() {
     test('no installed tools yields no options', () {
       expect(sshLaunchOptions(_FakeLauncher(), 7, tools: const []), isEmpty);
     });
+
+    test('a configured executable path is passed through as the override', () async {
+      final launcher = _FakeLauncher();
+      final tool = _FakeSshTool('a', 'Xshell');
+
+      await sshLaunchOptions(
+        launcher,
+        7,
+        tools: [tool],
+        executablePaths: {'a': '/opt/Xshell'},
+      ).single.run();
+
+      expect(launcher.sshCalls.single.override, '/opt/Xshell');
+    });
+
+    test('the preferred tool is ordered first', () {
+      final options = sshLaunchOptions(
+        _FakeLauncher(),
+        7,
+        tools: [_FakeSshTool('a', 'Xshell'), _FakeSshTool('b', 'Terminal')],
+        preferredToolId: 'b',
+      );
+      expect(options.map((o) => o.label), ['Terminal', 'Xshell']);
+    });
   });
 
   group('dbLaunchOptions', () {
@@ -141,6 +179,33 @@ void main() {
       expect(options.map((o) => o.label), ['#9 · DBeaver', '#12 · DBeaver']);
       await options[1].run();
       expect(launcher.dbCalls.single.databaseId, 12);
+    });
+
+    test('resolved labels qualify the multi-db menu instead of #id', () {
+      final options = dbLaunchOptions(
+        _FakeLauncher(),
+        [9, 12],
+        tools: [_FakeDbTool('dbeaver', 'DBeaver')],
+        databaseLabels: {9: '业务库 10.20.155.175', 12: '中转库 10.20.155.180'},
+      );
+
+      expect(options.map((o) => o.label), [
+        '业务库 10.20.155.175 · DBeaver',
+        '中转库 10.20.155.180 · DBeaver',
+      ]);
+    });
+
+    test('a configured executable path is passed through as the override', () async {
+      final launcher = _FakeLauncher();
+
+      await dbLaunchOptions(
+        launcher,
+        [9],
+        tools: [_FakeDbTool('dbeaver', 'DBeaver')],
+        executablePaths: {'dbeaver': '/opt/dbeaver'},
+      ).single.run();
+
+      expect(launcher.dbCalls.single.override, '/opt/dbeaver');
     });
   });
 }

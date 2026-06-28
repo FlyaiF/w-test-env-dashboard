@@ -5,7 +5,7 @@
 /// touches this type directly.
 class ComponentDto {
   final int id;
-  final String? role; // GATEWAY | UI | APP | PRIVATE_PROTO
+  final String? role; // UNSPECIFIED | GATEWAY | UI | APP | PRIVATE_PROTO
   final String? version;
   final DateTime? deployTime;
   final String? logLocation;

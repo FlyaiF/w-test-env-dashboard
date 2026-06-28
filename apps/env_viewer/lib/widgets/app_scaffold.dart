@@ -17,8 +17,15 @@ const _envGroup = ui.NavGroup(
   ],
 );
 
-const _aboutItem = ui.NavItem(
+const _settingsItem = ui.NavItem(
   index: 1,
+  label: '设置',
+  icon: Icons.settings_outlined,
+  selectedIcon: Icons.settings,
+);
+
+const _aboutItem = ui.NavItem(
+  index: 2,
   label: '关于',
   icon: Icons.info_outline,
   selectedIcon: Icons.info,
@@ -44,7 +51,7 @@ class AppScaffold extends StatelessWidget {
 
     return ui.AppScaffold(
       groups: const [_envGroup],
-      footerItems: const [_aboutItem],
+      footerItems: const [_settingsItem, _aboutItem],
       selectedIndex: selectedIndex,
       onDestinationSelected: onDestinationSelected,
       title: '环境速查',

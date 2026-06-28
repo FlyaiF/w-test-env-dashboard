@@ -4,7 +4,7 @@
 /// curated descriptive fields: links (runs-on / uses) and collected status are owned by other
 /// endpoints, so editing a Component here never touches them.
 class ComponentInput {
-  /// Wire enum: GATEWAY | UI | APP | PRIVATE_PROTO. Required by the backend.
+  /// Wire enum: UNSPECIFIED | GATEWAY | UI | APP | PRIVATE_PROTO. Required by the backend.
   final String role;
   final String? version;
   final DateTime? deployTime;

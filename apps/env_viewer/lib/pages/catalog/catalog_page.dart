@@ -540,6 +540,13 @@ class _ComponentCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final c = component;
+    // Resolve Server/Database references to friendly labels (ADR-0006); falls
+    // back to `#id` when inventory is unavailable.
+    final store = context.watch<EnvironmentStore>();
+    final serverRef = c.serverId == null ? null : store.serverRefs[c.serverId];
+    final dbRefs = {
+      for (final id in c.databaseIds) id: store.databaseRefs[id],
+    };
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -602,13 +609,17 @@ class _ComponentCard extends StatelessWidget {
               _Field('日志位置', c.logLocation),
               _Field(
                 '运行主机',
-                c.serverId == null ? null : '#${c.serverId}',
+                c.serverId == null
+                    ? null
+                    : (serverRef?.cardLabel ?? '#${c.serverId}'),
               ),
               _Field(
                 '使用数据库',
                 c.databaseIds.isEmpty
                     ? null
-                    : c.databaseIds.map((id) => '#$id').join('、'),
+                    : c.databaseIds
+                          .map((id) => dbRefs[id]?.cardLabel ?? '#$id')
+                          .join('、'),
               ),
             ],
           ),
@@ -638,6 +649,10 @@ class _ComponentCard extends StatelessWidget {
             ComponentAccessBar(
               serverId: c.serverId,
               databaseIds: c.databaseIds,
+              databaseLabels: {
+                for (final id in c.databaseIds)
+                  if (dbRefs[id] != null) id: dbRefs[id]!.menuLabel,
+              },
               connectionName: '$environmentName · ${c.roleLabel}',
             ),
           ],

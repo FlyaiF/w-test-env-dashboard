@@ -122,8 +122,9 @@ public class TenvinfoImporter {
             return null;
         }
 
-        // The legacy web server maps to the entry-point component of the Environment.
-        Component component = new Component(ComponentRole.GATEWAY);
+        // The legacy row carries no role discriminator, so the migrated component's role is left
+        // explicitly UNSPECIFIED for a human to classify later — never guessed (ADR-0007).
+        Component component = new Component(ComponentRole.UNSPECIFIED);
         component.setVersion(version);
         component.setDeployTime(row.updateTime());
         component.setLogLocation(logLocation);

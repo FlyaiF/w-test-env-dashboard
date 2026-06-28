@@ -18,10 +18,20 @@ class EnvironmentStore extends ChangeNotifier {
   EnvironmentStore(this._client);
 
   List<EnvironmentView> _all = [];
+  Map<int, ServerRefView> _serverRefs = {};
+  Map<int, DatabaseRefView> _databaseRefs = {};
   bool _loading = false;
   bool _loaded = false;
   String? _error;
   String _search = '';
+
+  /// Resolved Server references by id, for rendering a Component's 运行主机 as a
+  /// host instead of a bare `#id`. Empty when inventory could not be fetched.
+  Map<int, ServerRefView> get serverRefs => Map.unmodifiable(_serverRefs);
+
+  /// Resolved Database references by id, for the 使用数据库 field and the launch
+  /// menu. Empty when inventory could not be fetched.
+  Map<int, DatabaseRefView> get databaseRefs => Map.unmodifiable(_databaseRefs);
 
   /// Whether the backend has been reached successfully at least once. Drives the
   /// connection indicator; an error after a successful load keeps this true.
@@ -50,6 +60,7 @@ class EnvironmentStore extends ChangeNotifier {
       final dtos = await _client.listEnvironments();
       _all = CatalogAcl.toViews(dtos);
       _loaded = true;
+      await _loadInventoryRefs();
     } on BackendException catch (e) {
       _error = e.message;
     } catch (e) {
@@ -57,6 +68,28 @@ class EnvironmentStore extends ChangeNotifier {
     } finally {
       _loading = false;
       notifyListeners();
+    }
+  }
+
+  /// Best-effort: resolve the shared Server/Database references for display
+  /// (ADR-0006). Inventory is a display nicety, so any failure here leaves the
+  /// ref maps empty (cards/menus fall back to `#id`) without disturbing the
+  /// environment list or the connection state.
+  Future<void> _loadInventoryRefs() async {
+    try {
+      final serversFuture = _client.listServers();
+      final databasesFuture = _client.listDatabases();
+      final servers = await serversFuture;
+      final databases = await databasesFuture;
+      _serverRefs = {
+        for (final s in servers) s.id: CatalogAcl.serverRefView(s),
+      };
+      _databaseRefs = {
+        for (final d in databases) d.id: CatalogAcl.databaseRefView(d),
+      };
+    } catch (_) {
+      _serverRefs = {};
+      _databaseRefs = {};
     }
   }
 

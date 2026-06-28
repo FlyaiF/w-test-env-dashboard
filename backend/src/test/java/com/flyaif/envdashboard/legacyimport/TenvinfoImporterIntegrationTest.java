@@ -84,7 +84,7 @@ class TenvinfoImporterIntegrationTest {
         assertThat(env.getComponents()).hasSize(1);
 
         Component component = env.getComponents().get(0);
-        assertThat(component.getRole()).isEqualTo(ComponentRole.GATEWAY);
+        assertThat(component.getRole()).isEqualTo(ComponentRole.UNSPECIFIED);
         assertThat(component.getVersion()).isEqualTo("2.4.1");
         assertThat(component.getDeployTime()).isEqualTo(Instant.parse("2026-06-20T08:30:00Z"));
         assertThat(component.getLogLocation()).isEqualTo("/var/log/app.log");

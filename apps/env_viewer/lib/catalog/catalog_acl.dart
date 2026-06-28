@@ -1,5 +1,7 @@
 import '../api/dto/component_dto.dart';
+import '../api/dto/database_dto.dart';
 import '../api/dto/environment_dto.dart';
+import '../api/dto/server_dto.dart';
 import 'environment_view.dart';
 
 /// Anti-corruption layer for the Environment Catalog. Pure functions that
@@ -31,7 +33,13 @@ class CatalogAcl {
 
   /// Selectable Component role enums, in display order, for the edit form. Pair
   /// each with [roleLabel] for its localized label.
-  static const List<String> roleCodes = ['GATEWAY', 'UI', 'APP', 'PRIVATE_PROTO'];
+  static const List<String> roleCodes = [
+    'UNSPECIFIED',
+    'GATEWAY',
+    'UI',
+    'APP',
+    'PRIVATE_PROTO',
+  ];
 
   /// Selectable version-probe enums, in display order, for the edit form. Pair
   /// each with [versionProbeLabel] for its localized label.
@@ -76,11 +84,62 @@ class CatalogAcl {
         return '主服务';
       case 'PRIVATE_PROTO':
         return '专有协议服务';
+      // An explicit "not yet classified" role (e.g. legacy-imported components), unified with the
+      // null/blank case so there is a single term for "no role assigned".
+      case 'UNSPECIFIED':
       case null:
       case '':
-        return '未知组件';
+        return '未指定';
       default:
         return role;
+    }
+  }
+
+  /// Resolve a `ServerDto` into a render-ready Server reference.
+  static ServerRefView serverRefView(ServerDto dto) =>
+      ServerRefView(id: dto.id, host: _blankToNull(dto.host));
+
+  /// Resolve a `DatabaseDto` into a render-ready Database reference, mapping the
+  /// free-text role and the engine type to localized labels.
+  static DatabaseRefView databaseRefView(DatabaseDto dto) {
+    final conn = dto.connection;
+    return DatabaseRefView(
+      id: dto.id,
+      roleLabel: databaseRoleLabel(dto.role),
+      typeLabel: databaseTypeLabel(dto.type),
+      host: _blankToNull(conn?.host),
+      port: conn?.port,
+      serviceName: _blankToNull(conn?.serviceName),
+    );
+  }
+
+  /// Localized label for a Database's role. Known migration roles map to product
+  /// terms; any other (free-text, from slice-04 CRUD or seed) is surfaced verbatim;
+  /// blank yields an empty string so the segment is dropped from a composed label.
+  static String databaseRoleLabel(String? role) {
+    final trimmed = role?.trim() ?? '';
+    switch (trimmed) {
+      case 'business':
+        return '业务库';
+      case 'intermediate':
+        return '中转库';
+      default:
+        return trimmed; // unknown role passes through; blank → ''
+    }
+  }
+
+  /// Localized label for a Database engine type. Unknown/blank passes through.
+  static String databaseTypeLabel(String? type) {
+    final trimmed = type?.trim() ?? '';
+    switch (trimmed) {
+      case 'ORACLE':
+        return 'Oracle';
+      case 'DAMENG':
+        return '达梦';
+      case 'OCEANBASE':
+        return 'OceanBase';
+      default:
+        return trimmed; // OTHER/unknown → raw; blank → ''
     }
   }
 

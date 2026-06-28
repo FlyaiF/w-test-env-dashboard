@@ -6,9 +6,11 @@ import 'package:http/http.dart' as http;
 import 'dto/component_dto.dart';
 import 'dto/component_input.dart';
 import 'dto/database_credential.dart';
+import 'dto/database_dto.dart';
 import 'dto/environment_dto.dart';
 import 'dto/environment_input.dart';
 import 'dto/server_credential.dart';
+import 'dto/server_dto.dart';
 
 /// Raised when the backend cannot be reached or returns a non-2xx response.
 /// Carries a human-readable, already-localized message for the UI.
@@ -62,6 +64,32 @@ class BackendClient {
       throw const BackendException('后端返回了无法识别的环境详情');
     }
     return EnvironmentDto.fromJson(body);
+  }
+
+  /// List the shared Servers (Resource Inventory, `GET /api/servers`). Used to
+  /// resolve a Component's `serverId` reference to a display label client-side
+  /// (ADR-0006) — no secrets are returned.
+  Future<List<ServerDto>> listServers() async {
+    final body = await _getJson('/api/servers');
+    if (body is! List) {
+      throw const BackendException('后端返回了无法识别的服务器列表');
+    }
+    return body
+        .map((e) => ServerDto.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// List the shared Databases (Resource Inventory, `GET /api/databases`). Used to
+  /// resolve a Component's `databaseIds` references to display labels client-side
+  /// (ADR-0006) — connection metadata only, no passwords.
+  Future<List<DatabaseDto>> listDatabases() async {
+    final body = await _getJson('/api/databases');
+    if (body is! List) {
+      throw const BackendException('后端返回了无法识别的数据库列表');
+    }
+    return body
+        .map((e) => DatabaseDto.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   /// Create an Environment (optionally seeding inline Components) and return it.

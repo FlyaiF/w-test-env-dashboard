@@ -15,7 +15,9 @@ _Avoid_: env record, TENVINFO row, instance
 **Component**:
 One deployable part of an Environment (e.g. nginx gateway, UI, main service, private-protocol
 service). Has a role, a single version (or blank), a deploy time, a log location, a reachability
-(port/protocol/URL); runs on a Server and uses Databases, both by reference.
+(port/protocol/URL); runs on a Server and uses Databases, both by reference. The role is one of the
+four kinds above or **unspecified** (未指定) — "not yet classified", e.g. for a component imported from
+legacy data that carried no role; a human assigns the real role later.
 _Avoid_: service, subsystem, app, web server
 
 **Server**:

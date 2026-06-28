@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_ui/shared_ui.dart'
@@ -6,9 +8,11 @@ import 'package:window_manager/window_manager.dart';
 
 import 'api/backend_client.dart';
 import 'catalog/environment_store.dart';
+import 'config/config_store.dart';
 import 'pages/about/about_page.dart';
 import 'services/access/access_launcher.dart';
 import 'pages/catalog/catalog_page.dart';
+import 'pages/settings/settings_page.dart';
 import 'widgets/app_scaffold.dart';
 
 void main() async {
@@ -27,13 +31,32 @@ void main() async {
     await windowManager.focus();
   });
 
-  runApp(MyApp(backendClient: BackendClient()));
+  // Backend URL precedence: the ENV_DASHBOARD_BACKEND_URL env var wins (and is
+  // shown locked in Settings); otherwise the saved in-app value; otherwise the
+  // BackendClient's localhost default (null → default).
+  final envUrl = Platform.environment['ENV_DASHBOARD_BACKEND_URL'];
+  final configStore = await ConfigStore.load(backendUrlEnvOverride: envUrl);
+  final effectiveUrl = (envUrl != null && envUrl.isNotEmpty)
+      ? envUrl
+      : configStore.config.backendBaseUrl;
+
+  runApp(
+    MyApp(
+      backendClient: BackendClient(baseUrl: effectiveUrl),
+      configStore: configStore,
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
   final BackendClient backendClient;
+  final ConfigStore configStore;
 
-  const MyApp({super.key, required this.backendClient});
+  const MyApp({
+    super.key,
+    required this.backendClient,
+    required this.configStore,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -41,6 +64,7 @@ class MyApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => AppThemeController()..load()),
         Provider<BackendClient>.value(value: backendClient),
+        ChangeNotifierProvider<ConfigStore>.value(value: configStore),
         // Brokers Server/Database credentials on demand and launches the user's
         // own SSH/DB tools with them (ADR-0005); persists no secrets.
         Provider<AccessLauncher>(create: (_) => AccessLauncher(backendClient)),
@@ -81,6 +105,7 @@ class _HomePageState extends State<HomePage> {
         index: _selectedIndex,
         children: const [
           CatalogPage(),
+          SettingsPage(),
           AboutPage(),
         ],
       ),
