@@ -95,9 +95,43 @@ class CatalogAcl {
     }
   }
 
-  /// Resolve a `ServerDto` into a render-ready Server reference.
-  static ServerRefView serverRefView(ServerDto dto) =>
-      ServerRefView(id: dto.id, host: _blankToNull(dto.host));
+  /// Resolve a `ServerDto` into a render-ready Server reference, carrying the
+  /// non-secret SSH coordinates for the card's SSH 信息 section.
+  static ServerRefView serverRefView(ServerDto dto) => ServerRefView(
+    id: dto.id,
+    host: _blankToNull(dto.host),
+    sshHost: _blankToNull(dto.ssh?.host),
+    sshPort: dto.ssh?.port,
+    sshUsername: _blankToNull(dto.ssh?.username),
+  );
+
+  /// Assemble an Oracle Easy Connect login string for sqlplus / PL/SQL Developer:
+  /// `username/password@host:port/serviceName`. The password segment is dropped
+  /// when none is brokered (yielding `username@host…`, which prompts), and the
+  /// credential prefix is dropped entirely when there's no username. Any missing
+  /// coordinate is omitted; an empty string is returned when there is no host.
+  static String sqlplusConnectString({
+    String? username,
+    String? password,
+    String? host,
+    int? port,
+    String? serviceName,
+  }) {
+    final h = host?.trim();
+    if (h == null || h.isEmpty) return '';
+    final user = username?.trim() ?? '';
+    final pass = password?.trim() ?? '';
+    final credential = user.isEmpty
+        ? ''
+        : (pass.isEmpty ? user : '$user/$pass');
+    final buf = StringBuffer();
+    if (credential.isNotEmpty) buf.write('$credential@');
+    buf.write(h);
+    if (port != null) buf.write(':$port');
+    final svc = serviceName?.trim();
+    if (svc != null && svc.isNotEmpty) buf.write('/$svc');
+    return buf.toString();
+  }
 
   /// Resolve a `DatabaseDto` into a render-ready Database reference, mapping the
   /// free-text role and the engine type to localized labels.

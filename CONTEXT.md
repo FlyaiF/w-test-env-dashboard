@@ -62,4 +62,7 @@ concept, two uses.
 
 **Credential brokering**:
 The server holding Server/Database secrets encrypted at rest and delivering them to a client on
-demand, so the user can launch their own SSH or DB tool. The client never stores secrets durably.
+demand — to launch the user's own SSH or DB tool, or to reveal/copy a credential the user explicitly
+asks for. The client fetches each secret just-in-time and never stores it durably. The TENVINFO
+migration populates the broker from the legacy plaintext, so brokered credentials exist from day one
+(see ADR-0008).

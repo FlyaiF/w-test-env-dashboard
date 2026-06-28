@@ -29,8 +29,8 @@ class EnvironmentStore extends ChangeNotifier {
   /// host instead of a bare `#id`. Empty when inventory could not be fetched.
   Map<int, ServerRefView> get serverRefs => Map.unmodifiable(_serverRefs);
 
-  /// Resolved Database references by id, for the 使用数据库 field and the launch
-  /// menu. Empty when inventory could not be fetched.
+  /// Resolved Database references by id, for the 数据库信息 section rows and the
+  /// launch menu. Empty when inventory could not be fetched.
   Map<int, DatabaseRefView> get databaseRefs => Map.unmodifiable(_databaseRefs);
 
   /// Whether the backend has been reached successfully at least once. Drives the

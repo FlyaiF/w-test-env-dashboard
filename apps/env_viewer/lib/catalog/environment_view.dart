@@ -76,12 +76,39 @@ class ServerRefView {
   final int id;
   final String? host;
 
-  const ServerRefView({required this.id, this.host});
+  /// Non-secret SSH coordinates (no password — brokered) for the SSH 信息 section.
+  final String? sshHost;
+  final int? sshPort;
+  final String? sshUsername;
+
+  const ServerRefView({
+    required this.id,
+    this.host,
+    this.sshHost,
+    this.sshPort,
+    this.sshUsername,
+  });
 
   /// Label for the component card's 运行主机 field — the host, or `#id` if blank.
   String get cardLabel => (host != null && host!.trim().isNotEmpty)
       ? host!.trim()
       : '#$id';
+
+  /// Address shown in the SSH 信息 section: `user@host`, plus `:port` only when the
+  /// port is set and non-default (22). Empty when no host is known. The password is
+  /// never part of this — it is revealed/copied on demand from the broker.
+  String get sshAddress {
+    final h = (sshHost != null && sshHost!.trim().isNotEmpty)
+        ? sshHost!.trim()
+        : host?.trim();
+    if (h == null || h.isEmpty) return '';
+    final user = sshUsername?.trim();
+    final buf = StringBuffer();
+    if (user != null && user.isNotEmpty) buf.write('$user@');
+    buf.write(h);
+    if (sshPort != null && sshPort != 22) buf.write(':$sshPort');
+    return buf.toString();
+  }
 }
 
 /// A resolved Database reference, ready to render. Built by [CatalogAcl] from a
@@ -119,8 +146,8 @@ class DatabaseRefView {
     return buf.toString();
   }
 
-  /// Full label for the card's 使用数据库 field: `role · type · address`,
-  /// dropping any blank segment.
+  /// Full label for a 数据库信息 row: `role · type · address`, dropping any blank
+  /// segment.
   String get cardLabel {
     final parts = [roleLabel, typeLabel, address]
         .where((p) => p.trim().isNotEmpty)

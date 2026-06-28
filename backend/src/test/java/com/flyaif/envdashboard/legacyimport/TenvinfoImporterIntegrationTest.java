@@ -1,5 +1,6 @@
 package com.flyaif.envdashboard.legacyimport;
 
+import com.flyaif.envdashboard.access.AccessBrokerService;
 import com.flyaif.envdashboard.catalog.EnvironmentRepository;
 import com.flyaif.envdashboard.catalog.domain.Component;
 import com.flyaif.envdashboard.catalog.domain.ComponentRole;
@@ -42,6 +43,9 @@ class TenvinfoImporterIntegrationTest {
 
     @Autowired
     private DatabaseRepository databases;
+
+    @Autowired
+    private AccessBrokerService broker;
 
     @BeforeEach
     void clean() {
@@ -108,8 +112,11 @@ class TenvinfoImporterIntegrationTest {
         assertThat(business.getConnection().getServiceName()).isEqualTo("ORCL");
         assertThat(business.getConnection().getUsername()).isEqualTo("app");
 
-        // The password was present but deliberately not persisted (brokered in slice 06).
+        // The legacy passwords are migrated into the encrypted broker (ADR-0008), reachable only via
+        // on-demand brokering — never along the Inventory read DTOs asserted above.
         assertThat(report.getCredentialsSeen()).isGreaterThan(0);
+        assertThat(broker.brokerServerCredential(component.getServerId()).secret()).isEqualTo("secret");
+        assertThat(broker.brokerDatabaseCredential(business.getId()).secret()).isEqualTo("pw");
     }
 
     @Test
@@ -138,6 +145,12 @@ class TenvinfoImporterIntegrationTest {
             assertThat(component.getServerId()).isEqualTo(sharedServerId);
             assertThat(component.getDatabaseIds()).containsExactly(sharedDbId);
         }
+
+        // The shared resources keep the first row's secret; the duplicate password is reported, not
+        // stored over the top (ADR-0008).
+        assertThat(broker.brokerServerCredential(sharedServerId).secret()).isEqualTo("pw");
+        assertThat(broker.brokerDatabaseCredential(sharedDbId).secret()).isEqualTo("pw");
+        assertThat(report.getNotes()).anySatisfy(n -> assertThat(n.message()).contains("not stored"));
     }
 
     @Test
@@ -224,5 +237,7 @@ class TenvinfoImporterIntegrationTest {
         assertThat(environments.findAll()).isEmpty();
         assertThat(servers.findAll()).isEmpty();
         assertThat(databases.findAll()).isEmpty();
+        // A dry run sees the credential but persists no Server/Database, so nothing reaches the broker.
+        assertThat(report.getCredentialsSeen()).isGreaterThan(0);
     }
 }

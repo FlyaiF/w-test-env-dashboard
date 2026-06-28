@@ -10,6 +10,7 @@ import '../../catalog/environment_store.dart';
 import '../../catalog/environment_view.dart';
 import 'catalog_editors.dart';
 import 'component_access.dart';
+import 'connection_sections.dart';
 
 /// Browser + curation surface for the Environment Catalog. Lists Environments
 /// from the backend, shows the selected Environment's Components, and drives
@@ -613,14 +614,6 @@ class _ComponentCard extends StatelessWidget {
                     ? null
                     : (serverRef?.cardLabel ?? '#${c.serverId}'),
               ),
-              _Field(
-                '使用数据库',
-                c.databaseIds.isEmpty
-                    ? null
-                    : c.databaseIds
-                          .map((id) => dbRefs[id]?.cardLabel ?? '#$id')
-                          .join('、'),
-              ),
             ],
           ),
           if (c.url != null) ...[
@@ -646,6 +639,16 @@ class _ComponentCard extends StatelessWidget {
             const SizedBox(height: 12),
             const Divider(height: 1),
             const SizedBox(height: 10),
+            if (c.serverId != null)
+              SshInfoSection(serverId: c.serverId!, server: serverRef),
+            if (c.serverId != null && c.databaseIds.isNotEmpty)
+              const SizedBox(height: 12),
+            if (c.databaseIds.isNotEmpty)
+              DatabaseInfoSection(
+                databaseIds: c.databaseIds,
+                databaseRefs: store.databaseRefs,
+              ),
+            const SizedBox(height: 12),
             ComponentAccessBar(
               serverId: c.serverId,
               databaseIds: c.databaseIds,

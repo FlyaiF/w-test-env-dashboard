@@ -119,6 +119,86 @@ void main() {
       final ref = CatalogAcl.serverRefView(const ServerDto(id: 6, host: '  '));
       expect(ref.cardLabel, '#6');
     });
+
+    test('sshAddress is user@host, dropping the default port 22', () {
+      final ref = CatalogAcl.serverRefView(
+        const ServerDto(
+          id: 6,
+          host: '10.20.155.175',
+          ssh: SshAccessInfo(
+            host: '10.20.155.175',
+            port: 22,
+            username: 'ta66',
+          ),
+        ),
+      );
+      expect(ref.sshAddress, 'ta66@10.20.155.175');
+    });
+
+    test('sshAddress keeps a non-default port', () {
+      final ref = CatalogAcl.serverRefView(
+        const ServerDto(
+          id: 6,
+          host: 'h',
+          ssh: SshAccessInfo(host: 'h', port: 2222, username: 'ta66'),
+        ),
+      );
+      expect(ref.sshAddress, 'ta66@h:2222');
+    });
+
+    test('sshAddress falls back to the server host when no ssh block', () {
+      final ref = CatalogAcl.serverRefView(
+        const ServerDto(id: 6, host: '10.20.155.175'),
+      );
+      expect(ref.sshAddress, '10.20.155.175'); // no user, no port
+    });
+  });
+
+  group('CatalogAcl.sqlplusConnectString', () {
+    test('full form is username/password@host:port/serviceName', () {
+      expect(
+        CatalogAcl.sqlplusConnectString(
+          username: 'app',
+          password: 'pw',
+          host: 'h',
+          port: 1521,
+          serviceName: 'ORCL',
+        ),
+        'app/pw@h:1521/ORCL',
+      );
+    });
+
+    test('omits the password segment when none is brokered', () {
+      expect(
+        CatalogAcl.sqlplusConnectString(
+          username: 'app',
+          host: 'h',
+          port: 1521,
+          serviceName: 'ORCL',
+        ),
+        'app@h:1521/ORCL',
+      );
+    });
+
+    test('omits the whole credential prefix when there is no username', () {
+      expect(
+        CatalogAcl.sqlplusConnectString(host: 'h', port: 1521, serviceName: 'ORCL'),
+        'h:1521/ORCL',
+      );
+    });
+
+    test('omits a missing port or service, and is empty without a host', () {
+      expect(
+        CatalogAcl.sqlplusConnectString(
+          username: 'app',
+          password: 'pw',
+          host: 'h',
+          serviceName: 'ORCL',
+        ),
+        'app/pw@h/ORCL',
+      );
+      expect(CatalogAcl.sqlplusConnectString(username: 'app', password: 'pw'), '');
+    });
   });
 
   group('CatalogAcl.databaseRefView', () {

@@ -1,5 +1,6 @@
 package com.flyaif.envdashboard.legacyimport;
 
+import com.flyaif.envdashboard.access.AccessBrokerService;
 import com.flyaif.envdashboard.catalog.EnvironmentRepository;
 import com.flyaif.envdashboard.catalog.domain.Component;
 import com.flyaif.envdashboard.catalog.domain.ComponentRole;
@@ -45,13 +46,16 @@ public class TenvinfoImporter {
     private final EnvironmentRepository environments;
     private final ServerRepository servers;
     private final DatabaseRepository databases;
+    private final AccessBrokerService broker;
 
     public TenvinfoImporter(EnvironmentRepository environments,
                             ServerRepository servers,
-                            DatabaseRepository databases) {
+                            DatabaseRepository databases,
+                            AccessBrokerService broker) {
         this.environments = environments;
         this.servers = servers;
         this.databases = databases;
+        this.broker = broker;
     }
 
     @Transactional
@@ -182,6 +186,10 @@ public class TenvinfoImporter {
         Server existing = serverByKey.get(key);
         if (existing != null) {
             report.serverReused();
+            if (addr.password() != null) {
+                report.note(row.eNo(), "server " + addr.host()
+                        + ": a second SSH password was seen but not stored (the shared server already has one)");
+            }
             return existing;
         }
         Server server = new Server(addr.host(), ServerOs.LINUX,
@@ -190,6 +198,11 @@ public class TenvinfoImporter {
         report.note(row.eNo(), "server " + addr.host() + ": OS defaulted to LINUX (legacy had none)");
         if (!dryRun) {
             server = servers.save(server);
+            if (addr.password() != null) {
+                // Migrate the legacy plaintext SSH secret into the encrypted broker (ADR-0008); it is
+                // never returned on the Server's Inventory DTO, only via on-demand brokering.
+                broker.storeServerSecret(server.getId(), addr.password());
+            }
         }
         serverByKey.put(key, server);
         return server;
@@ -220,6 +233,10 @@ public class TenvinfoImporter {
         Database existing = databaseByKey.get(key);
         if (existing != null) {
             report.databaseReused();
+            if (ref.password() != null) {
+                report.note(eNo, field + " " + ref.host()
+                        + ": a second DB password was seen but not stored (the shared database already has one)");
+            }
             return existing;
         }
         Database database = new Database(role, type,
@@ -227,6 +244,11 @@ public class TenvinfoImporter {
         report.databaseCreated();
         if (!dryRun) {
             database = databases.save(database);
+            if (ref.password() != null) {
+                // Migrate the legacy plaintext DB secret into the encrypted broker (ADR-0008); it is
+                // never returned on the Database's Inventory DTO, only via on-demand brokering.
+                broker.storeDatabaseSecret(database.getId(), ref.password());
+            }
         }
         databaseByKey.put(key, database);
         return database;
