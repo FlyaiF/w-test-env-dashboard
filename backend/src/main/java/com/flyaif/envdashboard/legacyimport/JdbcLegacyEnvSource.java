@@ -55,7 +55,7 @@ public class JdbcLegacyEnvSource implements LegacyEnvSource {
         // E_UPDATETIME is an Oracle DATE with no timezone (AGENTS.md gotcha): the legacy stack wrote it
         // with SYSDATE and read it back as local wall-clock. We mirror that here — getTimestamp()
         // interprets the value in the JVM's default zone and toInstant() pins it to a point in time.
-        // Run the import with TZ set to the legacy data's zone so deploy times migrate faithfully.
+        // Run the import with TZ set to the legacy data's zone so version-update times migrate faithfully.
         Timestamp updateTime = rs.getTimestamp("E_UPDATETIME");
         Instant updateInstant = updateTime == null ? null : updateTime.toInstant();
         return new LegacyEnvRow(

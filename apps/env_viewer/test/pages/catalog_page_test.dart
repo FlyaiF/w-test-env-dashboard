@@ -64,6 +64,68 @@ void main() {
     expect(find.byIcon(Icons.save), findsNothing);
   });
 
+  testWidgets('立即采集 button collects the selected environment in place', (
+    tester,
+  ) async {
+    var refreshCalls = 0;
+    final store = EnvironmentStore(
+      BackendClient(
+        baseUrl: 'http://test',
+        httpClient: MockClient((req) async {
+          if (req.method == 'POST' &&
+              req.url.path == '/api/environments/1/refresh') {
+            refreshCalls++;
+            return http.Response(
+              jsonEncode({
+                'id': 1,
+                'name': 'Alpha',
+                'memo': null,
+                'components': [
+                  {
+                    'id': 10,
+                    'role': 'GATEWAY',
+                    'version': '2.0.0',
+                    'versionUpdatedAt': '2026-07-01T02:30:00Z',
+                    'collectionStatus': 'OK',
+                  },
+                ],
+              }),
+              200,
+            );
+          }
+          if (req.url.path == '/api/environments') {
+            return http.Response(
+              jsonEncode([
+                {
+                  'id': 1,
+                  'name': 'Alpha',
+                  'memo': null,
+                  'components': [
+                    {'id': 10, 'role': 'GATEWAY', 'version': '1.2.3'},
+                  ],
+                },
+              ]),
+              200,
+            );
+          }
+          return http.Response('[]', 200); // servers/databases refs
+        }),
+      ),
+    );
+
+    await tester.pumpWidget(_wrap(store));
+    await tester.pumpAndSettle();
+    expect(find.text('1.2.3'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('立即采集'));
+    await tester.pumpAndSettle();
+
+    expect(refreshCalls, 1);
+    expect(find.text('2.0.0'), findsOneWidget); // fresh view swapped in place
+    expect(find.text('1.2.3'), findsNothing);
+    expect(find.textContaining('已采集'), findsOneWidget); // success snackbar
+  });
+
   testWidgets('shows an empty state when the backend returns nothing', (
     tester,
   ) async {

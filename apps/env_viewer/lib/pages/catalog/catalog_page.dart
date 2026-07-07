@@ -67,7 +67,7 @@ class _CatalogPageState extends State<CatalogPage> {
                   children: [
                     Expanded(child: _buildEnvList(envs, selected)),
                     const Divider(height: 1),
-                    SizedBox(height: 320, child: _buildDetailPane(selected)),
+                    SizedBox(height: 320, child: _buildDetailPane(store, selected)),
                   ],
                 );
               }
@@ -75,7 +75,7 @@ class _CatalogPageState extends State<CatalogPage> {
                 children: [
                   SizedBox(width: 420, child: _buildEnvList(envs, selected)),
                   const VerticalDivider(width: 1),
-                  Expanded(child: _buildDetailPane(selected)),
+                  Expanded(child: _buildDetailPane(store, selected)),
                 ],
               );
             },
@@ -169,7 +169,7 @@ class _CatalogPageState extends State<CatalogPage> {
     );
   }
 
-  Widget _buildDetailPane(EnvironmentView? env) {
+  Widget _buildDetailPane(EnvironmentStore store, EnvironmentView? env) {
     if (env == null) {
       return Center(
         child: Text(
@@ -182,6 +182,8 @@ class _CatalogPageState extends State<CatalogPage> {
     }
     return _EnvironmentDetail(
       env: env,
+      collecting: store.isCollecting(env.id),
+      onCollect: () => _collectNow(env),
       onOpenUrl: _launchUrl,
       onEdit: () => _editEnv(env),
       onDelete: () => _deleteEnv(env),
@@ -233,6 +235,19 @@ class _CatalogPageState extends State<CatalogPage> {
     if (uri != null) {
       await launchUrl(uri);
     }
+  }
+
+  // ---- Collection (slice 05 / issue 08) ----------------------------------
+
+  /// 立即采集: server-side Collection for one Environment, distinct from the
+  /// toolbar 刷新 which only re-fetches what the backend already knows.
+  Future<void> _collectNow(EnvironmentView env) async {
+    final store = context.read<EnvironmentStore>();
+    final error = await store.collectNow(env.id);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(error ?? '环境「${env.name}」已采集')),
+    );
   }
 
   // ---- Curation (slice 03) ----------------------------------------------
@@ -408,6 +423,11 @@ class _EnvListTile extends StatelessWidget {
 
 class _EnvironmentDetail extends StatelessWidget {
   final EnvironmentView env;
+
+  /// True while 立即采集 is in flight for this Environment; the button shows a
+  /// spinner and refuses re-entry.
+  final bool collecting;
+  final VoidCallback onCollect;
   final Future<void> Function(String url) onOpenUrl;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
@@ -417,6 +437,8 @@ class _EnvironmentDetail extends StatelessWidget {
 
   const _EnvironmentDetail({
     required this.env,
+    required this.collecting,
+    required this.onCollect,
     required this.onOpenUrl,
     required this.onEdit,
     required this.onDelete,
@@ -458,6 +480,17 @@ class _EnvironmentDetail extends StatelessWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(env.name, style: theme.textTheme.headlineSmall),
+                ),
+                IconButton(
+                  icon: collecting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.radar),
+                  tooltip: '立即采集',
+                  onPressed: collecting ? null : onCollect,
                 ),
                 IconButton(
                   icon: const Icon(Icons.edit_outlined),
@@ -593,10 +626,10 @@ class _ComponentCard extends StatelessWidget {
             fields: [
               _Field('版本', c.version),
               _Field(
-                '部署时间',
-                c.deployTime == null
+                '版本更新时间',
+                c.versionUpdatedAt == null
                     ? null
-                    : _dateFmt.format(c.deployTime!.toLocal()),
+                    : _dateFmt.format(c.versionUpdatedAt!.toLocal()),
               ),
               _Field('版本探测', c.versionProbeLabel),
               _Field(

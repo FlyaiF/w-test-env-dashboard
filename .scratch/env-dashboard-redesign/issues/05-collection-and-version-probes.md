@@ -1,6 +1,7 @@
 # 05 — Collection + Version probes
 
-Status: backend done — client "refresh now" action outstanding (see AC 6)
+Status: backend done — client "refresh now" action outstanding (see AC 6; picked up by issue 08,
+along with replacing the placeholder db-query probe with the real legacy version source)
 
 ## Parent
 
@@ -36,7 +37,7 @@ do not gate on native-image driver compatibility.
 - [x] Per-Component status is one of ok / failed / unsupported; a failing probe does not blank sibling Components
 - [x] At least two probe strategies exist behind one named extension point (e.g. db-query + http), pluggable without editing existing probes
 - [x] Probes reach machines via the shared Machine Access capability using slice-04 descriptors
-- [ ] Client shows "refresh now" and per-Component Version / deploy time / status / last-collected — ⚠️ PARTIAL: per-Component data renders (`CatalogPage`), but the client has no "refresh now" action wired to the refresh endpoint (no `refresh` method on `BackendClient`/`EnvironmentStore`; the toolbar 刷新 only re-fetches). Needs a small client slice.
+- [x] Client shows "refresh now" and per-Component Version / 版本更新时间 / status / last-collected — closed by issue 08 (立即采集 button on the environment detail header → `POST /{id}/refresh`, in-place swap; "deploy time" renamed 版本更新时间).
 - [x] Tests cover the probe extension point and graceful per-Component degradation (`VersionProbeRegistryTest`, `CollectionServiceTest`)
 
 ## Blocked by

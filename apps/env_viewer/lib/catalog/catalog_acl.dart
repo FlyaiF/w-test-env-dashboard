@@ -57,7 +57,7 @@ class CatalogAcl {
       roleCode: dto.role,
       roleLabel: roleLabel(dto.role),
       version: _blankToNull(dto.version),
-      deployTime: dto.deployTime,
+      versionUpdatedAt: dto.versionUpdatedAt,
       logLocation: _blankToNull(dto.logLocation),
       listenPort: dto.listenPort,
       protocol: _blankToNull(dto.protocol),

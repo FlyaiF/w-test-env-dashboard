@@ -70,7 +70,7 @@ class EnvironmentControllerTest {
                 .andExpect(jsonPath("$.memo").value("first env"))
                 .andExpect(jsonPath("$.components", hasSize(2)))
                 .andExpect(jsonPath("$.components[?(@.role=='GATEWAY')].version").value("1.2.3"))
-                .andExpect(jsonPath("$.components[?(@.role=='GATEWAY')].deployTime")
+                .andExpect(jsonPath("$.components[?(@.role=='GATEWAY')].versionUpdatedAt")
                         .value("2026-01-02T03:04:05Z"))
                 .andExpect(jsonPath("$.components[?(@.role=='GATEWAY')].serverId").value(5))
                 // Definite path here: a filter expression would wrap the array, breaking hasItems.

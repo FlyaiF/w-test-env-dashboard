@@ -19,6 +19,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 
@@ -71,6 +72,8 @@ class CollectionServiceTest {
         given(machineAccess.httpGet("http://bad/version"))
                 .willThrow(new MachineAccessException("connection refused"));
         given(machineAccess.queryScalar(any(Database.class), anyString())).willReturn("7.7.7");
+        given(machineAccess.queryInstant(any(Database.class), anyString()))
+                .willReturn(Instant.parse("2026-06-30T18:00:00Z"));
 
         Database appDb = databases.save(new Database("business", DatabaseType.ORACLE, null));
 
@@ -108,6 +111,7 @@ class CollectionServiceTest {
         ComponentDto dbComp = byRole(refreshed, ComponentRole.APP);
         assertThat(dbComp.collectionStatus()).isEqualTo("OK");
         assertThat(dbComp.version()).isEqualTo("7.7.7");
+        assertThat(dbComp.versionUpdatedAt()).isEqualTo(Instant.parse("2026-06-30T18:00:00Z"));
 
         ComponentDto failComp = byRole(refreshed, ComponentRole.UI);
         assertThat(failComp.collectionStatus()).isEqualTo("FAILED");

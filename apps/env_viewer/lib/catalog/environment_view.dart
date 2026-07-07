@@ -22,7 +22,7 @@ class ComponentView {
 
   /// Live version string, or null when blank/unknown.
   final String? version;
-  final DateTime? deployTime;
+  final DateTime? versionUpdatedAt;
   final String? logLocation;
   final int? listenPort;
   final String? protocol;
@@ -55,7 +55,7 @@ class ComponentView {
     this.roleCode,
     required this.roleLabel,
     this.version,
-    this.deployTime,
+    this.versionUpdatedAt,
     this.logLocation,
     this.listenPort,
     this.protocol,

@@ -15,7 +15,7 @@ import java.time.Instant;
 public record ComponentRequest(
         @NotNull ComponentRole role,
         String version,
-        Instant deployTime,
+        Instant versionUpdatedAt,
         String logLocation,
         Integer listenPort,
         String protocol,

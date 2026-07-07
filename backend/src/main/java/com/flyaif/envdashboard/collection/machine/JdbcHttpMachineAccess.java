@@ -14,8 +14,11 @@ import java.net.http.HttpResponse;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Timestamp;
 import java.time.Duration;
+import java.time.Instant;
 
 /**
  * Real {@link MachineAccess}: HTTP over {@link HttpClient}, databases over JDBC with the driver chosen
@@ -63,6 +66,19 @@ public class JdbcHttpMachineAccess implements MachineAccess {
 
     @Override
     public String queryScalar(Database database, String sql) {
+        return querySingle(database, sql, rows -> rows.getString(1));
+    }
+
+    @Override
+    public Instant queryInstant(Database database, String sql) {
+        return querySingle(database, sql, rows -> {
+            Timestamp value = rows.getTimestamp(1);
+            return value == null ? null : value.toInstant();
+        });
+    }
+
+    /** Reads column 1 of the first row via {@code reader}, or returns null when there is no row. */
+    private <T> T querySingle(Database database, String sql, ScalarReader<T> reader) {
         String url = JdbcUrlBuilder.forDatabase(database);
         if (url == null) {
             throw new MachineAccessException(
@@ -76,14 +92,17 @@ public class JdbcHttpMachineAccess implements MachineAccess {
              Statement statement = connection.createStatement();
              ResultSet rows = statement.executeQuery(sql)) {
             if (!rows.next()) {
-                throw new MachineAccessException("Query returned no rows: " + sql);
+                return null;
             }
-            return rows.getString(1);
-        } catch (MachineAccessException e) {
-            throw e;
+            return reader.read(rows);
         } catch (Exception e) {
             throw new MachineAccessException(
                     "Failed querying database " + database.getId() + ": " + e.getMessage(), e);
         }
+    }
+
+    @FunctionalInterface
+    private interface ScalarReader<T> {
+        T read(ResultSet rows) throws SQLException;
     }
 }

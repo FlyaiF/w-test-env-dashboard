@@ -32,7 +32,7 @@ class EnvironmentRepositoryTest {
         Environment env = new Environment("ENV-A", "first env");
         Component gateway = new Component(ComponentRole.GATEWAY);
         gateway.setVersion("1.2.3");
-        gateway.setDeployTime(Instant.parse("2026-01-02T03:04:05Z"));
+        gateway.setVersionUpdatedAt(Instant.parse("2026-01-02T03:04:05Z"));
         gateway.setLogLocation("/var/log/gateway.log");
         gateway.setListenPort(8080);
         gateway.setProtocol("https");
@@ -56,7 +56,7 @@ class EnvironmentRepositoryTest {
                 .findFirst().orElseThrow();
         assertThat(reloadedGateway.getId()).isNotNull();
         assertThat(reloadedGateway.getVersion()).isEqualTo("1.2.3");
-        assertThat(reloadedGateway.getDeployTime()).isEqualTo(Instant.parse("2026-01-02T03:04:05Z"));
+        assertThat(reloadedGateway.getVersionUpdatedAt()).isEqualTo(Instant.parse("2026-01-02T03:04:05Z"));
         assertThat(reloadedGateway.getListenPort()).isEqualTo(8080);
         // Collection fields stay null until slice 05.
         assertThat(reloadedGateway.getCollectionStatus()).isNull();

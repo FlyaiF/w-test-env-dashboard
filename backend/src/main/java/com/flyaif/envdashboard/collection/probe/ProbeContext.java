@@ -15,8 +15,15 @@ import java.util.Optional;
  */
 public record ProbeContext(Component component, Server server, List<Database> databases) {
 
-    /** The first linked Database, if any — the db-query probe targets it. */
-    public Optional<Database> primaryDatabase() {
-        return databases.isEmpty() ? Optional.empty() : Optional.of(databases.get(0));
+    /**
+     * The Database the db-query probe targets: the linked Database with the well-known
+     * {@link Database#BUSINESS_ROLE} (业务库 — where the upgrade process records version and
+     * 版本更新时间), falling back to the first linked Database when no role matches.
+     */
+    public Optional<Database> businessDatabase() {
+        return databases.stream()
+                .filter(db -> Database.BUSINESS_ROLE.equalsIgnoreCase(db.getRole()))
+                .findFirst()
+                .or(() -> databases.stream().findFirst());
     }
 }

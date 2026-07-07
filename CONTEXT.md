@@ -14,7 +14,7 @@ _Avoid_: env record, TENVINFO row, instance
 
 **Component**:
 One deployable part of an Environment (e.g. nginx gateway, UI, main service, private-protocol
-service). Has a role, a single version (or blank), a deploy time, a log location, a reachability
+service). Has a role, a single version (or blank), a version update time, a log location, a reachability
 (port/protocol/URL); runs on a Server and uses Databases, both by reference. The role is one of the
 four kinds above or **unspecified** (未指定) — "not yet classified", e.g. for a component imported from
 legacy data that carried no role; a human assigns the real role later.
@@ -35,8 +35,15 @@ _Avoid_: YWDB, ZJDB, DSN slot
 
 **Version**:
 The single version string currently live for a Component (or blank if unknown). Paired with a
-**deploy time** so devops can judge whether a deploy took effect. There is no recorded "expected"
-version — environments are eyeball-compared against each other.
+**Version update time** so devops can judge whether an update took effect. There is no recorded
+"expected" version — environments are eyeball-compared against each other.
+
+**Version update time** (版本更新时间):
+When the Component's database last had a schema change applied — the moment its Version last moved.
+Written by the upgrade process in the environment's business database, alongside the Version itself.
+It says nothing about app restarts or code deployments.
+_Avoid_: deploy time (the value tracks database upgrades, not app deployments), update time (ambiguous
+with last-collected time)
 
 **Up to date**:
 A human judgement, not a stored flag — made by comparing live Versions across Environments. The
@@ -46,7 +53,7 @@ _Avoid_: reconciliation, drift (no target version exists to reconcile against)
 ## Server-side capabilities
 
 **Collection**:
-The act of refreshing Components' live data (Version, deploy time) from the running system. Runs on a
+The act of refreshing Components' live data (Version, Version update time) from the running system. Runs on a
 schedule and on manual "refresh now". Each Component's Collection carries a status (ok / failed /
 unsupported) and a last-collected time.
 

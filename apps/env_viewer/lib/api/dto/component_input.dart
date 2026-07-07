@@ -7,7 +7,7 @@ class ComponentInput {
   /// Wire enum: UNSPECIFIED | GATEWAY | UI | APP | PRIVATE_PROTO. Required by the backend.
   final String role;
   final String? version;
-  final DateTime? deployTime;
+  final DateTime? versionUpdatedAt;
   final String? logLocation;
   final int? listenPort;
   final String? protocol;
@@ -19,7 +19,7 @@ class ComponentInput {
   const ComponentInput({
     required this.role,
     this.version,
-    this.deployTime,
+    this.versionUpdatedAt,
     this.logLocation,
     this.listenPort,
     this.protocol,
@@ -31,7 +31,7 @@ class ComponentInput {
     'role': role,
     'version': version,
     // Instants cross the wire as UTC ISO-8601, matching the read DTO's parsing.
-    'deployTime': deployTime?.toUtc().toIso8601String(),
+    'versionUpdatedAt': versionUpdatedAt?.toUtc().toIso8601String(),
     'logLocation': logLocation,
     'listenPort': listenPort,
     'protocol': protocol,

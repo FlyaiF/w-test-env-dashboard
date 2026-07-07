@@ -7,7 +7,7 @@ class ComponentDto {
   final int id;
   final String? role; // UNSPECIFIED | GATEWAY | UI | APP | PRIVATE_PROTO
   final String? version;
-  final DateTime? deployTime;
+  final DateTime? versionUpdatedAt;
   final String? logLocation;
   final int? listenPort;
   final String? protocol;
@@ -22,7 +22,7 @@ class ComponentDto {
     required this.id,
     this.role,
     this.version,
-    this.deployTime,
+    this.versionUpdatedAt,
     this.logLocation,
     this.listenPort,
     this.protocol,
@@ -39,7 +39,7 @@ class ComponentDto {
       id: (json['id'] as num).toInt(),
       role: json['role'] as String?,
       version: json['version'] as String?,
-      deployTime: _parseInstant(json['deployTime']),
+      versionUpdatedAt: _parseInstant(json['versionUpdatedAt']),
       logLocation: json['logLocation'] as String?,
       listenPort: (json['listenPort'] as num?)?.toInt(),
       protocol: json['protocol'] as String?,

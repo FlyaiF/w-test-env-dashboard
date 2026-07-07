@@ -18,7 +18,7 @@ void main() {
             'id': 10,
             'role': 'GATEWAY',
             'version': '1.2.3',
-            'deployTime': '2026-06-20T08:30:00Z',
+            'versionUpdatedAt': '2026-06-20T08:30:00Z',
             'logLocation': '/var/log/gw.log',
             'listenPort': 8443,
             'protocol': 'https',
@@ -41,7 +41,7 @@ void main() {
       expect(c.id, 10);
       expect(c.role, 'GATEWAY');
       expect(c.version, '1.2.3');
-      expect(c.deployTime, DateTime.utc(2026, 6, 20, 8, 30));
+      expect(c.versionUpdatedAt, DateTime.utc(2026, 6, 20, 8, 30));
       expect(c.logLocation, '/var/log/gw.log');
       expect(c.listenPort, 8443);
       expect(c.protocol, 'https');
@@ -63,7 +63,7 @@ void main() {
             'id': 11,
             'role': 'UI',
             'version': null,
-            'deployTime': null,
+            'versionUpdatedAt': null,
             'logLocation': null,
             'listenPort': null,
             'protocol': null,
@@ -80,7 +80,7 @@ void main() {
       expect(dto.name, isNull);
       final c = dto.components.single;
       expect(c.version, isNull);
-      expect(c.deployTime, isNull);
+      expect(c.versionUpdatedAt, isNull);
       expect(c.serverId, isNull);
       expect(c.databaseIds, isEmpty);
       expect(c.collectionStatus, isNull);

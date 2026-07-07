@@ -29,20 +29,20 @@ void main() {
       expect(json['versionProbe'], 'HTTP');
     });
 
-    test('emits deployTime as a UTC ISO-8601 instant', () {
+    test('emits versionUpdatedAt as a UTC ISO-8601 instant', () {
       final json = ComponentInput(
         role: 'APP',
-        deployTime: DateTime.utc(2026, 1, 2, 3, 4, 5),
+        versionUpdatedAt: DateTime.utc(2026, 1, 2, 3, 4, 5),
       ).toJson();
 
-      expect(json['deployTime'], '2026-01-02T03:04:05.000Z');
+      expect(json['versionUpdatedAt'], '2026-01-02T03:04:05.000Z');
     });
 
     test('leaves optional fields null rather than dropping their keys', () {
       final json = const ComponentInput(role: 'UI').toJson();
       expect(json.containsKey('version'), isTrue);
       expect(json['version'], isNull);
-      expect(json['deployTime'], isNull);
+      expect(json['versionUpdatedAt'], isNull);
       expect(json['versionProbe'], isNull);
     });
   });

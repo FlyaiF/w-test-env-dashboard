@@ -93,6 +93,39 @@ class EnvironmentStore extends ChangeNotifier {
     }
   }
 
+  /// Whether a 立即采集 request is in flight for this Environment. Drives the
+  /// per-card button's spinner/disabled state.
+  bool isCollecting(int environmentId) => _collecting.contains(environmentId);
+  final Set<int> _collecting = {};
+
+  /// 立即采集: ask the backend to probe this Environment now and swap the
+  /// returned fresh view in place — deliberately no full list re-fetch, so the
+  /// rest of the catalog is untouched. Returns null on success or a localized
+  /// error message for the caller to surface (snackbar); unlike [load], it
+  /// never touches [error], because a failed collection is transient and
+  /// scoped to one Environment.
+  Future<String?> collectNow(int environmentId) async {
+    if (_collecting.contains(environmentId)) return null;
+    _collecting.add(environmentId);
+    notifyListeners();
+    try {
+      final dto = await _client.refreshEnvironment(environmentId);
+      final fresh = CatalogAcl.toView(dto);
+      final index = _all.indexWhere((e) => e.id == environmentId);
+      if (index >= 0) {
+        _all = List.of(_all)..[index] = fresh;
+      }
+      return null;
+    } on BackendException catch (e) {
+      return e.message;
+    } catch (e) {
+      return '采集失败：$e';
+    } finally {
+      _collecting.remove(environmentId);
+      notifyListeners();
+    }
+  }
+
   void setSearch(String value) {
     final next = value.trim();
     if (next == _search) return;

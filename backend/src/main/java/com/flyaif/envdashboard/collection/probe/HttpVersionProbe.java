@@ -6,7 +6,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * Obtains a Component's version from its HTTP endpoint (e.g. a {@code /health} or {@code /version} URL).
- * The trimmed response body is taken as the live version; the probe leaves deploy time to a richer
+ * The trimmed response body is taken as the live version; the probe leaves the Version update time to a richer
  * probe rather than guessing. Registered for {@link VersionProbeKind#HTTP}.
  */
 @Component

@@ -37,7 +37,7 @@ public final class EnvironmentMapper {
     public static void applyTo(Component component, ComponentRequest request) {
         component.setRole(request.role());
         component.setVersion(request.version());
-        component.setDeployTime(request.deployTime());
+        component.setVersionUpdatedAt(request.versionUpdatedAt());
         component.setLogLocation(request.logLocation());
         component.setListenPort(request.listenPort());
         component.setProtocol(request.protocol());
@@ -61,7 +61,7 @@ public final class EnvironmentMapper {
                 component.getId(),
                 name(component.getRole()),
                 component.getVersion(),
-                component.getDeployTime(),
+                component.getVersionUpdatedAt(),
                 component.getLogLocation(),
                 component.getListenPort(),
                 component.getProtocol(),

@@ -131,7 +131,7 @@ class _ComponentEditorDialogState extends State<_ComponentEditorDialog> {
   late String _role;
   String? _versionProbe;
   late final TextEditingController _version;
-  late final TextEditingController _deployTime;
+  late final TextEditingController _versionUpdatedAt;
   late final TextEditingController _logLocation;
   late final TextEditingController _listenPort;
   late final TextEditingController _protocol;
@@ -146,8 +146,8 @@ class _ComponentEditorDialogState extends State<_ComponentEditorDialog> {
     _role = e?.roleCode ?? CatalogAcl.roleCodes.first;
     _versionProbe = e?.versionProbeCode;
     _version = TextEditingController(text: e?.version ?? '');
-    _deployTime = TextEditingController(
-      text: e?.deployTime == null ? '' : _dateFmt.format(e!.deployTime!.toLocal()),
+    _versionUpdatedAt = TextEditingController(
+      text: e?.versionUpdatedAt == null ? '' : _dateFmt.format(e!.versionUpdatedAt!.toLocal()),
     );
     _logLocation = TextEditingController(text: e?.logLocation ?? '');
     _listenPort = TextEditingController(text: e?.listenPort?.toString() ?? '');
@@ -158,7 +158,7 @@ class _ComponentEditorDialogState extends State<_ComponentEditorDialog> {
   @override
   void dispose() {
     _version.dispose();
-    _deployTime.dispose();
+    _versionUpdatedAt.dispose();
     _logLocation.dispose();
     _listenPort.dispose();
     _protocol.dispose();
@@ -166,8 +166,8 @@ class _ComponentEditorDialogState extends State<_ComponentEditorDialog> {
     super.dispose();
   }
 
-  DateTime? _parseDeployTime() {
-    final text = _deployTime.text.trim();
+  DateTime? _parseVersionUpdatedAt() {
+    final text = _versionUpdatedAt.text.trim();
     if (text.isEmpty) return null;
     return _dateFmt.parseStrict(text);
   }
@@ -179,7 +179,7 @@ class _ComponentEditorDialogState extends State<_ComponentEditorDialog> {
       ComponentInput(
         role: _role,
         version: _blankToNull(_version.text),
-        deployTime: _parseDeployTime(),
+        versionUpdatedAt: _parseVersionUpdatedAt(),
         logLocation: _blankToNull(_logLocation.text),
         listenPort: port.isEmpty ? null : int.parse(port),
         protocol: _blankToNull(_protocol.text),
@@ -237,9 +237,9 @@ class _ComponentEditorDialogState extends State<_ComponentEditorDialog> {
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
-                  controller: _deployTime,
+                  controller: _versionUpdatedAt,
                   decoration: const InputDecoration(
-                    labelText: '部署时间',
+                    labelText: '版本更新时间',
                     hintText: 'yyyy-MM-dd HH:mm',
                   ),
                   validator: (v) {

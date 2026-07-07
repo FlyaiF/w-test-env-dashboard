@@ -2,6 +2,8 @@ package com.flyaif.envdashboard.collection.machine;
 
 import com.flyaif.envdashboard.inventory.domain.Database;
 
+import java.time.Instant;
+
 /**
  * The single shared "obtain something from a machine" capability (PRD §4). It is the one place that
  * actually touches the network, so every {@link com.flyaif.envdashboard.collection.probe.VersionProbe}
@@ -23,7 +25,15 @@ public interface MachineAccess {
     /**
      * Open a JDBC connection to the Database (driver chosen by its {@link Database#getType()} and the
      * slice-04 {@code ConnectionDescriptor}), run the query, and return the first column of the first
-     * row as text. Throws on any connection/SQL error.
+     * row as text — or {@code null} when the query yields no rows, so a probe can tell "the data is
+     * absent" apart from "the machine is unreachable". Throws on any connection/SQL error.
      */
     String queryScalar(Database database, String sql);
+
+    /**
+     * Like {@link #queryScalar} but reads the first column of the first row as a timestamp — or
+     * {@code null} when the query yields no rows or the value is SQL NULL. The value is interpreted
+     * in this JVM's zone (Oracle {@code DATE} carries none). Throws on any connection/SQL error.
+     */
+    Instant queryInstant(Database database, String sql);
 }

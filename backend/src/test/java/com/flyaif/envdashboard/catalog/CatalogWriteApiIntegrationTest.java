@@ -73,7 +73,7 @@ class CatalogWriteApiIntegrationTest {
                 "memo", "first env",
                 "components", List.of(
                         Map.of("role", "GATEWAY", "version", "1.2.3",
-                                "deployTime", "2026-01-02T03:04:05Z",
+                                "versionUpdatedAt", "2026-01-02T03:04:05Z",
                                 "logLocation", "/var/log/gw.log", "listenPort", 8080,
                                 "protocol", "https", "url", "https://gw/health",
                                 "versionProbe", "HTTP"),

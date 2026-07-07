@@ -24,7 +24,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * The Version Collection core capability. Refreshes each Component's live version, deploy time, status,
+ * The Version Collection core capability. Refreshes each Component's live version, Version update time (版本更新时间), status,
  * and last-collected time by dispatching it to the {@link VersionProbe} for its kind. Each Component is
  * collected independently and defensively: a probe that throws or fails turns into a {@code FAILED}
  * status for that one Component, never blanking its siblings (PRD §6 graceful degradation).
@@ -96,11 +96,11 @@ public class CollectionService {
         switch (result.status()) {
             case OK -> {
                 component.setVersion(result.version());
-                if (result.deployTime() != null) {
-                    component.setDeployTime(result.deployTime());
+                if (result.versionUpdatedAt() != null) {
+                    component.setVersionUpdatedAt(result.versionUpdatedAt());
                 }
             }
-            case FAILED, UNSUPPORTED -> { /* keep prior version/deployTime */ }
+            case FAILED, UNSUPPORTED -> { /* keep prior version/versionUpdatedAt */ }
         }
     }
 

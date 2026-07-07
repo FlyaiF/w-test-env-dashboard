@@ -38,8 +38,8 @@ import java.util.Set;
 @Service
 public class TenvinfoImporter {
 
-    /** Slot label for the legacy business DB (业务库). */
-    private static final String BUSINESS_DB_ROLE = "business";
+    /** Slot label for the legacy business DB (业务库) — the probe-targeted role (issue 08). */
+    private static final String BUSINESS_DB_ROLE = Database.BUSINESS_ROLE;
     /** Slot label for the legacy intermediate DB (中间库). */
     private static final String INTERMEDIATE_DB_ROLE = "intermediate";
 
@@ -130,7 +130,7 @@ public class TenvinfoImporter {
         // explicitly UNSPECIFIED for a human to classify later — never guessed (ADR-0007).
         Component component = new Component(ComponentRole.UNSPECIFIED);
         component.setVersion(version);
-        component.setDeployTime(row.updateTime());
+        component.setVersionUpdatedAt(row.updateTime());
         component.setLogLocation(logLocation);
         component.setUrl(url);
         if (server != null) {

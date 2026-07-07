@@ -92,6 +92,14 @@ class BackendClient {
         .toList();
   }
 
+  /// Ask the backend to collect this Environment right now — 立即采集
+  /// (`POST /api/environments/{id}/refresh`, slice 05) — and return its
+  /// freshly-collected view (versions, 版本更新时间, per-component status).
+  Future<EnvironmentDto> refreshEnvironment(int id) async {
+    final body = await _send('POST', '/api/environments/$id/refresh');
+    return _asEnvironment(body);
+  }
+
   /// Create an Environment (optionally seeding inline Components) and return it.
   Future<EnvironmentDto> createEnvironment(EnvironmentInput input) async {
     final body = await _send('POST', '/api/environments', body: input.toJson());

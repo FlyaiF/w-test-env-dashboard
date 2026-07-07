@@ -73,7 +73,7 @@ public class LocalSeedData implements CommandLineRunner {
         Environment alpha = new Environment("测试环境 Alpha", "QA 主测试环境");
         Component alphaGateway = new Component(ComponentRole.GATEWAY);
         alphaGateway.setVersion("2.4.1");
-        alphaGateway.setDeployTime(Instant.parse("2026-06-20T08:30:00Z"));
+        alphaGateway.setVersionUpdatedAt(Instant.parse("2026-06-20T08:30:00Z"));
         alphaGateway.setLogLocation("/var/log/nginx/gateway.log");
         alphaGateway.setListenPort(443);
         alphaGateway.setProtocol("https");
@@ -84,7 +84,7 @@ public class LocalSeedData implements CommandLineRunner {
 
         Component alphaApp = new Component(ComponentRole.APP);
         alphaApp.setVersion("2.4.0");
-        alphaApp.setDeployTime(Instant.parse("2026-06-19T14:05:00Z"));
+        alphaApp.setVersionUpdatedAt(Instant.parse("2026-06-19T14:05:00Z"));
         alphaApp.setLogLocation("/opt/app/logs/app.log");
         alphaApp.setListenPort(8080);
         alphaApp.setProtocol("http");
@@ -104,7 +104,7 @@ public class LocalSeedData implements CommandLineRunner {
         Environment beta = new Environment("测试环境 Beta", null);
         Component betaApp = new Component(ComponentRole.APP);
         betaApp.setVersion("3.0.0-rc2");
-        betaApp.setDeployTime(Instant.parse("2026-06-24T11:00:00Z"));
+        betaApp.setVersionUpdatedAt(Instant.parse("2026-06-24T11:00:00Z"));
         betaApp.setLogLocation("/opt/app/logs/app.log");
         betaApp.setListenPort(8080);
         betaApp.setProtocol("http");

@@ -22,7 +22,7 @@ import java.util.Set;
 
 /**
  * One deployable part of an {@link Environment} (gateway, UI, app, private-protocol service).
- * Carries a role, a single live {@link #version} (or blank) with its deploy time, a log location,
+ * Carries a role, a single live {@link #version} (or blank) with its Version update time, a log location,
  * reachability (listen port / protocol / URL), and Collection bookkeeping that stays null until
  * the collector lands (slice 05). Not an aggregate root — only ever reached through its Environment.
  */
@@ -57,8 +57,8 @@ public class Component {
     @Column(name = "app_version", length = 200)
     private String version;
 
-    @Column(name = "deploy_time")
-    private Instant deployTime;
+    @Column(name = "version_updated_at")
+    private Instant versionUpdatedAt;
 
     @Column(name = "log_location", length = 500)
     private String logLocation;
@@ -138,12 +138,12 @@ public class Component {
         this.version = version;
     }
 
-    public Instant getDeployTime() {
-        return deployTime;
+    public Instant getVersionUpdatedAt() {
+        return versionUpdatedAt;
     }
 
-    public void setDeployTime(Instant deployTime) {
-        this.deployTime = deployTime;
+    public void setVersionUpdatedAt(Instant versionUpdatedAt) {
+        this.versionUpdatedAt = versionUpdatedAt;
     }
 
     public String getLogLocation() {

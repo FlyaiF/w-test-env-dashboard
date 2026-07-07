@@ -20,6 +20,13 @@ import jakarta.persistence.Table;
 @Table(name = "database_resource")
 public class Database {
 
+    /**
+     * Well-known {@link #role} for an environment's business database (业务库, legacy E_YWDB). The role
+     * is free text, but this value is load-bearing: the db-query version probe reads the version and
+     * 版本更新时间 from the linked Database carrying it (issue 08). The TENVINFO importer stamps it.
+     */
+    public static final String BUSINESS_ROLE = "business";
+
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "database_seq_gen")
     @SequenceGenerator(name = "database_seq_gen", sequenceName = "database_seq", allocationSize = 1)
