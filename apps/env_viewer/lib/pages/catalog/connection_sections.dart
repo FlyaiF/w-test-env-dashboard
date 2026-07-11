@@ -25,56 +25,100 @@ class SshInfoSection extends StatefulWidget {
 class _SshInfoSectionState extends State<SshInfoSection> {
   bool _busy = false;
   bool _revealed = false;
-  bool _fetched = false;
   String? _secret;
+  int _requestVersion = 0;
 
-  /// Fetch the brokered secret once and remember whether one exists. Returns false
-  /// (and surfaces a message) on a broker error so callers can stay masked.
-  Future<bool> _ensureSecret() async {
-    if (_fetched) return _secret != null;
+  /// Fetch for one explicit user action. The version check makes a response from
+  /// a Server that is no longer rendered inert, including when navigation happens
+  /// while the broker request is still in flight.
+  Future<({bool completed, String? secret})> _fetchSecret() async {
+    final requestVersion = ++_requestVersion;
+    final serverId = widget.serverId;
     final client = context.read<BackendClient>();
     setState(() => _busy = true);
     try {
-      final cred = await client.getServerCredentials(widget.serverId);
-      _secret = cred.secret;
-      _fetched = true;
-      return _secret != null;
+      final cred = await client.getServerCredentials(serverId);
+      if (!_isCurrent(requestVersion, serverId)) {
+        return (completed: false, secret: null);
+      }
+      return (completed: true, secret: cred.secret);
     } on BackendException catch (e) {
-      _toast(e.message);
-      return false;
+      if (_isCurrent(requestVersion, serverId)) _toast(e.message);
+      return (completed: false, secret: null);
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (_isCurrent(requestVersion, serverId)) {
+        setState(() => _busy = false);
+      }
     }
   }
+
+  bool _isCurrent(int requestVersion, int serverId) =>
+      mounted &&
+      requestVersion == _requestVersion &&
+      serverId == widget.serverId;
 
   Future<void> _toggleReveal() async {
     if (_revealed) {
-      setState(() => _revealed = false);
+      setState(() {
+        _revealed = false;
+        _secret = null;
+      });
       return;
     }
-    final has = await _ensureSecret();
-    if (!mounted) return;
-    if (!has) {
+    final result = await _fetchSecret();
+    if (!mounted || !result.completed) return;
+    if (result.secret == null) {
       _toast('未配置密码');
       return;
     }
-    setState(() => _revealed = true);
+    setState(() {
+      _secret = result.secret;
+      _revealed = true;
+    });
   }
 
   Future<void> _copy() async {
-    final has = await _ensureSecret();
-    if (!mounted) return;
-    if (!has) {
+    final result = await _fetchSecret();
+    if (!mounted || !result.completed) return;
+    final secret = result.secret;
+    if (secret == null) {
+      if (_revealed || _secret != null) {
+        setState(() {
+          _revealed = false;
+          _secret = null;
+        });
+      }
       _toast('未配置密码');
       return;
     }
-    await Clipboard.setData(ClipboardData(text: _secret!));
+    if (_revealed) setState(() => _secret = secret);
+    await Clipboard.setData(ClipboardData(text: secret));
     if (mounted) _toast('已复制密码');
+  }
+
+  @override
+  void didUpdateWidget(covariant SshInfoSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.serverId != widget.serverId) {
+      _requestVersion++;
+      _busy = false;
+      _revealed = false;
+      _secret = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _requestVersion++;
+    _secret = null;
+    super.dispose();
   }
 
   void _toast(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -161,7 +205,11 @@ class DatabaseInfoSection extends StatelessWidget {
         _SectionLabel('数据库信息'),
         const SizedBox(height: 6),
         for (final id in databaseIds)
-          _DatabaseRow(databaseId: id, ref: databaseRefs[id]),
+          _DatabaseRow(
+            key: ValueKey(id),
+            databaseId: id,
+            ref: databaseRefs[id],
+          ),
       ],
     );
   }
@@ -171,7 +219,7 @@ class _DatabaseRow extends StatefulWidget {
   final int databaseId;
   final DatabaseRefView? ref;
 
-  const _DatabaseRow({required this.databaseId, this.ref});
+  const _DatabaseRow({super.key, required this.databaseId, this.ref});
 
   @override
   State<_DatabaseRow> createState() => _DatabaseRowState();
@@ -179,13 +227,16 @@ class _DatabaseRow extends StatefulWidget {
 
 class _DatabaseRowState extends State<_DatabaseRow> {
   bool _busy = false;
+  int _requestVersion = 0;
 
   Future<void> _copy() async {
+    final requestVersion = ++_requestVersion;
+    final databaseId = widget.databaseId;
     final client = context.read<BackendClient>();
-    final messenger = ScaffoldMessenger.of(context);
     setState(() => _busy = true);
     try {
-      final cred = await client.getDatabaseCredentials(widget.databaseId);
+      final cred = await client.getDatabaseCredentials(databaseId);
+      if (!_isCurrent(requestVersion, databaseId)) return;
       final connect = CatalogAcl.sqlplusConnectString(
         username: cred.username,
         password: cred.secret,
@@ -194,20 +245,48 @@ class _DatabaseRowState extends State<_DatabaseRow> {
         serviceName: cred.serviceName,
       );
       if (connect.isEmpty) {
-        messenger.showSnackBar(const SnackBar(content: Text('该数据库没有连接信息')));
+        _toast('该数据库没有连接信息');
         return;
       }
+      if (!_isCurrent(requestVersion, databaseId)) return;
       await Clipboard.setData(ClipboardData(text: connect));
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(cred.secret == null ? '已复制连接串（无密码）' : '已复制连接串'),
-        ),
-      );
+      if (_isCurrent(requestVersion, databaseId)) {
+        _toast(cred.secret == null ? '已复制连接串（无密码）' : '已复制连接串');
+      }
     } on BackendException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+      if (_isCurrent(requestVersion, databaseId)) _toast(e.message);
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (_isCurrent(requestVersion, databaseId)) {
+        setState(() => _busy = false);
+      }
     }
+  }
+
+  bool _isCurrent(int requestVersion, int databaseId) =>
+      mounted &&
+      requestVersion == _requestVersion &&
+      databaseId == widget.databaseId;
+
+  void _toast(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  @override
+  void didUpdateWidget(covariant _DatabaseRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.databaseId != widget.databaseId) {
+      _requestVersion++;
+      _busy = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _requestVersion++;
+    super.dispose();
   }
 
   @override

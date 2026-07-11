@@ -25,12 +25,28 @@ public final class JdbcUrlBuilder {
         }
         DatabaseType type = database.getType() == null ? DatabaseType.OTHER : database.getType();
         String host = c.getHost();
-        Integer port = c.getPort();
+        Integer port = c.getPort() == null ? defaultPort(type) : c.getPort();
         String service = c.getServiceName();
         return switch (type) {
             case ORACLE -> "jdbc:oracle:thin:@//" + host + ":" + port + "/" + service;
             case DAMENG -> "jdbc:dm://" + host + ":" + port;
-            case OCEANBASE -> "jdbc:oceanbase://" + host + ":" + port + "/" + service;
+            // The OceanBase driver uses a distinct protocol for Oracle compatibility mode. The
+            // generic jdbc:oceanbase:// shape selects MySQL mode and cannot run the Oracle SQL used
+            // by the version probe.
+            case OCEANBASE -> "jdbc:oceanbase:oracle://" + host + ":" + port + "/" + service;
+            case OTHER -> null;
+        };
+    }
+
+    /** The conventional engine port used when a legacy descriptor omitted it; null for OTHER. */
+    public static Integer defaultPort(DatabaseType type) {
+        if (type == null) {
+            return null;
+        }
+        return switch (type) {
+            case ORACLE -> 1521;
+            case DAMENG -> 5236;
+            case OCEANBASE -> 2881;
             case OTHER -> null;
         };
     }

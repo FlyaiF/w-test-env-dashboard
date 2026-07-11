@@ -5,6 +5,11 @@ import com.flyaif.envdashboard.catalog.EnvironmentRepository;
 import com.flyaif.envdashboard.catalog.domain.Component;
 import com.flyaif.envdashboard.catalog.domain.ComponentRole;
 import com.flyaif.envdashboard.catalog.domain.Environment;
+import com.flyaif.envdashboard.catalog.domain.VersionProbeKind;
+import com.flyaif.envdashboard.catalog.web.dto.ComponentDto;
+import com.flyaif.envdashboard.catalog.web.dto.EnvironmentDto;
+import com.flyaif.envdashboard.collection.CollectionService;
+import com.flyaif.envdashboard.collection.machine.MachineAccess;
 import com.flyaif.envdashboard.inventory.DatabaseRepository;
 import com.flyaif.envdashboard.inventory.ServerRepository;
 import com.flyaif.envdashboard.inventory.domain.Database;
@@ -15,6 +20,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
@@ -22,6 +28,11 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
 
 /**
  * Full-stack import tests against H2 (Oracle mode): a complete legacy row maps to the right
@@ -46,6 +57,12 @@ class TenvinfoImporterIntegrationTest {
 
     @Autowired
     private AccessBrokerService broker;
+
+    @Autowired
+    private CollectionService collection;
+
+    @MockBean
+    private MachineAccess machineAccess;
 
     @BeforeEach
     void clean() {
@@ -93,6 +110,7 @@ class TenvinfoImporterIntegrationTest {
         assertThat(component.getVersionUpdatedAt()).isEqualTo(Instant.parse("2026-06-20T08:30:00Z"));
         assertThat(component.getLogLocation()).isEqualTo("/var/log/app.log");
         assertThat(component.getUrl()).isEqualTo("https://alpha.test/health");
+        assertThat(component.getVersionProbe()).isEqualTo(VersionProbeKind.DB);
         assertThat(component.getServerId()).isNotNull();
         assertThat(component.getDatabaseIds()).hasSize(2);
 
@@ -117,6 +135,116 @@ class TenvinfoImporterIntegrationTest {
         assertThat(report.getCredentialsSeen()).isGreaterThan(0);
         assertThat(broker.brokerServerCredential(component.getServerId()).secret()).isEqualTo("secret");
         assertThat(broker.brokerDatabaseCredential(business.getId()).secret()).isEqualTo("pw");
+        assertThat(report.render())
+                .contains("secrets encrypted in the access broker")
+                .doesNotContain("Credentials seen but NOT stored");
+    }
+
+    @Test
+    void migratedBusinessDatabaseDispatchesDbCollectionAndRefreshesVersion() {
+        Instant refreshedAt = Instant.parse("2026-07-01T03:04:05Z");
+        given(machineAccess.queryScalar(any(Database.class), anyString())).willReturn(" 5.6.7 ");
+        given(machineAccess.queryInstant(any(Database.class), anyString())).willReturn(refreshedAt);
+
+        LegacyEnvRow row = new LegacyEnvRow(101L, "环境 Collect",
+                "app/pw@business-db:1521/ORCL", null, null, "old-version", null, null,
+                null, null, null, "oracle");
+
+        importer.run(source(row), false);
+        Environment imported = environments.findAll().get(0);
+        assertThat(imported.getComponents().get(0).getVersionProbe()).isEqualTo(VersionProbeKind.DB);
+
+        EnvironmentDto refreshed = collection.refresh(imported.getId());
+        ComponentDto component = refreshed.components().get(0);
+        assertThat(component.collectionStatus()).isEqualTo("OK");
+        assertThat(component.version()).isEqualTo("5.6.7");
+        assertThat(component.versionUpdatedAt()).isEqualTo(refreshedAt);
+        verify(machineAccess).queryScalar(
+                argThat(database -> Database.BUSINESS_ROLE.equals(database.getRole())), anyString());
+        verify(machineAccess).queryInstant(
+                argThat(database -> Database.BUSINESS_ROLE.equals(database.getRole())), anyString());
+    }
+
+    @Test
+    void importsDecodedOceanBaseQueryCredentialsAndOracleModeUrl() {
+        LegacyEnvRow row = new LegacyEnvRow(104L, "环境 OceanBase",
+                "jdbc:oceanbase:oracle://ob.example:2881/APP"
+                        + "?connectTimeout=5000&user=app%40oracle_tenant&password=p%2Bss%26word",
+                null, null, null, null, null, null, null, null, "oceanbase");
+
+        importer.run(source(row), false);
+
+        Database database = databases.findAll().get(0);
+        assertThat(database.getType()).isEqualTo(DatabaseType.OCEANBASE);
+        assertThat(database.getConnection().getUsername()).isEqualTo("app@oracle_tenant");
+        assertThat(broker.brokerDatabaseCredential(database.getId()).secret()).isEqualTo("p+ss&word");
+        assertThat(broker.brokerDatabaseCredential(database.getId()).jdbcUrl())
+                .isEqualTo("jdbc:oceanbase:oracle://ob.example:2881/APP");
+    }
+
+    @Test
+    void defaultsOmittedEnginePortsAndReportsTheNormalization() {
+        LegacyEnvRow oracle = new LegacyEnvRow(105L, "环境 Oracle Default Port",
+                "jdbc:oracle:thin:app/pw@oracle-db/ORCL", null, null, null, null, null,
+                null, null, null, "oracle");
+        LegacyEnvRow dameng = new LegacyEnvRow(106L, "环境 Dameng Default Port",
+                "app/pw@dameng-db/DMDB", null, null, null, null, null,
+                null, null, null, "dameng");
+        LegacyEnvRow oceanBase = new LegacyEnvRow(107L, "环境 OceanBase Default Port",
+                "jdbc:oceanbase:oracle://ocean-db/APP?user=app&password=pw", null,
+                null, null, null, null, null, null, null, "oceanbase");
+
+        ImportReport report = importer.run(source(oracle, dameng, oceanBase), false);
+
+        List<Database> imported = databases.findAll();
+        Database oracleDb = imported.stream()
+                .filter(database -> database.getType() == DatabaseType.ORACLE).findFirst().orElseThrow();
+        Database damengDb = imported.stream()
+                .filter(database -> database.getType() == DatabaseType.DAMENG).findFirst().orElseThrow();
+        Database oceanBaseDb = imported.stream()
+                .filter(database -> database.getType() == DatabaseType.OCEANBASE).findFirst().orElseThrow();
+
+        assertThat(oracleDb.getConnection().getPort()).isEqualTo(1521);
+        assertThat(damengDb.getConnection().getPort()).isEqualTo(5236);
+        assertThat(oceanBaseDb.getConnection().getPort()).isEqualTo(2881);
+        assertThat(broker.brokerDatabaseCredential(oracleDb.getId()).jdbcUrl())
+                .isEqualTo("jdbc:oracle:thin:@//oracle-db:1521/ORCL");
+        assertThat(broker.brokerDatabaseCredential(damengDb.getId()).jdbcUrl())
+                .isEqualTo("jdbc:dm://dameng-db:5236");
+        assertThat(broker.brokerDatabaseCredential(oceanBaseDb.getId()).jdbcUrl())
+                .isEqualTo("jdbc:oceanbase:oracle://ocean-db:2881/APP");
+        assertThat(report.getNotes())
+                .extracting(ImportReport.Note::message)
+                .anyMatch(message -> message.contains("defaulted to 1521 for ORACLE"))
+                .anyMatch(message -> message.contains("defaulted to 5236 for DAMENG"))
+                .anyMatch(message -> message.contains("defaulted to 2881 for OCEANBASE"));
+    }
+
+    @Test
+    void componentWithoutUsableBusinessDatabaseGetsExplicitNoProbePolicy() {
+        LegacyEnvRow row = new LegacyEnvRow(102L, "环境 No DB",
+                null, null, "https://env.example/health", "1.0", null, null,
+                null, null, null, "oracle");
+
+        importer.run(source(row), false);
+
+        Component component = environments.findAll().get(0).getComponents().get(0);
+        assertThat(component.getVersionProbe()).isEqualTo(VersionProbeKind.NONE);
+    }
+
+    @Test
+    void keepsBusinessAndIntermediateRolesDistinctWhenTheyShareAConnection() {
+        LegacyEnvRow row = new LegacyEnvRow(103L, "环境 Shared Roles",
+                "app/pw@shared-db:1521/ORCL",
+                "app/pw@shared-db:1521/ORCL",
+                null, null, null, null, null, null, null, "oracle");
+
+        importer.run(source(row), false);
+
+        assertThat(databases.findAll())
+                .extracting(Database::getRole)
+                .containsExactlyInAnyOrder(Database.BUSINESS_ROLE, "intermediate");
+        assertThat(environments.findAll().get(0).getComponents().get(0).getDatabaseIds()).hasSize(2);
     }
 
     @Test
@@ -239,5 +367,6 @@ class TenvinfoImporterIntegrationTest {
         assertThat(databases.findAll()).isEmpty();
         // A dry run sees the credential but persists no Server/Database, so nothing reaches the broker.
         assertThat(report.getCredentialsSeen()).isGreaterThan(0);
+        assertThat(report.render()).contains("dry run; no secrets stored");
     }
 }

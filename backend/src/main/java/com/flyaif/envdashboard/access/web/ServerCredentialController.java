@@ -4,7 +4,9 @@ import com.flyaif.envdashboard.access.AccessBrokerService;
 import com.flyaif.envdashboard.access.web.dto.SecretRequest;
 import com.flyaif.envdashboard.access.web.dto.ServerCredentialDto;
 import jakarta.validation.Valid;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -35,7 +37,9 @@ public class ServerCredentialController {
     }
 
     @GetMapping("/{id}/credentials")
-    public ServerCredentialDto credentials(@PathVariable Long id) {
-        return broker.brokerServerCredential(id);
+    public ResponseEntity<ServerCredentialDto> credentials(@PathVariable Long id) {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(broker.brokerServerCredential(id));
     }
 }

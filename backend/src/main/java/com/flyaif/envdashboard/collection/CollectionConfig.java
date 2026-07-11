@@ -1,5 +1,7 @@
 package com.flyaif.envdashboard.collection;
 
+import com.flyaif.envdashboard.collection.machine.JdbcAccessProperties;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableScheduling;
@@ -14,6 +16,7 @@ import java.time.Clock;
  */
 @Configuration
 @EnableScheduling
+@EnableConfigurationProperties(JdbcAccessProperties.class)
 public class CollectionConfig {
 
     @Bean

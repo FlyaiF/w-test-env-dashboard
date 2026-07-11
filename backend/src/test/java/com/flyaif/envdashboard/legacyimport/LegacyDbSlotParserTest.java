@@ -60,6 +60,60 @@ class LegacyDbSlotParserTest {
         assertThat(ref.port()).isEqualTo(2881);
         assertThat(ref.serviceName()).isEqualTo("obfz");
         assertThat(ref.username()).isEqualTo("obfz@tenant");
+        assertThat(ref.password()).isEqualTo("handsome");
+    }
+
+    @Test
+    void decodesUrlStyleQueryCredentialsWithoutSplittingEncodedDelimiters() {
+        LegacyDbRef ref = LegacyDbSlotParser.parse(
+                "jdbc:oceanbase:oracle://db.example:2881/tenant"
+                        + "?USER=app%40oracle_tenant&password=p%2Bss%26word%3D1")
+                .orElseThrow();
+
+        assertThat(ref.username()).isEqualTo("app@oracle_tenant");
+        assertThat(ref.password()).isEqualTo("p+ss&word=1");
+    }
+
+    @Test
+    void preservesLiteralPlusInsteadOfApplyingHtmlFormDecoding() {
+        LegacyDbRef ref = LegacyDbSlotParser.parse(
+                "jdbc:oceanbase:oracle://db.example:2881/tenant"
+                        + "?user=app+reader&password=p+ss%2Bword")
+                .orElseThrow();
+
+        assertThat(ref.username()).isEqualTo("app+reader");
+        assertThat(ref.password()).isEqualTo("p+ss+word");
+    }
+
+    @Test
+    void parsesQuotedPasswordContainingRawAmpersand() {
+        LegacyDbRef ref = LegacyDbSlotParser.parse(
+                "jdbc:oceanbase:oracle://db.example:2881/tenant"
+                        + "?password='p&ss'&socketTimeout=15000&user=app")
+                .orElseThrow();
+
+        assertThat(ref.username()).isEqualTo("app");
+        assertThat(ref.password()).isEqualTo("p&ss");
+    }
+
+    @Test
+    void stripsMatchingOuterQuotesAfterPercentDecoding() {
+        LegacyDbRef ref = LegacyDbSlotParser.parse(
+                "jdbc:oceanbase:oracle://db.example:2881/tenant"
+                        + "?user=app&password=%22p%26ss%22")
+                .orElseThrow();
+
+        assertThat(ref.password()).isEqualTo("p&ss");
+    }
+
+    @Test
+    void malformedUrlEscapeDoesNotAbortParsing() {
+        LegacyDbRef ref = LegacyDbSlotParser.parse(
+                "jdbc:oceanbase:oracle://db.example:2881/tenant?user=app&password=bad%escape")
+                .orElseThrow();
+
+        assertThat(ref.host()).isEqualTo("db.example");
+        assertThat(ref.password()).isEqualTo("bad%escape");
     }
 
     @Test
@@ -79,6 +133,16 @@ class LegacyDbSlotParserTest {
         assertThat(ref.host()).isEqualTo("dbhost");
         assertThat(ref.port()).isNull();
         assertThat(ref.serviceName()).isNull();
+    }
+
+    @Test
+    void parsesPortlessUrlForEngineAwareImporterDefault() {
+        LegacyDbRef ref = LegacyDbSlotParser.parse(
+                "jdbc:oceanbase:oracle://ob.example/APP?user=app&password=pw").orElseThrow();
+
+        assertThat(ref.host()).isEqualTo("ob.example");
+        assertThat(ref.port()).isNull();
+        assertThat(ref.serviceName()).isEqualTo("APP");
     }
 
     @Test

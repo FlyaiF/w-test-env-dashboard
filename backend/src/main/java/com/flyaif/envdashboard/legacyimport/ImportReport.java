@@ -19,7 +19,7 @@ public class ImportReport {
     public record BlankedField(long eNo, String field, String reason) {
     }
 
-    /** A judgement call worth a human's eye (e.g. a defaulted OS, an unstored credential). */
+    /** A judgement call worth a human's eye (e.g. a defaulted OS or a duplicate credential). */
     public record Note(long eNo, String message) {
     }
 
@@ -138,8 +138,10 @@ public class ImportReport {
         sb.append("Rows dropped          : ").append(droppedRows.size()).append('\n');
         sb.append("Fields blanked        : ").append(blankedFields.size()).append('\n');
         if (credentialsSeen > 0) {
-            sb.append("Credentials seen but NOT stored (brokered in slice 06): ")
-                    .append(credentialsSeen).append('\n');
+            sb.append("Legacy credential fields seen : ").append(credentialsSeen).append('\n');
+            sb.append(dryRun
+                    ? "Secret handling       : dry run; no secrets stored\n"
+                    : "Secret handling       : secrets encrypted in the access broker when present; first value wins for shared resources\n");
         }
 
         if (!droppedRows.isEmpty()) {

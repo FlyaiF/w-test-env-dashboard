@@ -8,7 +8,7 @@ import 'config_service.dart';
 /// the launch path and the Settings page, and persists every edit through
 /// [ConfigService]. Holds no durable secrets (ADR-0005).
 class ConfigStore extends ChangeNotifier {
-  AppConfig _config;
+  final AppConfig _config;
 
   /// The `ENV_DASHBOARD_BACKEND_URL` value captured at startup, or null. When
   /// present it wins over the saved URL and locks the Settings field, so the
@@ -34,13 +34,13 @@ class ConfigStore extends ChangeNotifier {
 
   /// The URL to display in the field: the env override if locked, else the saved
   /// value (empty string when neither is set).
-  String get effectiveBackendUrl =>
-      backendUrlLocked ? backendUrlEnvOverride! : (_config.backendBaseUrl ?? '');
+  String get effectiveBackendUrl => backendUrlLocked
+      ? backendUrlEnvOverride!
+      : (_config.backendBaseUrl ?? '');
 
   // --- Tool launch preferences --------------------------------------------
 
-  PasswordMode get passwordMode =>
-      _config.sshTools.passwordMode == 'clipboard'
+  PasswordMode get passwordMode => _config.sshTools.passwordMode == 'clipboard'
       ? PasswordMode.clipboard
       : PasswordMode.argv;
 

@@ -67,7 +67,10 @@ class _CatalogPageState extends State<CatalogPage> {
                   children: [
                     Expanded(child: _buildEnvList(envs, selected)),
                     const Divider(height: 1),
-                    SizedBox(height: 320, child: _buildDetailPane(store, selected)),
+                    SizedBox(
+                      height: 320,
+                      child: _buildDetailPane(store, selected),
+                    ),
                   ],
                 );
               }
@@ -89,45 +92,78 @@ class _CatalogPageState extends State<CatalogPage> {
     final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
-      child: Row(
-        children: [
-          Text('环境目录', style: theme.textTheme.headlineSmall),
-          const SizedBox(width: 12),
-          Text(
-            '显示 $visibleCount / ${store.totalCount} 条',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.outline,
-            ),
-          ),
-          const Spacer(),
-          SizedBox(
-            width: 340,
-            child: FilterHistoryTextField(
-              controller: _searchController,
-              filterText: _searchController.text,
-              hintText: '搜索编号、名称、备注、组件、版本...',
-              onChanged: (v) {
-                setState(() {});
-                _debounce?.cancel();
-                _debounce = Timer(const Duration(milliseconds: 250), () {
-                  store.setSearch(v);
-                });
-              },
-            ),
-          ),
-          const SizedBox(width: 8),
-          FilledButton.icon(
-            icon: const Icon(Icons.add, size: 18),
-            label: const Text('新建环境'),
-            onPressed: store.loading ? null : _createEnv,
-          ),
-          const SizedBox(width: 8),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: store.loading ? null : store.load,
-            tooltip: '刷新',
-          ),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final summary = Wrap(
+            spacing: 12,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text('环境目录', style: theme.textTheme.headlineSmall),
+              Text(
+                '显示 $visibleCount / ${store.totalCount} 条',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.outline,
+                ),
+              ),
+            ],
+          );
+          final search = FilterHistoryTextField(
+            controller: _searchController,
+            filterText: _searchController.text,
+            hintText: '搜索编号、名称、备注、组件、版本...',
+            onChanged: (v) {
+              setState(() {});
+              _debounce?.cancel();
+              _debounce = Timer(const Duration(milliseconds: 250), () {
+                store.setSearch(v);
+              });
+            },
+          );
+          final actions = Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              FilledButton.icon(
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('新建环境'),
+                onPressed: store.loading ? null : _createEnv,
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                icon: const Icon(Icons.refresh),
+                onPressed: store.loading ? null : store.load,
+                tooltip: '刷新',
+              ),
+            ],
+          );
+
+          if (constraints.maxWidth < 900) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Expanded(child: summary),
+                    const SizedBox(width: 12),
+                    actions,
+                  ],
+                ),
+                const SizedBox(height: 8),
+                search,
+              ],
+            );
+          }
+
+          return Row(
+            children: [
+              summary,
+              const Spacer(),
+              SizedBox(width: 340, child: search),
+              const SizedBox(width: 8),
+              actions,
+            ],
+          );
+        },
       ),
     );
   }
@@ -245,9 +281,9 @@ class _CatalogPageState extends State<CatalogPage> {
     final store = context.read<EnvironmentStore>();
     final error = await store.collectNow(env.id);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(error ?? '环境「${env.name}」已采集')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(error ?? '环境「${env.name}」已采集')));
   }
 
   // ---- Curation (slice 03) ----------------------------------------------
@@ -269,7 +305,10 @@ class _CatalogPageState extends State<CatalogPage> {
   }
 
   Future<void> _deleteEnv(EnvironmentView env) async {
-    final confirmed = await _confirm('删除环境', '确定删除环境「${env.name}」及其组件？此操作不可撤销。');
+    final confirmed = await _confirm(
+      '删除环境',
+      '确定删除环境「${env.name}」及其组件？此操作不可撤销。',
+    );
     if (!confirmed || !mounted) return;
     final store = context.read<EnvironmentStore>();
     final ok = await store.deleteEnvironment(env.id);
@@ -286,7 +325,10 @@ class _CatalogPageState extends State<CatalogPage> {
     _report(store, ok, '组件已添加');
   }
 
-  Future<void> _editComponent(EnvironmentView env, ComponentView component) async {
+  Future<void> _editComponent(
+    EnvironmentView env,
+    ComponentView component,
+  ) async {
     final input = await showComponentEditor(context, existing: component);
     if (input == null || !mounted) return;
     final store = context.read<EnvironmentStore>();
@@ -294,7 +336,10 @@ class _CatalogPageState extends State<CatalogPage> {
     _report(store, ok, '组件已更新');
   }
 
-  Future<void> _deleteComponent(EnvironmentView env, ComponentView component) async {
+  Future<void> _deleteComponent(
+    EnvironmentView env,
+    ComponentView component,
+  ) async {
     final confirmed = await _confirm('删除组件', '确定删除组件「${component.roleLabel}」？');
     if (!confirmed || !mounted) return;
     final store = context.read<EnvironmentStore>();
@@ -578,9 +623,7 @@ class _ComponentCard extends StatelessWidget {
     // back to `#id` when inventory is unavailable.
     final store = context.watch<EnvironmentStore>();
     final serverRef = c.serverId == null ? null : store.serverRefs[c.serverId];
-    final dbRefs = {
-      for (final id in c.databaseIds) id: store.databaseRefs[id],
-    };
+    final dbRefs = {for (final id in c.databaseIds) id: store.databaseRefs[id]};
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -593,7 +636,11 @@ class _ComponentCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.widgets_outlined, size: 18, color: theme.colorScheme.primary),
+              Icon(
+                Icons.widgets_outlined,
+                size: 18,
+                color: theme.colorScheme.primary,
+              ),
               const SizedBox(width: 8),
               Text(
                 c.roleLabel,
@@ -673,7 +720,11 @@ class _ComponentCard extends StatelessWidget {
             const Divider(height: 1),
             const SizedBox(height: 10),
             if (c.serverId != null)
-              SshInfoSection(serverId: c.serverId!, server: serverRef),
+              SshInfoSection(
+                key: ValueKey(c.serverId),
+                serverId: c.serverId!,
+                server: serverRef,
+              ),
             if (c.serverId != null && c.databaseIds.isNotEmpty)
               const SizedBox(height: 12),
             if (c.databaseIds.isNotEmpty)
@@ -791,11 +842,7 @@ class _FieldView extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 2),
-        SelectableText(
-          value,
-          maxLines: 2,
-          style: theme.textTheme.bodyMedium,
-        ),
+        SelectableText(value, maxLines: 2, style: theme.textTheme.bodyMedium),
       ],
     );
   }

@@ -1,5 +1,8 @@
 package com.flyaif.envdashboard.legacyimport;
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 /**
  * Masks credentials in a legacy composite string before it is echoed into the {@link ImportReport}.
  * The report is the slice's deliverable and is logged, so the careful never-persist-secrets stance
@@ -9,6 +12,9 @@ package com.flyaif.envdashboard.legacyimport;
  * row — are preserved.
  */
 final class LegacyValueRedactor {
+
+    private static final Pattern PASSWORD_QUERY_PARAMETER =
+            Pattern.compile("(?i)(?:^|[?&])password=");
 
     private LegacyValueRedactor() {
     }
@@ -48,7 +54,12 @@ final class LegacyValueRedactor {
             base = base.substring(0, start) + "***" + base.substring(at);
         }
 
-        query = query.replaceAll("(?i)(password=)[^&\\s]+", "$1***");
+        // Conservatively mask the remainder once password= begins. Quoted OceanBase passwords may
+        // legally contain '&', so stopping at the next ampersand could leak the secret tail into logs.
+        Matcher passwordParameter = PASSWORD_QUERY_PARAMETER.matcher(query);
+        if (passwordParameter.find()) {
+            query = query.substring(0, passwordParameter.end()) + "***";
+        }
         return base + query;
     }
 }

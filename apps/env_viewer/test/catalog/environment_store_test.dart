@@ -9,9 +9,16 @@ import 'package:http/testing.dart';
 BackendClient _clientReturning(Object json) {
   return BackendClient(
     baseUrl: 'http://test',
-    httpClient: MockClient((_) async => http.Response(jsonEncode(json), 200)),
+    httpClient: MockClient((_) async => _jsonResponse(json)),
   );
 }
+
+http.Response _jsonResponse(Object? body, [int statusCode = 200]) =>
+    http.Response.bytes(
+      utf8.encode(jsonEncode(body)),
+      statusCode,
+      headers: {'content-type': 'application/json; charset=utf-8'},
+    );
 
 void main() {
   group('EnvironmentStore.load', () {

@@ -3,6 +3,7 @@
 /// the presentation layer needs — already-localized labels and display-ready
 /// values. They are produced by [CatalogAcl] from the backend DTOs so backend
 /// wire shapes never leak into widgets.
+library;
 
 /// Collection outcome for a Component, decoupled from the backend's enum string
 /// so the UI can colour/branch on it without matching raw values.
@@ -90,9 +91,8 @@ class ServerRefView {
   });
 
   /// Label for the component card's 运行主机 field — the host, or `#id` if blank.
-  String get cardLabel => (host != null && host!.trim().isNotEmpty)
-      ? host!.trim()
-      : '#$id';
+  String get cardLabel =>
+      (host != null && host!.trim().isNotEmpty) ? host!.trim() : '#$id';
 
   /// Address shown in the SSH 信息 section: `user@host`, plus `:port` only when the
   /// port is set and non-default (22). Empty when no host is known. The password is
@@ -149,9 +149,11 @@ class DatabaseRefView {
   /// Full label for a 数据库信息 row: `role · type · address`, dropping any blank
   /// segment.
   String get cardLabel {
-    final parts = [roleLabel, typeLabel, address]
-        .where((p) => p.trim().isNotEmpty)
-        .toList();
+    final parts = [
+      roleLabel,
+      typeLabel,
+      address,
+    ].where((p) => p.trim().isNotEmpty).toList();
     return parts.isEmpty ? '#$id' : parts.join(' · ');
   }
 

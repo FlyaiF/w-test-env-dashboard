@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:env_viewer/api/backend_client.dart';
@@ -16,11 +17,14 @@ import 'package:provider/provider.dart';
 BackendClient _client({
   Map<int, Map<String, dynamic>> servers = const {},
   Map<int, Map<String, dynamic>> databases = const {},
+  Future<http.Response> Function(http.Request request)? handler,
 }) {
   return BackendClient(
     baseUrl: 'http://test',
     httpClient: MockClient((req) async {
-      final segs = req.url.pathSegments; // api, servers|databases, {id}, credentials
+      if (handler != null) return handler(req);
+      final segs =
+          req.url.pathSegments; // api, servers|databases, {id}, credentials
       final id = int.parse(segs[2]);
       final bundle = segs[1] == 'servers' ? servers[id] : databases[id];
       if (bundle == null) return http.Response('not found', 404);
@@ -80,12 +84,40 @@ void main() {
       expect(find.text('••••••'), findsNothing);
     });
 
-    testWidgets('reveal on a server with no stored secret warns and stays masked', (
+    testWidgets('every reveal and copy refetches; hiding drops the secret', (
       tester,
     ) async {
+      final copied = <String>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            copied.add((call.arguments as Map)['text'] as String);
+          }
+          return null;
+        },
+      );
+      addTearDown(() {
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        );
+      });
+
+      var requests = 0;
       final client = _client(
-        servers: {
-          7: {'serverId': 7, 'host': 'h', 'port': 22, 'username': 'u', 'secret': null},
+        handler: (req) async {
+          requests++;
+          return http.Response(
+            jsonEncode({
+              'serverId': 6,
+              'host': 'h',
+              'port': 22,
+              'username': 'u',
+              'secret': 'secret-$requests',
+            }),
+            200,
+          );
         },
       );
 
@@ -93,18 +125,182 @@ void main() {
         _host(
           client,
           const SshInfoSection(
-            serverId: 7,
-            server: ServerRefView(id: 7, host: 'h', sshHost: 'h', sshUsername: 'u'),
+            serverId: 6,
+            server: ServerRefView(id: 6, host: 'h'),
           ),
         ),
       );
 
       await tester.tap(find.byTooltip('显示密码'));
       await tester.pumpAndSettle();
+      expect(find.text('secret-1'), findsOneWidget);
 
-      expect(find.text('未配置密码'), findsOneWidget); // snackbar
-      expect(find.text('••••••'), findsOneWidget); // still masked
+      await tester.tap(find.byTooltip('复制密码'));
+      await tester.pumpAndSettle();
+      expect(copied, ['secret-2']);
+      expect(find.text('secret-2'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('隐藏密码'));
+      await tester.pumpAndSettle();
+      expect(find.text('secret-2'), findsNothing);
+      expect(find.text('••••••'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('显示密码'));
+      await tester.pumpAndSettle();
+      expect(find.text('secret-3'), findsOneWidget);
+      expect(requests, 3);
     });
+
+    testWidgets('changing Server clears a revealed secret before refetching', (
+      tester,
+    ) async {
+      final client = _client(
+        servers: {
+          6: {
+            'serverId': 6,
+            'host': 'a',
+            'port': 22,
+            'username': 'u',
+            'secret': 'server-a-secret',
+          },
+          7: {
+            'serverId': 7,
+            'host': 'b',
+            'port': 22,
+            'username': 'u',
+            'secret': 'server-b-secret',
+          },
+        },
+      );
+
+      await tester.pumpWidget(
+        _host(
+          client,
+          const SshInfoSection(
+            serverId: 6,
+            server: ServerRefView(id: 6, host: 'a'),
+          ),
+        ),
+      );
+      await tester.tap(find.byTooltip('显示密码'));
+      await tester.pumpAndSettle();
+      expect(find.text('server-a-secret'), findsOneWidget);
+
+      await tester.pumpWidget(
+        _host(
+          client,
+          const SshInfoSection(
+            serverId: 7,
+            server: ServerRefView(id: 7, host: 'b'),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('server-a-secret'), findsNothing);
+      expect(find.text('••••••'), findsOneWidget);
+      await tester.tap(find.byTooltip('显示密码'));
+      await tester.pumpAndSettle();
+      expect(find.text('server-b-secret'), findsOneWidget);
+    });
+
+    testWidgets('an in-flight response from the previous Server is ignored', (
+      tester,
+    ) async {
+      final firstResponse = Completer<http.Response>();
+      final client = _client(
+        handler: (req) async {
+          final id = int.parse(req.url.pathSegments[2]);
+          if (id == 6) return firstResponse.future;
+          return http.Response(
+            jsonEncode({
+              'serverId': 7,
+              'host': 'b',
+              'port': 22,
+              'username': 'u',
+              'secret': 'server-b-secret',
+            }),
+            200,
+          );
+        },
+      );
+
+      await tester.pumpWidget(
+        _host(
+          client,
+          const SshInfoSection(
+            serverId: 6,
+            server: ServerRefView(id: 6, host: 'a'),
+          ),
+        ),
+      );
+      await tester.tap(find.byTooltip('显示密码'));
+      await tester.pump();
+
+      await tester.pumpWidget(
+        _host(
+          client,
+          const SshInfoSection(
+            serverId: 7,
+            server: ServerRefView(id: 7, host: 'b'),
+          ),
+        ),
+      );
+      firstResponse.complete(
+        http.Response(
+          jsonEncode({
+            'serverId': 6,
+            'host': 'a',
+            'port': 22,
+            'username': 'u',
+            'secret': 'server-a-secret',
+          }),
+          200,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('server-a-secret'), findsNothing);
+      expect(find.text('••••••'), findsOneWidget);
+    });
+
+    testWidgets(
+      'reveal on a server with no stored secret warns and stays masked',
+      (tester) async {
+        final client = _client(
+          servers: {
+            7: {
+              'serverId': 7,
+              'host': 'h',
+              'port': 22,
+              'username': 'u',
+              'secret': null,
+            },
+          },
+        );
+
+        await tester.pumpWidget(
+          _host(
+            client,
+            const SshInfoSection(
+              serverId: 7,
+              server: ServerRefView(
+                id: 7,
+                host: 'h',
+                sshHost: 'h',
+                sshUsername: 'u',
+              ),
+            ),
+          ),
+        );
+
+        await tester.tap(find.byTooltip('显示密码'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('未配置密码'), findsOneWidget); // snackbar
+        expect(find.text('••••••'), findsOneWidget); // still masked
+      },
+    );
   });
 
   group('DatabaseInfoSection', () {
@@ -167,6 +363,84 @@ void main() {
 
       expect(copied, ['app/pw@10.0.0.1:1521/ORCL']);
       expect(find.text('已复制连接串'), findsOneWidget); // snackbar
+    });
+
+    testWidgets('an in-flight response from a removed database is ignored', (
+      tester,
+    ) async {
+      final copied = <String>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            copied.add((call.arguments as Map)['text'] as String);
+          }
+          return null;
+        },
+      );
+      addTearDown(() {
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        );
+      });
+
+      final oldResponse = Completer<http.Response>();
+      final client = _client(
+        handler: (req) async {
+          final id = int.parse(req.url.pathSegments[2]);
+          if (id == 9) return oldResponse.future;
+          return http.Response(
+            jsonEncode({
+              'databaseId': 12,
+              'username': 'next',
+              'host': 'new-db',
+              'port': 1521,
+              'serviceName': 'NEXT',
+              'secret': 'new-secret',
+            }),
+            200,
+          );
+        },
+      );
+
+      await tester.pumpWidget(
+        _host(
+          client,
+          const DatabaseInfoSection(databaseIds: [9], databaseRefs: {}),
+        ),
+      );
+      await tester.tap(find.byTooltip('复制 sqlplus 连接串'));
+      await tester.pump();
+
+      await tester.pumpWidget(
+        _host(
+          client,
+          const DatabaseInfoSection(databaseIds: [12], databaseRefs: {}),
+        ),
+      );
+      oldResponse.complete(
+        http.Response(
+          jsonEncode({
+            'databaseId': 9,
+            'username': 'old',
+            'host': 'old-db',
+            'port': 1521,
+            'serviceName': 'OLD',
+            'secret': 'old-secret',
+          }),
+          200,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(copied, isEmpty);
+      expect(find.text('已复制连接串'), findsNothing);
+      expect(find.text('#12'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('复制 sqlplus 连接串'));
+      await tester.pumpAndSettle();
+      expect(copied, ['next/new-secret@new-db:1521/NEXT']);
     });
 
     testWidgets('an unresolved database falls back to #id and still copies', (

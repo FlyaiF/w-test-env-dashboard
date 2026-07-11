@@ -22,12 +22,13 @@ import java.util.Set;
 /**
  * Seeds a couple of demo Environments — plus shared Servers/Databases and the links between them — on
  * the {@code local} profile so the read and Resource Inventory APIs are immediately demoable on a
- * fresh H2. Never active in prod — keeps Oracle migrations free of seed rows.
+ * fresh H2. It stays disabled when the one-time {@code import} profile is also active, so a local
+ * migration rehearsal still targets an empty schema. Never active in prod.
  *
  * <p>Registered as a Spring bean via the fully-qualified {@code @org.springframework.stereotype.Component}
  * to avoid colliding with the domain {@link Component} type imported above.
  */
-@Profile("local")
+@Profile("local & !import")
 @org.springframework.stereotype.Component
 public class LocalSeedData implements CommandLineRunner {
 

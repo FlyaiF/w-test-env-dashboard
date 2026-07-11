@@ -8,3 +8,10 @@ own aggregates with independent lifecycle, and Components reference them **by ID
 opposite of the legacy flat `TENVINFO` row (which baked one web-server string and exactly two DB
 slots into each Environment), so it is worth recording why the ownership was deliberately inverted. A
 bonus: "which Environments run on machine X / use database Y?" becomes a first-class lookup.
+
+For identity purposes, a `Database` inventory record represents a **role-specific access profile**,
+not only a physical endpoint. Its role and login profile are part of the identity alongside engine,
+host, port, and service. The same physical endpoint may therefore have separate IDs when it is used as
+both a business and intermediate database (or through distinct login profiles). Sharing and import
+deduplication apply within the same role/access profile; this keeps role-dependent behavior such as
+business-database version collection deterministic.

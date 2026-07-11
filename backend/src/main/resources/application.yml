@@ -18,6 +18,12 @@ envdashboard:
     scheduler-enabled: true
     interval: PT5M
     initial-delay: PT30S
+    jdbc:
+      # Bounds for live DB version probes. Driver-specific connect/socket properties are supplied in
+      # addition to JDBC's standard login/query/network timeouts for Oracle/OceanBase compatibility.
+      login-timeout: PT5S
+      query-timeout: PT10S
+      read-timeout: PT15S
 
 # Liveness/readiness for the walking-skeleton health-check AC.
 management:

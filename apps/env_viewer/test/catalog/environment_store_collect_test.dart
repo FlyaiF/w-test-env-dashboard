@@ -40,41 +40,44 @@ void main() {
     ],
   };
 
-  test('collectNow POSTs to the refresh endpoint and swaps the env in place',
-      () async {
-    final requests = <String>[];
-    final store = EnvironmentStore(
-      BackendClient(
-        baseUrl: 'http://test',
-        httpClient: MockClient((req) async {
-          requests.add('${req.method} ${req.url.path}');
-          if (req.method == 'POST' && req.url.path == '/api/environments/1/refresh') {
-            return http.Response(jsonEncode(freshAlphaJson), 200);
-          }
-          if (req.url.path == '/api/environments') {
-            return http.Response(jsonEncode(listJson), 200);
-          }
-          return http.Response('[]', 200); // servers/databases refs
-        }),
-      ),
-    );
-    await store.load();
+  test(
+    'collectNow POSTs to the refresh endpoint and swaps the env in place',
+    () async {
+      final requests = <String>[];
+      final store = EnvironmentStore(
+        BackendClient(
+          baseUrl: 'http://test',
+          httpClient: MockClient((req) async {
+            requests.add('${req.method} ${req.url.path}');
+            if (req.method == 'POST' &&
+                req.url.path == '/api/environments/1/refresh') {
+              return _jsonResponse(freshAlphaJson);
+            }
+            if (req.url.path == '/api/environments') {
+              return _jsonResponse(listJson);
+            }
+            return http.Response('[]', 200); // servers/databases refs
+          }),
+        ),
+      );
+      await store.load();
 
-    final error = await store.collectNow(1);
+      final error = await store.collectNow(1);
 
-    expect(error, isNull);
-    expect(requests, contains('POST /api/environments/1/refresh'));
-    // Swapped in place from the response — not re-fetched.
-    expect(requests.where((r) => r == 'GET /api/environments'), hasLength(1));
-    final alpha = store.environments.singleWhere((e) => e.id == 1);
-    expect(alpha.components.single.version, '2.0.0');
-    expect(
-      alpha.components.single.versionUpdatedAt,
-      DateTime.utc(2026, 7, 1, 2, 30),
-    );
-    // Sibling untouched, ordering preserved.
-    expect(store.environments.map((e) => e.id), [1, 2]);
-  });
+      expect(error, isNull);
+      expect(requests, contains('POST /api/environments/1/refresh'));
+      // Swapped in place from the response — not re-fetched.
+      expect(requests.where((r) => r == 'GET /api/environments'), hasLength(1));
+      final alpha = store.environments.singleWhere((e) => e.id == 1);
+      expect(alpha.components.single.version, '2.0.0');
+      expect(
+        alpha.components.single.versionUpdatedAt,
+        DateTime.utc(2026, 7, 1, 2, 30),
+      );
+      // Sibling untouched, ordering preserved.
+      expect(store.environments.map((e) => e.id), [1, 2]);
+    },
+  );
 
   test('reports in-flight state while the request runs', () async {
     final gate = Completer<void>();
@@ -84,11 +87,10 @@ void main() {
         httpClient: MockClient((req) async {
           if (req.method == 'POST') {
             await gate.future;
-            return http.Response(jsonEncode(freshAlphaJson), 200);
+            return _jsonResponse(freshAlphaJson);
           }
-          return http.Response(
-            jsonEncode(req.url.path == '/api/environments' ? listJson : []),
-            200,
+          return _jsonResponse(
+            req.url.path == '/api/environments' ? listJson : [],
           );
         }),
       ),
@@ -104,36 +106,42 @@ void main() {
     expect(store.isCollecting(1), isFalse);
   });
 
-  test('returns the localized error and leaves store.error untouched', () async {
-    final store = EnvironmentStore(
-      BackendClient(
-        baseUrl: 'http://test',
-        httpClient: MockClient((req) async {
-          if (req.method == 'POST') {
-            return http.Response(
-              jsonEncode({
+  test(
+    'returns the localized error and leaves store.error untouched',
+    () async {
+      final store = EnvironmentStore(
+        BackendClient(
+          baseUrl: 'http://test',
+          httpClient: MockClient((req) async {
+            if (req.method == 'POST') {
+              return _jsonResponse({
                 'title': 'Bad Gateway',
                 'detail': '采集失败：无法连接业务库',
-              }),
-              502,
+              }, 502);
+            }
+            return _jsonResponse(
+              req.url.path == '/api/environments' ? listJson : [],
             );
-          }
-          return http.Response(
-            jsonEncode(req.url.path == '/api/environments' ? listJson : []),
-            200,
-          );
-        }),
-      ),
-    );
-    await store.load();
+          }),
+        ),
+      );
+      await store.load();
 
-    final error = await store.collectNow(1);
+      final error = await store.collectNow(1);
 
-    expect(error, contains('502'));
-    expect(store.error, isNull);
-    expect(store.isCollecting(1), isFalse);
-    // The known-good view stays as it was.
-    final alpha = store.environments.singleWhere((e) => e.id == 1);
-    expect(alpha.components.single.version, '1.0.0');
-  });
+      expect(error, contains('502'));
+      expect(store.error, isNull);
+      expect(store.isCollecting(1), isFalse);
+      // The known-good view stays as it was.
+      final alpha = store.environments.singleWhere((e) => e.id == 1);
+      expect(alpha.components.single.version, '1.0.0');
+    },
+  );
 }
+
+http.Response _jsonResponse(Object? body, [int statusCode = 200]) =>
+    http.Response.bytes(
+      utf8.encode(jsonEncode(body)),
+      statusCode,
+      headers: {'content-type': 'application/json; charset=utf-8'},
+    );

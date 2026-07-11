@@ -5,7 +5,9 @@ import com.flyaif.envdashboard.catalog.EnvironmentRepository;
 import com.flyaif.envdashboard.catalog.domain.Component;
 import com.flyaif.envdashboard.catalog.domain.ComponentRole;
 import com.flyaif.envdashboard.catalog.domain.Environment;
+import com.flyaif.envdashboard.catalog.domain.VersionProbeKind;
 import com.flyaif.envdashboard.inventory.DatabaseRepository;
+import com.flyaif.envdashboard.inventory.JdbcUrlBuilder;
 import com.flyaif.envdashboard.inventory.ServerRepository;
 import com.flyaif.envdashboard.inventory.domain.ConnectionDescriptor;
 import com.flyaif.envdashboard.inventory.domain.Database;
@@ -133,6 +135,11 @@ public class TenvinfoImporter {
         component.setVersionUpdatedAt(row.updateTime());
         component.setLogLocation(logLocation);
         component.setUrl(url);
+        // The legacy dashboard reads the live version from E_YWDB. Preserve that behavior explicitly
+        // on cutover; otherwise Collection sees a null probe kind and marks every migrated component
+        // UNSUPPORTED. With no usable business DB, NONE records the deliberate no-probe policy rather
+        // than leaving an ambiguous null for an operator to diagnose later.
+        component.setVersionProbe(businessDb == null ? VersionProbeKind.NONE : VersionProbeKind.DB);
         if (server != null) {
             component.setServerId(server.getId());
         }
@@ -224,10 +231,25 @@ public class TenvinfoImporter {
         if (ref.password() != null) {
             report.credentialSeen();
         }
+        Integer port = ref.port();
+        if (port == null) {
+            port = JdbcUrlBuilder.defaultPort(type);
+            if (port != null) {
+                report.note(eNo, field + " " + ref.host() + ": port omitted; defaulted to "
+                        + port + " for " + type.name());
+            } else {
+                report.note(eNo, field + " " + ref.host()
+                        + ": port omitted and left blank; database type has no deterministic default");
+            }
+        }
 
-        String key = String.join("|", type.name(),
+        // Role is load-bearing for DB version Collection: ProbeContext selects the linked database
+        // whose role is "business". The same endpoint appearing in E_ZJDB and E_YWDB must therefore
+        // remain two role-specific inventory records instead of whichever role happened to be seen
+        // first winning during deduplication.
+        String key = String.join("|", role, type.name(),
                 ref.host().toLowerCase(Locale.ROOT),
-                String.valueOf(ref.port()),
+                String.valueOf(port),
                 String.valueOf(ref.serviceName()),
                 String.valueOf(ref.username()));
         Database existing = databaseByKey.get(key);
@@ -240,7 +262,7 @@ public class TenvinfoImporter {
             return existing;
         }
         Database database = new Database(role, type,
-                new ConnectionDescriptor(ref.host(), ref.port(), ref.serviceName(), ref.username()));
+                new ConnectionDescriptor(ref.host(), port, ref.serviceName(), ref.username()));
         report.databaseCreated();
         if (!dryRun) {
             database = databases.save(database);

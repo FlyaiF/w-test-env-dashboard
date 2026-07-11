@@ -38,6 +38,16 @@ class LegacyValueRedactorTest {
     }
 
     @Test
+    void quotedAmpersandPasswordCannotLeakItsTail() {
+        String redacted = LegacyValueRedactor.redact(
+                "jdbc:oceanbase:oracle://db:2881/app?user=u&password='p&ss'&socketTimeout=15000");
+
+        assertThat(redacted)
+                .isEqualTo("jdbc:oceanbase:oracle://db:2881/app?user=u&password=***")
+                .doesNotContain("p&ss", "ss'");
+    }
+
+    @Test
     void leavesCredentialFreeValuesUntouched() {
         assertThat(LegacyValueRedactor.redact("dbhost:1521/ORCL")).isEqualTo("dbhost:1521/ORCL");
         assertThat(LegacyValueRedactor.redact(":::garbage")).isEqualTo(":::garbage");

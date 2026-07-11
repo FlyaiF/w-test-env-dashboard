@@ -13,6 +13,7 @@ set -euo pipefail
 #   LEGACY_DB_USERNAME
 #   LEGACY_DB_PASSWORD
 #   LEGACY_TABLE           optional, defaults to TENVINFO
+#   LEGACY_TIMEZONE        optional, defaults to Asia/Shanghai (Oracle DATE has no timezone)
 #
 # Target schema = the backend's own datasource, selected by the Spring profile in APP_PROFILES
 # (default: prod, which reads ORACLE_JDBC_URL / ORACLE_USERNAME / ORACLE_PASSWORD per
@@ -44,14 +45,26 @@ esac
 
 profiles="${APP_PROFILES:-prod},import"
 table="${LEGACY_TABLE:-TENVINFO}"
+legacy_timezone="${LEGACY_TIMEZONE:-Asia/Shanghai}"
 
-echo "TENVINFO import — profiles=${profiles}, dryRun=${dry_run}, table=${table}"
+# Oracle DATE carries no timezone. Pin the importer JVM's local zone so the same
+# legacy value becomes the same Instant regardless of which workstation runs it.
+export TZ="$legacy_timezone"
+
+# Bind legacy coordinates through Spring's environment-variable mapping instead
+# of Maven command-line arguments. In particular, keep the plaintext password out
+# of `ps` / process command lines during the one-time migration.
+export ENVDASHBOARD_IMPORT_LEGACY_URL="$LEGACY_JDBC_URL"
+export ENVDASHBOARD_IMPORT_LEGACY_USERNAME="${LEGACY_DB_USERNAME:-}"
+export ENVDASHBOARD_IMPORT_LEGACY_PASSWORD="${LEGACY_DB_PASSWORD:-}"
+export ENVDASHBOARD_IMPORT_TABLE="$table"
+export ENVDASHBOARD_IMPORT_DRY_RUN="$dry_run"
+# Defense in depth for a run-once migration: do not start the HTTP server or
+# background collector while the target catalog is only partially populated.
+export SPRING_MAIN_WEB_APPLICATION_TYPE="none"
+export ENVDASHBOARD_COLLECTION_SCHEDULER_ENABLED="false"
+
+echo "TENVINFO import — profiles=${profiles}, dryRun=${dry_run}, table=${table}, timezone=${legacy_timezone}"
 
 exec mvn -f "$BACKEND_DIR/pom.xml" spring-boot:run \
-    -Dspring-boot.run.profiles="${profiles}" \
-    -Dspring-boot.run.arguments="\
---envdashboard.import.dry-run=${dry_run} \
---envdashboard.import.table=${table} \
---envdashboard.import.legacy.url=${LEGACY_JDBC_URL} \
---envdashboard.import.legacy.username=${LEGACY_DB_USERNAME:-} \
---envdashboard.import.legacy.password=${LEGACY_DB_PASSWORD:-}"
+    -Dspring-boot.run.profiles="${profiles}"

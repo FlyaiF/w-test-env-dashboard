@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -23,6 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -78,6 +80,7 @@ class AccessApiIntegrationTest {
         // Brokered back on demand: descriptor + decrypted secret.
         mockMvc.perform(get("/api/servers/{id}/credentials", server.getId()))
                 .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
                 .andExpect(jsonPath("$.serverId").value(server.getId().intValue()))
                 .andExpect(jsonPath("$.host").value("10.0.0.1"))
                 .andExpect(jsonPath("$.port").value(22))
@@ -109,6 +112,7 @@ class AccessApiIntegrationTest {
 
         mockMvc.perform(get("/api/databases/{id}/credentials", db.getId()))
                 .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
                 .andExpect(jsonPath("$.databaseId").value(db.getId().intValue()))
                 .andExpect(jsonPath("$.type").value("ORACLE"))
                 .andExpect(jsonPath("$.host").value("10.0.2.5"))

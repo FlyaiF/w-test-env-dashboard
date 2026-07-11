@@ -1,8 +1,8 @@
 # PRD — Test Environment Dashboard Redesign
 
-> Status: draft · Scope: `env_viewer` client + new backend · Out of scope: `zipr_tool`
+> Status: implementation / cutover stabilization · Scope: `env_viewer` client + Spring backend · Out of scope: `zipr_tool`
 > Companion docs: [CONTEXT.md](../CONTEXT.md) (glossary), [CONTEXT-MAP.md](../CONTEXT-MAP.md)
-> (bounded contexts), [docs/adr/](./adr) (decisions 0001–0005).
+> (bounded contexts), [docs/adr/](./adr) (decisions 0001–0008).
 
 ## 1. Problem & goals
 
@@ -23,9 +23,9 @@ This redesign re-carves the product around a rich domain model and a client-serv
 5. **Testability** — a welcome side effect, *not* a goal we pay extra for (no speculative test seams).
 
 **Success looks like:** dev/QA open the shared dashboard, find an environment, and immediately see —
-per component — which machine runs it, where its logs are, what version is live, and when it
-deployed; and can launch their own SSH/DB tool against it. Everyone sees the same, freshly-collected
-data.
+per component — which machine runs it, where its logs are, what version is live, when that version
+metadata was updated, and when it was last collected; and can launch their own SSH/DB tool against
+it. Everyone sees the same, freshly-collected data.
 
 ## 2. Scope
 
@@ -40,7 +40,7 @@ See [CONTEXT.md](../CONTEXT.md) for definitions. Aggregates:
 ```
 Environment (aggregate root) ── owns ──► Component (1..N)
                                           ├─ role (gateway | ui | app | private-proto | …)
-                                          ├─ version (single, or blank) + deployTime
+                                          ├─ version (single, or blank) + versionUpdatedAt
                                           ├─ lastCollectedAt + collection status
                                           ├─ logLocation, listenPort, protocol, url
                                           ├─ runs-on  → Server   (by ID)
@@ -121,7 +121,8 @@ Backend cutover is necessarily **big-bang** (Go→Java, new schema). Approach (A
 2. Run the **one-time import** script (`TENVINFO` → new rows; parse composite strings & fixed slots).
    The import doubles as proof the model represents reality.
 3. Stand the new backend up **alongside** the old setup; point a refactored client at it; validate.
-4. Cut over; retire the Go sidecar and the per-desktop local JSON.
+4. Cut over the active client runtime and delivery path; retain `go_sidecar/` only as a legacy/import
+   reference until rollout validation is complete. Retire the per-desktop canonical data store.
 
 ## 9. Risks & open questions
 
@@ -138,8 +139,19 @@ Backend cutover is necessarily **big-bang** (Go→Java, new schema). Approach (A
 - **OceanBase via JDBC** — confirm a clean JDBC path replaces the current Go→Java-helper shellout.
   _Resolved:_ `com.oceanbase:oceanbase-client:2.4.7.1` (Maven Central) provides the JDBC path.
 
-## 10. Next step
+## 10. Current delivery status
 
-Split this PRD into independently-grabbable implementation issues (schema + backend skeleton, catalog
-context, resource inventory, collection + probes, access brokering, client slim-down, import script),
-each small enough for a single fresh implementation session.
+The redesign was split into implementation slices 01–08 under
+`.scratch/env-dashboard-redesign/issues/`. The walking skeleton, thin-client catalog, catalog writes,
+backend Resource Inventory, collection/probes, access brokering/tool launching, one-time import, and
+manual “collect now” path are implemented.
+
+The remaining product slice is the `env_viewer` Resource Inventory UI: manage shared Servers and
+Databases, link them from Components, and surface reverse references. Cutover stabilization also
+requires green Flutter analysis/tests, production-shaped probe/import rehearsal, backend deployment
+and rollback instructions, and validation of credential handling.
+
+The active delivery model is now explicit: desktop clients contain no sidecar or JDBC helper; release
+backend jars include the `probe-drivers` profile; tagged releases publish that backend jar beside the
+macOS/Windows desktop archives. `go_sidecar/` remains source-only as a pre-redesign reference and is
+not an active deployable.

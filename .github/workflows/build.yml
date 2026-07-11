@@ -1,4 +1,4 @@
-name: Build Desktop App
+name: Build and Release
 
 on:
   push:
@@ -29,11 +29,20 @@ jobs:
           java-version: '21'
           cache: maven
 
-      # Default build: unit/integration tests against H2 (Oracle mode).
+      # CI build: unit/integration tests against H2 (Oracle mode).
       # The Oracle Testcontainers test is tagged "oracle-it" and excluded here;
       # run it on demand with -Dgroups=oracle-it -DexcludedGroups=.
+      # Release packaging enables every JDBC driver used by version probes.
       - name: Build and test backend
-        run: mvn -B -f backend/pom.xml verify
+        run: mvn -B -f backend/pom.xml -Pprobe-drivers clean verify
+
+      - name: Verify probe drivers are packaged
+        shell: bash
+        run: |
+          backend_jar="$(find backend/target -maxdepth 1 -type f -name 'env-dashboard-backend-*.jar' ! -name '*.original' -print -quit)"
+          test -n "$backend_jar"
+          jar tf "$backend_jar" | grep -Fx 'BOOT-INF/lib/DmJdbcDriver18-8.1.3.140.jar'
+          jar tf "$backend_jar" | grep -Fx 'BOOT-INF/lib/oceanbase-client-2.4.7.1.jar'
 
       # `verify` runs through the package phase, so spring-boot-maven-plugin has
       # already repackaged the executable jar in backend/target/. Publish it so a
@@ -46,24 +55,48 @@ jobs:
           path: backend/target/env-dashboard-backend-*.jar
           if-no-files-found: error
 
+  env-viewer-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.41.6'
+          cache: true
+
+      - name: Cache Flutter pub packages
+        uses: actions/cache@v5
+        with:
+          path: .pub-cache
+          key: ${{ runner.os }}-flutter-pub-${{ hashFiles('apps/**/pubspec.lock', 'packages/**/pubspec.yaml') }}
+          restore-keys: ${{ runner.os }}-flutter-pub-
+
+      - name: Prepare env_viewer
+        working-directory: apps/env_viewer
+        run: |
+          bash ../../scripts/sync_assets.sh
+          flutter pub get
+
+      - name: Analyze env_viewer
+        working-directory: apps/env_viewer
+        run: flutter analyze
+
+      - name: Test env_viewer
+        working-directory: apps/env_viewer
+        run: |
+          unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
+          flutter test
+
   env-viewer-macos:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v6
         with:
-          submodules: recursive
-          persist-credentials: true
-          token: ${{ secrets.PAT || github.token }}
-
-      - uses: actions/setup-go@v6
-        with:
-          go-version: '1.22'
-          cache-dependency-path: go_sidecar/go.sum
-
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '11'
+          persist-credentials: false
 
       - uses: subosito/flutter-action@v2
         with:
@@ -81,35 +114,10 @@ jobs:
       - name: Compute build metadata
         id: meta
         run: |
-          VERSION=$(git describe --tags --always 2>/dev/null || echo "dev")
           COMMIT=$(git rev-parse --short HEAD)
           BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
           echo "build_time=$BUILD_TIME" >> "$GITHUB_OUTPUT"
-
-      - name: Build Go sidecar (universal binary)
-        working-directory: go_sidecar
-        env:
-          VERSION: ${{ steps.meta.outputs.version }}
-          COMMIT: ${{ steps.meta.outputs.commit }}
-          BUILD_TIME: ${{ steps.meta.outputs.build_time }}
-        run: |
-          PKG=test-env-dashboard/go_sidecar/buildinfo
-          LDFLAGS="-s -w -X $PKG.Version=$VERSION -X $PKG.Commit=$COMMIT -X $PKG.BuildTime=$BUILD_TIME"
-          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="$LDFLAGS" -o go_sidecar_arm64 .
-          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags="$LDFLAGS" -o go_sidecar_amd64 .
-          lipo -create -output go_sidecar go_sidecar_arm64 go_sidecar_amd64
-          file go_sidecar
-
-      - name: Build JDBC helper
-        shell: bash
-        run: |
-          mvn -q dependency:get -Dartifact=com.oceanbase:oceanbase-client:2.4.7.1
-          mkdir -p build/sidecar/jdbc/classes
-          javac -source 8 -target 8 -d build/sidecar/jdbc/classes go_sidecar/jdbc_helper/RuntimeInfoHelper.java
-          jar cf build/sidecar/jdbc/runtime-info-helper.jar -C build/sidecar/jdbc/classes RuntimeInfoHelper.class
-          cp "$HOME/.m2/repository/com/oceanbase/oceanbase-client/2.4.7.1/oceanbase-client-2.4.7.1.jar" build/sidecar/jdbc/oceanbase-client.jar
 
       - name: Build env_viewer
         working-directory: apps/env_viewer
@@ -123,21 +131,21 @@ jobs:
             --dart-define=COMMIT="$COMMIT" \
             --dart-define=BUILD_TIME="$BUILD_TIME"
 
-      - name: Bundle sidecar and package
+      - name: Package
         run: |
           RELEASE_DIR="apps/env_viewer/build/macos/Build/Products/Release"
           APP="$RELEASE_DIR/env_viewer.app"
-          cp go_sidecar/go_sidecar "$APP/Contents/Resources/go_sidecar"
-          chmod +x "$APP/Contents/Resources/go_sidecar"
-          mkdir -p "$APP/Contents/Resources/jdbc"
-          cp build/sidecar/jdbc/runtime-info-helper.jar "$APP/Contents/Resources/jdbc/"
-          cp build/sidecar/jdbc/oceanbase-client.jar "$APP/Contents/Resources/jdbc/"
+          rm -f "$APP/Contents/Resources/go_sidecar"
+          rm -rf "$APP/Contents/Resources/jdbc"
+          test ! -e "$APP/Contents/Resources/go_sidecar"
+          test ! -e "$APP/Contents/Resources/jdbc"
           (cd "$RELEASE_DIR" && zip -r -y "env_viewer-macos.zip" "env_viewer.app")
 
       - uses: actions/upload-artifact@v7
         with:
           name: env_viewer-macos
           path: apps/env_viewer/build/macos/Build/Products/Release/env_viewer-macos.zip
+          if-no-files-found: error
 
   zipr-tool-macos:
     runs-on: macos-latest
@@ -145,8 +153,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          persist-credentials: true
-          token: ${{ secrets.PAT || github.token }}
+          persist-credentials: false
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -179,7 +186,6 @@ jobs:
       - name: Compute build metadata
         id: meta
         run: |
-          VERSION=$(git describe --tags --always 2>/dev/null || echo "dev")
           COMMIT=$(git rev-parse --short HEAD)
           BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
@@ -206,25 +212,14 @@ jobs:
         with:
           name: zipr_tool-macos
           path: apps/zipr_tool/build/macos/Build/Products/Release/zipr_tool-macos.zip
+          if-no-files-found: error
 
   env-viewer-windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v6
         with:
-          submodules: recursive
-          persist-credentials: true
-          token: ${{ secrets.PAT || github.token }}
-
-      - uses: actions/setup-go@v6
-        with:
-          go-version: '1.22'
-          cache-dependency-path: go_sidecar/go.sum
-
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '11'
+          persist-credentials: false
 
       - uses: subosito/flutter-action@v2
         with:
@@ -243,32 +238,10 @@ jobs:
         id: meta
         shell: bash
         run: |
-          VERSION=$(git describe --tags --always 2>/dev/null || echo "dev")
           COMMIT=$(git rev-parse --short HEAD)
           BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
           echo "build_time=$BUILD_TIME" >> "$GITHUB_OUTPUT"
-
-      - name: Build Go sidecar
-        working-directory: go_sidecar
-        shell: bash
-        env:
-          VERSION: ${{ steps.meta.outputs.version }}
-          COMMIT: ${{ steps.meta.outputs.commit }}
-          BUILD_TIME: ${{ steps.meta.outputs.build_time }}
-        run: |
-          PKG=test-env-dashboard/go_sidecar/buildinfo
-          LDFLAGS="-s -w -X $PKG.Version=$VERSION -X $PKG.Commit=$COMMIT -X $PKG.BuildTime=$BUILD_TIME"
-          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="$LDFLAGS" -o go_sidecar.exe .
-
-      - name: Build JDBC helper
-        shell: bash
-        run: |
-          mvn -q dependency:get -Dartifact=com.oceanbase:oceanbase-client:2.4.7.1
-          mkdir -p build/sidecar/jdbc/classes
-          javac -source 8 -target 8 -d build/sidecar/jdbc/classes go_sidecar/jdbc_helper/RuntimeInfoHelper.java
-          jar cf build/sidecar/jdbc/runtime-info-helper.jar -C build/sidecar/jdbc/classes RuntimeInfoHelper.class
-          cp "$HOME/.m2/repository/com/oceanbase/oceanbase-client/2.4.7.1/oceanbase-client-2.4.7.1.jar" build/sidecar/jdbc/oceanbase-client.jar
 
       - name: Build env_viewer
         working-directory: apps/env_viewer
@@ -283,21 +256,21 @@ jobs:
             --dart-define=COMMIT="$COMMIT" \
             --dart-define=BUILD_TIME="$BUILD_TIME"
 
-      - name: Bundle sidecar and package
+      - name: Package
         shell: bash
         run: |
           RELEASE_DIR="apps/env_viewer/build/windows/x64/runner/Release"
-          mkdir -p "$RELEASE_DIR/data"
-          cp go_sidecar/go_sidecar.exe "$RELEASE_DIR/data/go_sidecar.exe"
-          mkdir -p "$RELEASE_DIR/data/jdbc"
-          cp build/sidecar/jdbc/runtime-info-helper.jar "$RELEASE_DIR/data/jdbc/"
-          cp build/sidecar/jdbc/oceanbase-client.jar "$RELEASE_DIR/data/jdbc/"
+          rm -f "$RELEASE_DIR/data/go_sidecar.exe"
+          rm -rf "$RELEASE_DIR/data/jdbc"
+          test ! -e "$RELEASE_DIR/data/go_sidecar.exe"
+          test ! -e "$RELEASE_DIR/data/jdbc"
           (cd "$RELEASE_DIR" && 7z a -tzip "../env_viewer-windows.zip" ./*)
 
       - uses: actions/upload-artifact@v7
         with:
           name: env_viewer-windows
           path: apps/env_viewer/build/windows/x64/runner/env_viewer-windows.zip
+          if-no-files-found: error
 
   zipr-tool-windows:
     runs-on: windows-latest
@@ -305,8 +278,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          persist-credentials: true
-          token: ${{ secrets.PAT || github.token }}
+          persist-credentials: false
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -338,7 +310,6 @@ jobs:
         id: meta
         shell: bash
         run: |
-          VERSION=$(git describe --tags --always 2>/dev/null || echo "dev")
           COMMIT=$(git rev-parse --short HEAD)
           BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
@@ -367,10 +338,11 @@ jobs:
         with:
           name: zipr_tool-windows
           path: apps/zipr_tool/build/windows/x64/runner/zipr_tool-windows.zip
+          if-no-files-found: error
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [env-viewer-macos, zipr-tool-macos, env-viewer-windows, zipr-tool-windows]
+    needs: [backend, env-viewer-checks, env-viewer-macos, zipr-tool-macos, env-viewer-windows, zipr-tool-windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -380,14 +352,15 @@ jobs:
         with:
           path: artifacts
 
-      - name: Collect zip files
+      - name: Collect release files
         run: |
           mkdir -p release
-          find artifacts -name "*.zip" -exec cp {} release/ \;
+          find artifacts -type f \( -name "*.zip" -o -name "env-dashboard-backend-*.jar" \) -exec cp {} release/ \;
           ls -la release/
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
-          files: release/*.zip
+          files: release/*
+          fail_on_unmatched_files: true
