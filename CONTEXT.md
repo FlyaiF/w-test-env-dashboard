@@ -27,8 +27,10 @@ an Environment.
 _Avoid_: web server, host string, node, machine
 
 **Database**:
-A database instance (Oracle, Dameng, OceanBase, …) that Components connect to. A **shared** resource,
-not necessarily dedicated to one Environment, so it is referenced by ID, never owned.
+A role-specific access profile for a database instance (Oracle, Dameng, OceanBase, …) that
+Components connect to. Its role and login profile are part of its identity, so one physical endpoint
+may have separate Database IDs for business/intermediate roles or distinct logins. A **shared**
+resource, not necessarily dedicated to one Environment, so it is referenced by ID, never owned.
 _Avoid_: YWDB, ZJDB, DSN slot
 
 ## Version & freshness

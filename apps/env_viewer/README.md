@@ -57,8 +57,10 @@ ENV_DASHBOARD_BACKEND_URL=http://backend.example.test:8080 \
   ./scripts/dev_env_viewer.sh run
 ```
 
-On a healthy launch, the window is titled 测试环境速查工具, the navigation contains 总览 / 设置 /
-关于, the cloud indicator is green, and the local profile's seeded environments appear in 总览. A
+On a healthy launch, the window is titled 测试环境速查工具, the navigation contains 总览 / 资源库存 /
+设置 / 关于, the cloud indicator is green, and the local profile's seeded environments appear in 总览.
+资源库存 manages shared Servers/Databases, shows their reverse Environment references, and links them
+from Components without exposing stored secrets. A
 red cloud means the configured backend could not be reached. Catalog data is canonical on the
 backend; the desktop persists only its backend URL and local tool preferences.
 

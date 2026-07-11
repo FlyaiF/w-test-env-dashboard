@@ -144,12 +144,12 @@ Backend cutover is necessarily **big-bang** (Go→Java, new schema). Approach (A
 The redesign was split into implementation slices 01–08 under
 `.scratch/env-dashboard-redesign/issues/`. The walking skeleton, thin-client catalog, catalog writes,
 backend Resource Inventory, collection/probes, access brokering/tool launching, one-time import, and
-manual “collect now” path are implemented.
+manual “collect now” path are implemented. The `env_viewer` Resource Inventory UI now manages shared
+Servers and Databases, links them from Components, and surfaces reverse Environment references.
 
-The remaining product slice is the `env_viewer` Resource Inventory UI: manage shared Servers and
-Databases, link them from Components, and surface reverse references. Cutover stabilization also
-requires green Flutter analysis/tests, production-shaped probe/import rehearsal, backend deployment
-and rollback instructions, and validation of credential handling.
+The remaining work is cutover validation rather than a missing product slice: production-shaped
+probe/import rehearsal, backend deployment and rollback instructions, and environment-specific
+validation of credential handling and network policy.
 
 The active delivery model is now explicit: desktop clients contain no sidecar or JDBC helper; release
 backend jars include the `probe-drivers` profile; tagged releases publish that backend jar beside the

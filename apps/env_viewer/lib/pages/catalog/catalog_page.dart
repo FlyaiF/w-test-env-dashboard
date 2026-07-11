@@ -8,7 +8,10 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../catalog/environment_store.dart';
 import '../../catalog/environment_view.dart';
+import '../../inventory/inventory_store.dart';
+import '../../inventory/inventory_view.dart';
 import 'catalog_editors.dart';
+import 'catalog_link_editor.dart';
 import 'component_access.dart';
 import 'connection_sections.dart';
 
@@ -225,6 +228,7 @@ class _CatalogPageState extends State<CatalogPage> {
       onDelete: () => _deleteEnv(env),
       onAddComponent: () => _addComponent(env),
       onEditComponent: (c) => _editComponent(env, c),
+      onLinkComponent: _linkComponent,
       onDeleteComponent: (c) => _deleteComponent(env, c),
     );
   }
@@ -345,6 +349,42 @@ class _CatalogPageState extends State<CatalogPage> {
     final store = context.read<EnvironmentStore>();
     final ok = await store.removeComponent(env.id, component.id);
     _report(store, ok, '组件已删除');
+  }
+
+  Future<void> _linkComponent(ComponentView component) async {
+    final inventory = context.read<InventoryStore?>();
+    if (inventory == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('资源库存未就绪')));
+      return;
+    }
+    if (!inventory.loaded) {
+      await inventory.load();
+      if (!mounted) return;
+      if (!inventory.loaded) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(inventory.error ?? '资源库存加载失败')));
+        return;
+      }
+    }
+    if (!mounted) return;
+    final store = context.read<EnvironmentStore>();
+    final saved = await showComponentLinksEditor(
+      context,
+      component: component,
+      servers: inventory.servers,
+      databases: inventory.databases,
+      onSave: (input) async {
+        final ok = await store.setComponentLinks(component.id, input);
+        return ok ? null : (store.error ?? '操作失败');
+      },
+    );
+    if (!saved || !mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('组件资源关联已更新')));
   }
 
   Future<bool> _confirm(String title, String message) async {
@@ -478,6 +518,7 @@ class _EnvironmentDetail extends StatelessWidget {
   final VoidCallback onDelete;
   final VoidCallback onAddComponent;
   final void Function(ComponentView component) onEditComponent;
+  final void Function(ComponentView component) onLinkComponent;
   final void Function(ComponentView component) onDeleteComponent;
 
   const _EnvironmentDetail({
@@ -489,6 +530,7 @@ class _EnvironmentDetail extends StatelessWidget {
     required this.onDelete,
     required this.onAddComponent,
     required this.onEditComponent,
+    required this.onLinkComponent,
     required this.onDeleteComponent,
   });
 
@@ -587,6 +629,7 @@ class _EnvironmentDetail extends StatelessWidget {
                     environmentName: env.name,
                     onOpenUrl: onOpenUrl,
                     onEdit: () => onEditComponent(c),
+                    onLink: () => onLinkComponent(c),
                     onDelete: () => onDeleteComponent(c),
                   ),
                 ),
@@ -605,6 +648,7 @@ class _ComponentCard extends StatelessWidget {
   final String environmentName;
   final Future<void> Function(String url) onOpenUrl;
   final VoidCallback onEdit;
+  final VoidCallback onLink;
   final VoidCallback onDelete;
 
   const _ComponentCard({
@@ -612,6 +656,7 @@ class _ComponentCard extends StatelessWidget {
     required this.environmentName,
     required this.onOpenUrl,
     required this.onEdit,
+    required this.onLink,
     required this.onDelete,
   });
 
@@ -621,9 +666,15 @@ class _ComponentCard extends StatelessWidget {
     final c = component;
     // Resolve Server/Database references to friendly labels (ADR-0006); falls
     // back to `#id` when inventory is unavailable.
-    final store = context.watch<EnvironmentStore>();
-    final serverRef = c.serverId == null ? null : store.serverRefs[c.serverId];
-    final dbRefs = {for (final id in c.databaseIds) id: store.databaseRefs[id]};
+    final inventory = context.watch<InventoryStore?>();
+    final serversById = inventory?.serversById ?? const <int, ServerView>{};
+    final databasesById =
+        inventory?.databasesById ?? const <int, DatabaseView>{};
+    final server = c.serverId == null ? null : serversById[c.serverId];
+    final dbRefs = {
+      for (final id in c.databaseIds)
+        if (databasesById[id] != null) id: databasesById[id]!,
+    };
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -661,6 +712,12 @@ class _ComponentCard extends StatelessWidget {
                 onPressed: onEdit,
               ),
               IconButton(
+                icon: const Icon(Icons.account_tree_outlined, size: 18),
+                tooltip: '关联资源',
+                visualDensity: VisualDensity.compact,
+                onPressed: onLink,
+              ),
+              IconButton(
                 icon: const Icon(Icons.delete_outline, size: 18),
                 tooltip: '删除组件',
                 visualDensity: VisualDensity.compact,
@@ -692,7 +749,7 @@ class _ComponentCard extends StatelessWidget {
                 '运行主机',
                 c.serverId == null
                     ? null
-                    : (serverRef?.cardLabel ?? '#${c.serverId}'),
+                    : (server?.displayLabel ?? '#${c.serverId}'),
               ),
             ],
           ),
@@ -723,14 +780,14 @@ class _ComponentCard extends StatelessWidget {
               SshInfoSection(
                 key: ValueKey(c.serverId),
                 serverId: c.serverId!,
-                server: serverRef,
+                server: server,
               ),
             if (c.serverId != null && c.databaseIds.isNotEmpty)
               const SizedBox(height: 12),
             if (c.databaseIds.isNotEmpty)
               DatabaseInfoSection(
                 databaseIds: c.databaseIds,
-                databaseRefs: store.databaseRefs,
+                databaseRefs: dbRefs,
               ),
             const SizedBox(height: 12),
             ComponentAccessBar(

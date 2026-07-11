@@ -161,6 +161,7 @@ class _AppScaffoldState extends State<AppScaffold> {
             icon: const Icon(Icons.menu, size: 20),
             onPressed: () => setState(() => _expanded = !_expanded),
             tooltip: _expanded ? '收起侧栏' : '展开侧栏',
+            visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
           ),

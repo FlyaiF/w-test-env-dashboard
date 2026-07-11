@@ -14,18 +14,24 @@ const _envGroup = ui.NavGroup(
       icon: Icons.dashboard_outlined,
       selectedIcon: Icons.dashboard,
     ),
+    ui.NavItem(
+      index: 1,
+      label: '资源库存',
+      icon: Icons.inventory_2_outlined,
+      selectedIcon: Icons.inventory_2,
+    ),
   ],
 );
 
 const _settingsItem = ui.NavItem(
-  index: 1,
+  index: 2,
   label: '设置',
   icon: Icons.settings_outlined,
   selectedIcon: Icons.settings,
 );
 
 const _aboutItem = ui.NavItem(
-  index: 2,
+  index: 3,
   label: '关于',
   icon: Icons.info_outline,
   selectedIcon: Icons.info,

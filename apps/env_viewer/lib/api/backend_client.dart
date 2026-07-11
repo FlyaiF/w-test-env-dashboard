@@ -5,12 +5,15 @@ import 'package:http/http.dart' as http;
 
 import 'dto/component_dto.dart';
 import 'dto/component_input.dart';
+import 'dto/component_links_input.dart';
 import 'dto/database_credential.dart';
 import 'dto/database_dto.dart';
+import 'dto/database_input.dart';
 import 'dto/environment_dto.dart';
 import 'dto/environment_input.dart';
 import 'dto/server_credential.dart';
 import 'dto/server_dto.dart';
+import 'dto/server_input.dart';
 
 /// Raised when the backend cannot be reached or returns a non-2xx response.
 /// Carries a human-readable, already-localized message for the UI.
@@ -79,6 +82,29 @@ class BackendClient {
         .toList();
   }
 
+  /// Create a shared Server from non-secret inventory coordinates.
+  Future<ServerDto> createServer(ServerInput input) async {
+    final body = await _send('POST', '/api/servers', body: input.toJson());
+    return _asServer(body);
+  }
+
+  /// Replace a shared Server's non-secret inventory coordinates.
+  Future<ServerDto> updateServer(int id, ServerInput input) async {
+    final body = await _send('PUT', '/api/servers/$id', body: input.toJson());
+    return _asServer(body);
+  }
+
+  /// Delete an unused shared Server. Referenced Servers fail with backend 409.
+  Future<void> deleteServer(int id) async {
+    await _send('DELETE', '/api/servers/$id');
+  }
+
+  /// Environments containing a Component that runs on this Server.
+  Future<List<EnvironmentDto>> environmentsOnServer(int id) async {
+    final body = await _getJson('/api/servers/$id/environments');
+    return _asEnvironmentList(body);
+  }
+
   /// List the shared Databases (Resource Inventory, `GET /api/databases`). Used to
   /// resolve a Component's `databaseIds` references to display labels client-side
   /// (ADR-0006) — connection metadata only, no passwords.
@@ -90,6 +116,29 @@ class BackendClient {
     return body
         .map((e) => DatabaseDto.fromJson(e as Map<String, dynamic>))
         .toList();
+  }
+
+  /// Create a shared Database from non-secret inventory coordinates.
+  Future<DatabaseDto> createDatabase(DatabaseInput input) async {
+    final body = await _send('POST', '/api/databases', body: input.toJson());
+    return _asDatabase(body);
+  }
+
+  /// Replace a shared Database's non-secret inventory coordinates.
+  Future<DatabaseDto> updateDatabase(int id, DatabaseInput input) async {
+    final body = await _send('PUT', '/api/databases/$id', body: input.toJson());
+    return _asDatabase(body);
+  }
+
+  /// Delete an unused shared Database. Referenced Databases fail with backend 409.
+  Future<void> deleteDatabase(int id) async {
+    await _send('DELETE', '/api/databases/$id');
+  }
+
+  /// Environments containing a Component that uses this Database.
+  Future<List<EnvironmentDto>> environmentsUsingDatabase(int id) async {
+    final body = await _getJson('/api/databases/$id/environments');
+    return _asEnvironmentList(body);
   }
 
   /// Ask the backend to collect this Environment right now — 立即采集
@@ -107,8 +156,15 @@ class BackendClient {
   }
 
   /// Update an Environment's own fields (name, memo). Components are unaffected.
-  Future<EnvironmentDto> updateEnvironment(int id, EnvironmentInput input) async {
-    final body = await _send('PUT', '/api/environments/$id', body: input.toJson());
+  Future<EnvironmentDto> updateEnvironment(
+    int id,
+    EnvironmentInput input,
+  ) async {
+    final body = await _send(
+      'PUT',
+      '/api/environments/$id',
+      body: input.toJson(),
+    );
     return _asEnvironment(body);
   }
 
@@ -118,7 +174,10 @@ class BackendClient {
   }
 
   /// Add a Component to an Environment and return it (with its assigned id).
-  Future<ComponentDto> addComponent(int environmentId, ComponentInput input) async {
+  Future<ComponentDto> addComponent(
+    int environmentId,
+    ComponentInput input,
+  ) async {
     final body = await _send(
       'POST',
       '/api/environments/$environmentId/components',
@@ -147,6 +206,19 @@ class BackendClient {
       'DELETE',
       '/api/environments/$environmentId/components/$componentId',
     );
+  }
+
+  /// Replace one Component's runs-on Server and uses-Database references.
+  Future<ComponentDto> setComponentLinks(
+    int componentId,
+    ComponentLinksInput input,
+  ) async {
+    final body = await _send(
+      'PUT',
+      '/api/components/$componentId/links',
+      body: input.toJson(),
+    );
+    return _asComponent(body);
   }
 
   /// Fetch an SSH credential bundle for a Server on demand (Access Brokering,
@@ -182,6 +254,29 @@ class BackendClient {
       throw const BackendException('后端返回了无法识别的组件详情');
     }
     return ComponentDto.fromJson(body);
+  }
+
+  ServerDto _asServer(dynamic body) {
+    if (body is! Map<String, dynamic>) {
+      throw const BackendException('后端返回了无法识别的服务器详情');
+    }
+    return ServerDto.fromJson(body);
+  }
+
+  DatabaseDto _asDatabase(dynamic body) {
+    if (body is! Map<String, dynamic>) {
+      throw const BackendException('后端返回了无法识别的数据库详情');
+    }
+    return DatabaseDto.fromJson(body);
+  }
+
+  List<EnvironmentDto> _asEnvironmentList(dynamic body) {
+    if (body is! List) {
+      throw const BackendException('后端返回了无法识别的环境列表');
+    }
+    return body
+        .map((e) => EnvironmentDto.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   Future<dynamic> _getJson(String path) => _send('GET', path);

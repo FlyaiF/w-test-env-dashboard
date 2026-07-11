@@ -1,6 +1,6 @@
 # 04 — Resource Inventory: shared Server / Database aggregates + linking
 
-Status: backend done — client Server/Database management UI outstanding (see AC 5)
+Status: done — backend and client management/linking UI implemented
 
 ## Parent
 
@@ -28,7 +28,7 @@ Databases and links them from a Component.
 - [x] A Component can be linked to one Server (runs-on) and 0..N Databases (uses)
 - [x] Deleting a Server/Database is independent of Environment lifecycle (and is blocked or surfaced when still referenced — not silently cascaded)
 - [x] Reverse-lookup endpoints return Environments by Server id and by Database id
-- [ ] Client UI manages Servers/Databases and links them from a Component — ⚠️ OUTSTANDING: backend endpoints exist (`/api/servers`, `/api/databases` full CRUD + `/{id}/environments`), but the thin client has no Server/Database management page (nav is only 总览 + 关于). Components currently show Server/DB only as `#id` references. Needs a client UI slice.
+- [x] Client UI manages Servers/Databases, shows reverse Environment references, and links one Server / 0..N Databases from a Component. Inventory metadata is non-secret; credential brokering remains just-in-time.
 - [x] Integration tests cover linking and both reverse lookups; vocabulary matches the glossary (`InventoryApiIntegrationTest`)
 
 ## Blocked by

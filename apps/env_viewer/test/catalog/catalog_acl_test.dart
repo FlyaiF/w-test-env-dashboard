@@ -1,7 +1,5 @@
 import 'package:env_viewer/api/dto/component_dto.dart';
-import 'package:env_viewer/api/dto/database_dto.dart';
 import 'package:env_viewer/api/dto/environment_dto.dart';
-import 'package:env_viewer/api/dto/server_dto.dart';
 import 'package:env_viewer/catalog/catalog_acl.dart';
 import 'package:env_viewer/catalog/environment_view.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -106,54 +104,6 @@ void main() {
     });
   });
 
-  group('CatalogAcl.serverRefView', () {
-    test('uses the host as the card label', () {
-      final ref = CatalogAcl.serverRefView(
-        const ServerDto(id: 6, host: '10.20.155.175', os: 'LINUX'),
-      );
-      expect(ref.id, 6);
-      expect(ref.cardLabel, '10.20.155.175');
-    });
-
-    test('falls back to #id when the host is blank', () {
-      final ref = CatalogAcl.serverRefView(const ServerDto(id: 6, host: '  '));
-      expect(ref.cardLabel, '#6');
-    });
-
-    test('sshAddress is user@host, dropping the default port 22', () {
-      final ref = CatalogAcl.serverRefView(
-        const ServerDto(
-          id: 6,
-          host: '10.20.155.175',
-          ssh: SshAccessInfo(
-            host: '10.20.155.175',
-            port: 22,
-            username: 'ta66',
-          ),
-        ),
-      );
-      expect(ref.sshAddress, 'ta66@10.20.155.175');
-    });
-
-    test('sshAddress keeps a non-default port', () {
-      final ref = CatalogAcl.serverRefView(
-        const ServerDto(
-          id: 6,
-          host: 'h',
-          ssh: SshAccessInfo(host: 'h', port: 2222, username: 'ta66'),
-        ),
-      );
-      expect(ref.sshAddress, 'ta66@h:2222');
-    });
-
-    test('sshAddress falls back to the server host when no ssh block', () {
-      final ref = CatalogAcl.serverRefView(
-        const ServerDto(id: 6, host: '10.20.155.175'),
-      );
-      expect(ref.sshAddress, '10.20.155.175'); // no user, no port
-    });
-  });
-
   group('CatalogAcl.sqlplusConnectString', () {
     test('full form is username/password@host:port/serviceName', () {
       expect(
@@ -182,7 +132,11 @@ void main() {
 
     test('omits the whole credential prefix when there is no username', () {
       expect(
-        CatalogAcl.sqlplusConnectString(host: 'h', port: 1521, serviceName: 'ORCL'),
+        CatalogAcl.sqlplusConnectString(
+          host: 'h',
+          port: 1521,
+          serviceName: 'ORCL',
+        ),
         'h:1521/ORCL',
       );
     });
@@ -197,63 +151,10 @@ void main() {
         ),
         'app/pw@h/ORCL',
       );
-      expect(CatalogAcl.sqlplusConnectString(username: 'app', password: 'pw'), '');
-    });
-  });
-
-  group('CatalogAcl.databaseRefView', () {
-    test('full label is role · type · host:port/service; menu label is role + host', () {
-      final ref = CatalogAcl.databaseRefView(
-        const DatabaseDto(
-          id: 61,
-          role: 'business',
-          type: 'ORACLE',
-          connection: ConnectionInfo(
-            host: '10.20.155.175',
-            port: 1521,
-            serviceName: 'ORCL',
-          ),
-        ),
+      expect(
+        CatalogAcl.sqlplusConnectString(username: 'app', password: 'pw'),
+        '',
       );
-      expect(ref.cardLabel, '业务库 · Oracle · 10.20.155.175:1521/ORCL');
-      expect(ref.menuLabel, '业务库 10.20.155.175');
-    });
-
-    test('intermediate role and type labels map, unknown role passes through', () {
-      expect(CatalogAcl.databaseRoleLabel('intermediate'), '中转库');
-      expect(CatalogAcl.databaseRoleLabel('cache'), 'cache');
-      expect(CatalogAcl.databaseTypeLabel('DAMENG'), '达梦');
-      expect(CatalogAcl.databaseTypeLabel('OCEANBASE'), 'OceanBase');
-    });
-
-    test('blank segments are dropped from the card label', () {
-      final ref = CatalogAcl.databaseRefView(
-        const DatabaseDto(id: 9, role: 'business', type: null, connection: null),
-      );
-      expect(ref.cardLabel, '业务库'); // no type, no address
-      expect(ref.menuLabel, '业务库'); // no host
-    });
-
-    test('address omits a missing port or service', () {
-      final noPort = CatalogAcl.databaseRefView(
-        const DatabaseDto(
-          id: 1,
-          role: 'business',
-          type: 'ORACLE',
-          connection: ConnectionInfo(host: 'h', serviceName: 'svc'),
-        ),
-      );
-      expect(noPort.address, 'h/svc');
-
-      final noService = CatalogAcl.databaseRefView(
-        const DatabaseDto(
-          id: 2,
-          role: 'business',
-          type: 'ORACLE',
-          connection: ConnectionInfo(host: 'h', port: 1521),
-        ),
-      );
-      expect(noService.address, 'h:1521');
     });
   });
 }

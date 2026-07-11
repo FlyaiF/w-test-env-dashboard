@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:env_viewer/api/backend_client.dart';
-import 'package:env_viewer/catalog/environment_view.dart';
+import 'package:env_viewer/inventory/inventory_view.dart';
 import 'package:env_viewer/pages/catalog/connection_sections.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -62,7 +62,7 @@ void main() {
           client,
           const SshInfoSection(
             serverId: 6,
-            server: ServerRefView(
+            server: ServerView(
               id: 6,
               host: 'h',
               sshHost: 'h',
@@ -126,7 +126,7 @@ void main() {
           client,
           const SshInfoSection(
             serverId: 6,
-            server: ServerRefView(id: 6, host: 'h'),
+            server: ServerView(id: 6, host: 'h'),
           ),
         ),
       );
@@ -178,7 +178,7 @@ void main() {
           client,
           const SshInfoSection(
             serverId: 6,
-            server: ServerRefView(id: 6, host: 'a'),
+            server: ServerView(id: 6, host: 'a'),
           ),
         ),
       );
@@ -191,7 +191,7 @@ void main() {
           client,
           const SshInfoSection(
             serverId: 7,
-            server: ServerRefView(id: 7, host: 'b'),
+            server: ServerView(id: 7, host: 'b'),
           ),
         ),
       );
@@ -230,7 +230,7 @@ void main() {
           client,
           const SshInfoSection(
             serverId: 6,
-            server: ServerRefView(id: 6, host: 'a'),
+            server: ServerView(id: 6, host: 'a'),
           ),
         ),
       );
@@ -242,7 +242,7 @@ void main() {
           client,
           const SshInfoSection(
             serverId: 7,
-            server: ServerRefView(id: 7, host: 'b'),
+            server: ServerView(id: 7, host: 'b'),
           ),
         ),
       );
@@ -284,7 +284,7 @@ void main() {
             client,
             const SshInfoSection(
               serverId: 7,
-              server: ServerRefView(
+              server: ServerView(
                 id: 7,
                 host: 'h',
                 sshHost: 'h',
@@ -343,7 +343,7 @@ void main() {
           const DatabaseInfoSection(
             databaseIds: [9],
             databaseRefs: {
-              9: DatabaseRefView(
+              9: DatabaseView(
                 id: 9,
                 roleLabel: '业务库',
                 typeLabel: 'Oracle',

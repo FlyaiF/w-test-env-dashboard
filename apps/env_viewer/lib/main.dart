@@ -9,9 +9,11 @@ import 'package:window_manager/window_manager.dart';
 import 'api/backend_client.dart';
 import 'catalog/environment_store.dart';
 import 'config/config_store.dart';
+import 'inventory/inventory_store.dart';
 import 'pages/about/about_page.dart';
 import 'services/access/access_launcher.dart';
 import 'pages/catalog/catalog_page.dart';
+import 'pages/inventory/inventory_page.dart';
 import 'pages/settings/settings_page.dart';
 import 'widgets/app_scaffold.dart';
 
@@ -68,6 +70,7 @@ class MyApp extends StatelessWidget {
         // Brokers Server/Database credentials on demand and launches the user's
         // own SSH/DB tools with them (ADR-0005); persists no secrets.
         Provider<AccessLauncher>(create: (_) => AccessLauncher(backendClient)),
+        ChangeNotifierProvider(create: (_) => InventoryStore(backendClient)),
         ChangeNotifierProvider(create: (_) => EnvironmentStore(backendClient)),
       ],
       child: Consumer<AppThemeController>(
@@ -105,6 +108,7 @@ class _HomePageState extends State<HomePage> {
         index: _selectedIndex,
         children: const [
           CatalogPage(),
+          InventoryPage(),
           SettingsPage(),
           AboutPage(),
         ],

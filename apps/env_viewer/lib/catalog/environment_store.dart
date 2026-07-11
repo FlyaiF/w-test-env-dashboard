@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../api/backend_client.dart';
+import '../api/dto/component_links_input.dart';
 import '../api/dto/component_input.dart';
 import '../api/dto/environment_input.dart';
 import 'catalog_acl.dart';
@@ -18,20 +19,10 @@ class EnvironmentStore extends ChangeNotifier {
   EnvironmentStore(this._client);
 
   List<EnvironmentView> _all = [];
-  Map<int, ServerRefView> _serverRefs = {};
-  Map<int, DatabaseRefView> _databaseRefs = {};
   bool _loading = false;
   bool _loaded = false;
   String? _error;
   String _search = '';
-
-  /// Resolved Server references by id, for rendering a Component's 运行主机 as a
-  /// host instead of a bare `#id`. Empty when inventory could not be fetched.
-  Map<int, ServerRefView> get serverRefs => Map.unmodifiable(_serverRefs);
-
-  /// Resolved Database references by id, for the 数据库信息 section rows and the
-  /// launch menu. Empty when inventory could not be fetched.
-  Map<int, DatabaseRefView> get databaseRefs => Map.unmodifiable(_databaseRefs);
 
   /// Whether the backend has been reached successfully at least once. Drives the
   /// connection indicator; an error after a successful load keeps this true.
@@ -60,7 +51,6 @@ class EnvironmentStore extends ChangeNotifier {
       final dtos = await _client.listEnvironments();
       _all = CatalogAcl.toViews(dtos);
       _loaded = true;
-      await _loadInventoryRefs();
     } on BackendException catch (e) {
       _error = e.message;
     } catch (e) {
@@ -68,28 +58,6 @@ class EnvironmentStore extends ChangeNotifier {
     } finally {
       _loading = false;
       notifyListeners();
-    }
-  }
-
-  /// Best-effort: resolve the shared Server/Database references for display
-  /// (ADR-0006). Inventory is a display nicety, so any failure here leaves the
-  /// ref maps empty (cards/menus fall back to `#id`) without disturbing the
-  /// environment list or the connection state.
-  Future<void> _loadInventoryRefs() async {
-    try {
-      final serversFuture = _client.listServers();
-      final databasesFuture = _client.listDatabases();
-      final servers = await serversFuture;
-      final databases = await databasesFuture;
-      _serverRefs = {
-        for (final s in servers) s.id: CatalogAcl.serverRefView(s),
-      };
-      _databaseRefs = {
-        for (final d in databases) d.id: CatalogAcl.databaseRefView(d),
-      };
-    } catch (_) {
-      _serverRefs = {};
-      _databaseRefs = {};
     }
   }
 
@@ -156,11 +124,19 @@ class EnvironmentStore extends ChangeNotifier {
     int environmentId,
     int componentId,
     ComponentInput input,
-  ) => _mutate(() => _client.updateComponent(environmentId, componentId, input));
+  ) =>
+      _mutate(() => _client.updateComponent(environmentId, componentId, input));
 
   /// Remove one Component from its owning Environment.
   Future<bool> removeComponent(int environmentId, int componentId) =>
       _mutate(() => _client.deleteComponent(environmentId, componentId));
+
+  /// Replace the Resource Inventory links for one Component, then reload the
+  /// canonical Environment list so every catalog view observes the same links.
+  Future<bool> setComponentLinks(int componentId, ComponentLinksInput input) =>
+      _mutate(() async {
+        await _client.setComponentLinks(componentId, input);
+      });
 
   /// Run a write against the backend, then re-fetch the canonical list so the UI
   /// reflects exactly what the server stored. Errors are captured into [error]
@@ -178,7 +154,7 @@ class EnvironmentStore extends ChangeNotifier {
       return false;
     }
     await load();
-    return true;
+    return _error == null;
   }
 
   static bool _matches(EnvironmentView env, String lowerQuery) {

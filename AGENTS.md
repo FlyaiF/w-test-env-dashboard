@@ -26,7 +26,7 @@ shared UI package. The UI of both apps is in Chinese.
 the URL defaults to `http://localhost:8080` and can be changed in Settings or locked with
 `ENV_DASHBOARD_BACKEND_URL`. The app does not spawn a local backend and ships no database drivers.
 
-- **Client state**: Provider + `ChangeNotifier` (`EnvironmentStore`, `ConfigStore`). Backend data is
+- **Client state**: Provider + `ChangeNotifier` (`EnvironmentStore`, `InventoryStore`, `ConfigStore`). Backend data is
   canonical; the client keeps only presentation state and DTO/view mappings.
 - **Backend domains**: Environment Catalog, Resource Inventory (`Server`/`Database`), Version
   Collection, and Access Brokering. Components reference shared resources by ID.
@@ -85,10 +85,12 @@ LEGACY_JDBC_URL=... LEGACY_DB_USERNAME=... LEGACY_DB_PASSWORD=... scripts/import
 
 - `apps/env_viewer/lib/api/backend_client.dart` — the thin client's HTTP boundary
 - `apps/env_viewer/lib/catalog/environment_store.dart` — catalog/read-model state and refresh flows
+- `apps/env_viewer/lib/inventory/inventory_store.dart` — canonical Server/Database presentation state
 - `apps/env_viewer/lib/catalog/catalog_acl.dart` — DTO-to-view anti-corruption mapping
 - `apps/env_viewer/lib/config/config_store.dart` — backend URL and local tool preferences
 - `apps/env_viewer/lib/services/access/access_launcher.dart` — brokers credentials and launches tools
 - `apps/env_viewer/lib/pages/catalog/catalog_page.dart` — main environment catalog UI
+- `apps/env_viewer/lib/pages/inventory/inventory_page.dart` — shared resource management and reverse references
 - `backend/src/main/java/com/flyaif/envdashboard/catalog/` — Environment/Component domain and API
 - `backend/src/main/java/com/flyaif/envdashboard/inventory/` — shared Server/Database inventory
 - `backend/src/main/java/com/flyaif/envdashboard/collection/` — scheduler, probes, machine access

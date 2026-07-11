@@ -2,7 +2,11 @@ import 'dart:convert';
 
 import 'package:env_viewer/api/backend_client.dart';
 import 'package:env_viewer/catalog/environment_store.dart';
+import 'package:env_viewer/config/config_service.dart';
+import 'package:env_viewer/config/config_store.dart';
+import 'package:env_viewer/inventory/inventory_store.dart';
 import 'package:env_viewer/pages/catalog/catalog_page.dart';
+import 'package:env_viewer/services/access/access_launcher.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -25,9 +29,24 @@ http.Response _jsonResponse(Object? body, [int statusCode = 200]) =>
       headers: {'content-type': 'application/json; charset=utf-8'},
     );
 
-Widget _wrap(EnvironmentStore store) {
-  return ChangeNotifierProvider<EnvironmentStore>.value(
-    value: store,
+Widget _wrap(EnvironmentStore store, {InventoryStore? inventoryStore}) {
+  return MultiProvider(
+    providers: [
+      ChangeNotifierProvider<EnvironmentStore>.value(value: store),
+      if (inventoryStore != null)
+        ChangeNotifierProvider<InventoryStore>.value(value: inventoryStore),
+      ChangeNotifierProvider<ConfigStore>.value(
+        value: ConfigStore(AppConfig.empty()),
+      ),
+      Provider<AccessLauncher>(
+        create: (_) => AccessLauncher(
+          BackendClient(
+            baseUrl: 'http://unused',
+            httpClient: MockClient((_) async => http.Response('{}', 200)),
+          ),
+        ),
+      ),
+    ],
     child: const MaterialApp(home: Scaffold(body: CatalogPage())),
   );
 }
@@ -166,5 +185,71 @@ void main() {
 
     expect(find.textContaining('500'), findsOneWidget);
     expect(find.text('重试'), findsOneWidget);
+  });
+
+  testWidgets('resolves Component references from canonical InventoryStore', (
+    tester,
+  ) async {
+    final environmentStore = EnvironmentStore(
+      BackendClient(
+        baseUrl: 'http://catalog',
+        httpClient: MockClient((req) async {
+          if (req.url.path == '/api/environments') {
+            return _jsonResponse([
+              {
+                'id': 1,
+                'name': 'Alpha',
+                'components': [
+                  {
+                    'id': 10,
+                    'role': 'APP',
+                    'serverId': 7,
+                    'databaseIds': [9],
+                  },
+                ],
+              },
+            ]);
+          }
+          return _jsonResponse([]);
+        }),
+      ),
+    );
+    final inventoryStore = InventoryStore(
+      BackendClient(
+        baseUrl: 'http://inventory',
+        httpClient: MockClient((req) async {
+          if (req.url.path == '/api/servers') {
+            return _jsonResponse([
+              {'id': 7, 'host': 'srv-main', 'os': 'LINUX', 'ssh': null},
+            ]);
+          }
+          if (req.url.path == '/api/databases') {
+            return _jsonResponse([
+              {
+                'id': 9,
+                'role': 'business',
+                'type': 'ORACLE',
+                'connection': {
+                  'host': 'db-main',
+                  'port': 1521,
+                  'serviceName': 'ORCL',
+                  'username': 'app',
+                },
+              },
+            ]);
+          }
+          return _jsonResponse([]);
+        }),
+      ),
+    );
+    await inventoryStore.load();
+
+    await tester.pumpWidget(
+      _wrap(environmentStore, inventoryStore: inventoryStore),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('srv-main'), findsWidgets);
+    expect(find.text('业务库 · Oracle · db-main:1521/ORCL'), findsOneWidget);
   });
 }

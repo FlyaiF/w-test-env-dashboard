@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../api/backend_client.dart';
 import '../../catalog/catalog_acl.dart';
-import '../../catalog/environment_view.dart';
+import '../../inventory/inventory_view.dart';
 
 /// `SSH 信息` — the non-secret SSH coordinates for the Server a Component runs on,
 /// with an on-demand password reveal/copy brokered just-in-time (ADR-0008). The
@@ -14,7 +14,7 @@ import '../../catalog/environment_view.dart';
 /// of — the catalog never sprays plaintext credentials.
 class SshInfoSection extends StatefulWidget {
   final int serverId;
-  final ServerRefView? server;
+  final ServerView? server;
 
   const SshInfoSection({super.key, required this.serverId, this.server});
 
@@ -189,7 +189,7 @@ class _SshInfoSectionState extends State<SshInfoSection> {
 /// clipboard (an explicit act), never the screen.
 class DatabaseInfoSection extends StatelessWidget {
   final List<int> databaseIds;
-  final Map<int, DatabaseRefView> databaseRefs;
+  final Map<int, DatabaseView> databaseRefs;
 
   const DatabaseInfoSection({
     super.key,
@@ -217,7 +217,7 @@ class DatabaseInfoSection extends StatelessWidget {
 
 class _DatabaseRow extends StatefulWidget {
   final int databaseId;
-  final DatabaseRefView? ref;
+  final DatabaseView? ref;
 
   const _DatabaseRow({super.key, required this.databaseId, this.ref});
 
@@ -292,7 +292,7 @@ class _DatabaseRowState extends State<_DatabaseRow> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final label = widget.ref?.cardLabel ?? '#${widget.databaseId}';
+    final label = widget.ref?.displayLabel ?? '#${widget.databaseId}';
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
