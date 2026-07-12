@@ -66,6 +66,14 @@
             <version>${ojdbc8.version}</version>
             <scope>runtime</scope>
         </dependency>
+        <!-- Required when legacy/production Oracle databases use non-UTF character sets
+             such as ZHS16GBK. Keep it aligned with the JDBC driver version. -->
+        <dependency>
+            <groupId>com.oracle.database.nls</groupId>
+            <artifactId>orai18n</artifactId>
+            <version>${ojdbc8.version}</version>
+            <scope>runtime</scope>
+        </dependency>
 
         <dependency>
             <groupId>org.springframework.boot</groupId>
