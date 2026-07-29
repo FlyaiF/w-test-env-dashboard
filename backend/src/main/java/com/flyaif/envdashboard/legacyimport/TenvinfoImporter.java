@@ -130,7 +130,9 @@ public class TenvinfoImporter {
 
         // The legacy row carries no role discriminator, so the migrated component's role is left
         // explicitly UNSPECIFIED for a human to classify later — never guessed (ADR-0007).
-        Component component = new Component(ComponentRole.UNSPECIFIED);
+        // Every legacy TENVINFO "web server" entry is the environment's main service, per the
+        // system owner (ADR-0007, superseded note) — so APP is recorded fact, not a guess.
+        Component component = new Component(ComponentRole.APP);
         component.setVersion(version);
         component.setVersionUpdatedAt(row.updateTime());
         component.setLogLocation(logLocation);

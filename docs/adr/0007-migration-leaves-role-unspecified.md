@@ -1,5 +1,11 @@
 # The TENVINFO migration leaves a migrated Component's role UNSPECIFIED, never guessed
 
+> **Superseded 2026-07-29.** The missing domain knowledge arrived: the system owner confirmed that
+> every legacy `TENVINFO` "web server" entry is the environment's main service (主服务). The role is
+> therefore no longer a guess — the migration now assigns `ComponentRole.APP`. `UNSPECIFIED` keeps
+> its original meaning ("not yet classified") and remains the default for hand-added Components.
+> The original decision and its rationale are preserved below.
+
 The legacy `TENVINFO` row captures exactly one "web server" per Environment and carries **no role
 discriminator** — nothing distinguishes a gateway from a UI from a main service. Issue 07's settled
 migration policy is "dirty/ambiguous fields are left blank, never invented," so stamping any concrete
