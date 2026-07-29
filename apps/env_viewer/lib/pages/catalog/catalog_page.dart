@@ -123,7 +123,11 @@ class _CatalogPageState extends State<CatalogPage> {
                   ],
                 );
               }
+              // Stretch, not the default center: the detail pane's scroll view
+              // shrink-wraps its height, and centering a short Environment
+              // floats it mid-pane.
               return Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   SizedBox(width: 380, child: _buildRoster(envs, selected)),
                   const VerticalDivider(width: 1),
