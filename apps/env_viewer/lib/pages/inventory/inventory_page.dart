@@ -1,13 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_ui/shared_ui.dart';
 
 import '../../catalog/environment_view.dart';
 import '../../inventory/inventory_store.dart';
 import '../../inventory/inventory_view.dart';
 import 'inventory_editors.dart';
 
-/// Standalone presentation for the shared Server/Database Resource Inventory.
-/// Routing is intentionally owned by the application shell, not this page.
+/// Standalone presentation for the shared Server/Database Resource Inventory:
+/// one dense, client-side-sortable table per tab (服务器 / 数据库). The 引用
+/// count is the clickable affordance that opens the usage view. Routing is
+/// intentionally owned by the application shell, not this page.
 class InventoryPage extends StatefulWidget {
   const InventoryPage({super.key});
 
@@ -15,12 +20,29 @@ class InventoryPage extends StatefulWidget {
   State<InventoryPage> createState() => _InventoryPageState();
 }
 
+enum _ServerColumn { id, host, os, ssh, password, references }
+
+enum _DatabaseColumn {
+  id,
+  role,
+  type,
+  connection,
+  username,
+  password,
+  references,
+}
+
 class _InventoryPageState extends State<InventoryPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
   final _searchController = TextEditingController();
+  Timer? _debounce;
   int _activeTab = 0;
-  String _query = '';
+
+  _ServerColumn _serverSort = _ServerColumn.id;
+  bool _serverAscending = true;
+  _DatabaseColumn _databaseSort = _DatabaseColumn.id;
+  bool _databaseAscending = true;
 
   bool get _showingServers => _activeTab == 0;
 
@@ -39,24 +61,23 @@ class _InventoryPageState extends State<InventoryPage>
     _tabController
       ..removeListener(_handleTabChange)
       ..dispose();
+    _debounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
 
+  /// Switching tabs keeps the search query — one query filters both
+  /// inventories (the store owns it).
   void _handleTabChange() {
     if (_activeTab == _tabController.index) return;
-    setState(() {
-      _activeTab = _tabController.index;
-      _query = '';
-      _searchController.clear();
-    });
+    setState(() => _activeTab = _tabController.index);
   }
 
   @override
   Widget build(BuildContext context) {
     final store = context.watch<InventoryStore>();
-    final servers = _filteredServers(store.servers);
-    final databases = _filteredDatabases(store.databases);
+    final servers = _sortedServers(store.filteredServers);
+    final databases = _sortedDatabases(store.filteredDatabases);
     final visibleCount = _showingServers ? servers.length : databases.length;
     final totalCount = _showingServers
         ? store.servers.length
@@ -64,9 +85,49 @@ class _InventoryPageState extends State<InventoryPage>
 
     return Column(
       children: [
-        _buildHeader(store, visibleCount, totalCount),
+        PageHeader(
+          title: '资源清单',
+          visibleCount: visibleCount,
+          totalCount: totalCount,
+          search: FilterHistoryTextField(
+            key: const ValueKey('inventory-search-field'),
+            controller: _searchController,
+            filterText: _searchController.text,
+            hintText: '搜索主机、系统、SSH、用途、类型、地址、用户名...',
+            onChanged: (value) {
+              setState(() {});
+              _debounce?.cancel();
+              if (value.trim().isEmpty) {
+                store.setSearch('');
+                return;
+              }
+              _debounce = Timer(const Duration(milliseconds: 250), () {
+                store.setSearch(value);
+              });
+            },
+          ),
+          actions: [
+            FilledButton.icon(
+              key: const ValueKey('inventory-create-button'),
+              onPressed: store.loading ? null : _createCurrent,
+              icon: const Icon(Icons.add, size: 18),
+              label: Text(_showingServers ? '新建服务器' : '新建数据库'),
+            ),
+            const SizedBox(width: 8),
+            IconButton(
+              key: const ValueKey('inventory-refresh-button'),
+              onPressed: store.loading ? null : store.load,
+              icon: const Icon(Icons.refresh),
+              tooltip: '刷新资源清单',
+            ),
+          ],
+        ),
         if (store.error != null)
-          _InventoryErrorBanner(message: store.error!, onRetry: store.load),
+          ErrorBanner(
+            key: const ValueKey('inventory-error-banner'),
+            message: store.error!,
+            onRetry: store.load,
+          ),
         TabBar(
           controller: _tabController,
           tabs: const [
@@ -74,7 +135,12 @@ class _InventoryPageState extends State<InventoryPage>
             Tab(text: '数据库'),
           ],
         ),
-        if (store.loading && store.loaded) const LinearProgressIndicator(),
+        SizedBox(
+          height: 3,
+          child: store.loading && store.loaded
+              ? const LinearProgressIndicator(minHeight: 3)
+              : null,
+        ),
         Expanded(
           child: TabBarView(
             controller: _tabController,
@@ -88,94 +154,78 @@ class _InventoryPageState extends State<InventoryPage>
     );
   }
 
-  Widget _buildHeader(InventoryStore store, int visibleCount, int totalCount) {
-    final theme = Theme.of(context);
-    final summary = Wrap(
-      spacing: 12,
-      runSpacing: 4,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        Text('资源清单', style: theme.textTheme.headlineSmall),
-        Text(
-          '显示 $visibleCount / $totalCount 条',
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.outline,
-          ),
-        ),
-      ],
-    );
-    final search = TextField(
-      key: const ValueKey('inventory-search-field'),
-      controller: _searchController,
-      decoration: InputDecoration(
-        hintText: _showingServers ? '搜索主机、系统、SSH...' : '搜索用途、类型、地址、用户名...',
-        prefixIcon: const Icon(Icons.search),
-        suffixIcon: _query.isEmpty
-            ? null
-            : IconButton(
-                tooltip: '清除搜索',
-                onPressed: () {
-                  _searchController.clear();
-                  setState(() => _query = '');
-                },
-                icon: const Icon(Icons.clear),
-              ),
-        isDense: true,
-      ),
-      onChanged: (value) => setState(() => _query = value.trim()),
-    );
-    final actions = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        FilledButton.icon(
-          key: const ValueKey('inventory-create-button'),
-          onPressed: store.loading ? null : _createCurrent,
-          icon: const Icon(Icons.add, size: 18),
-          label: Text(_showingServers ? '新建服务器' : '新建数据库'),
-        ),
-        const SizedBox(width: 8),
-        IconButton(
-          key: const ValueKey('inventory-refresh-button'),
-          onPressed: store.loading ? null : store.load,
-          icon: const Icon(Icons.refresh),
-          tooltip: '刷新资源清单',
-        ),
-      ],
-    );
+  // ---- sorting ----------------------------------------------------------
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          if (constraints.maxWidth < 900) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Expanded(child: summary),
-                    const SizedBox(width: 12),
-                    actions,
-                  ],
-                ),
-                const SizedBox(height: 8),
-                search,
-              ],
-            );
-          }
-          return Row(
-            children: [
-              summary,
-              const Spacer(),
-              SizedBox(width: 360, child: search),
-              const SizedBox(width: 8),
-              actions,
-            ],
-          );
-        },
-      ),
-    );
+  List<ServerView> _sortedServers(List<ServerView> servers) {
+    final sorted = [...servers];
+    final dir = _serverAscending ? 1 : -1;
+    int byLabel(String a, String b) =>
+        a.toLowerCase().compareTo(b.toLowerCase());
+    sorted.sort((a, b) {
+      final order = switch (_serverSort) {
+        _ServerColumn.id => a.id.compareTo(b.id),
+        _ServerColumn.host => byLabel(a.displayLabel, b.displayLabel),
+        _ServerColumn.os => byLabel(a.osLabel, b.osLabel),
+        _ServerColumn.ssh => byLabel(a.sshAddress, b.sshAddress),
+        _ServerColumn.password => (a.hasSecret ? 1 : 0).compareTo(
+          b.hasSecret ? 1 : 0,
+        ),
+        _ServerColumn.references => a.referenceCount.compareTo(
+          b.referenceCount,
+        ),
+      };
+      return dir * (order != 0 ? order : a.id.compareTo(b.id));
+    });
+    return sorted;
   }
+
+  List<DatabaseView> _sortedDatabases(List<DatabaseView> databases) {
+    final sorted = [...databases];
+    final dir = _databaseAscending ? 1 : -1;
+    int byLabel(String a, String b) =>
+        a.toLowerCase().compareTo(b.toLowerCase());
+    sorted.sort((a, b) {
+      final order = switch (_databaseSort) {
+        _DatabaseColumn.id => a.id.compareTo(b.id),
+        _DatabaseColumn.role => byLabel(a.roleLabel, b.roleLabel),
+        _DatabaseColumn.type => byLabel(a.typeLabel, b.typeLabel),
+        _DatabaseColumn.connection => byLabel(a.address, b.address),
+        _DatabaseColumn.username => byLabel(a.username ?? '', b.username ?? ''),
+        _DatabaseColumn.password => (a.hasSecret ? 1 : 0).compareTo(
+          b.hasSecret ? 1 : 0,
+        ),
+        _DatabaseColumn.references => a.referenceCount.compareTo(
+          b.referenceCount,
+        ),
+      };
+      return dir * (order != 0 ? order : a.id.compareTo(b.id));
+    });
+    return sorted;
+  }
+
+  void _sortServersBy(_ServerColumn column) {
+    setState(() {
+      if (_serverSort == column) {
+        _serverAscending = !_serverAscending;
+      } else {
+        _serverSort = column;
+        _serverAscending = true;
+      }
+    });
+  }
+
+  void _sortDatabasesBy(_DatabaseColumn column) {
+    setState(() {
+      if (_databaseSort == column) {
+        _databaseAscending = !_databaseAscending;
+      } else {
+        _databaseSort = column;
+        _databaseAscending = true;
+      }
+    });
+  }
+
+  // ---- bodies -----------------------------------------------------------
 
   Widget _buildServerBody(InventoryStore store, List<ServerView> servers) {
     if (store.loading && !store.loaded) {
@@ -186,16 +236,22 @@ class _InventoryPageState extends State<InventoryPage>
       );
     }
     if (servers.isEmpty) {
-      return _EmptyInventory(
-        icon: _query.isEmpty ? Icons.dns_outlined : Icons.search_off,
-        message: _query.isEmpty ? '暂无服务器' : '没有匹配的服务器',
+      return EmptyState(
+        icon: store.search.isEmpty ? Icons.dns_outlined : Icons.search_off,
+        message: store.search.isEmpty ? '暂无服务器' : '没有匹配的服务器',
       );
     }
-    return _InventoryGrid(
+    return _InventoryTable(
+      minWidth: 680,
+      header: _ServerTableHeader(
+        sort: _serverSort,
+        ascending: _serverAscending,
+        onSort: _sortServersBy,
+      ),
       itemCount: servers.length,
       itemBuilder: (context, index) {
         final server = servers[index];
-        return _ServerCard(
+        return _ServerRow(
           server: server,
           onUsage: () => _showServerUsage(server),
           onEdit: () => _editServer(server),
@@ -217,16 +273,22 @@ class _InventoryPageState extends State<InventoryPage>
       );
     }
     if (databases.isEmpty) {
-      return _EmptyInventory(
-        icon: _query.isEmpty ? Icons.storage_outlined : Icons.search_off,
-        message: _query.isEmpty ? '暂无数据库' : '没有匹配的数据库',
+      return EmptyState(
+        icon: store.search.isEmpty ? Icons.storage_outlined : Icons.search_off,
+        message: store.search.isEmpty ? '暂无数据库' : '没有匹配的数据库',
       );
     }
-    return _InventoryGrid(
+    return _InventoryTable(
+      minWidth: 780,
+      header: _DatabaseTableHeader(
+        sort: _databaseSort,
+        ascending: _databaseAscending,
+        onSort: _sortDatabasesBy,
+      ),
       itemCount: databases.length,
       itemBuilder: (context, index) {
         final database = databases[index];
-        return _DatabaseCard(
+        return _DatabaseRow(
           database: database,
           onUsage: () => _showDatabaseUsage(database),
           onEdit: () => _editDatabase(database),
@@ -236,43 +298,7 @@ class _InventoryPageState extends State<InventoryPage>
     );
   }
 
-  List<ServerView> _filteredServers(List<ServerView> servers) {
-    final query = _query.toLowerCase();
-    if (query.isEmpty) return servers;
-    return servers
-        .where((server) {
-          return [
-            server.id.toString(),
-            server.host,
-            server.os,
-            server.osLabel,
-            server.sshAddress,
-          ].whereType<String>().any(
-            (value) => value.toLowerCase().contains(query),
-          );
-        })
-        .toList(growable: false);
-  }
-
-  List<DatabaseView> _filteredDatabases(List<DatabaseView> databases) {
-    final query = _query.toLowerCase();
-    if (query.isEmpty) return databases;
-    return databases
-        .where((database) {
-          return [
-            database.id.toString(),
-            database.role,
-            database.roleLabel,
-            database.type,
-            database.typeLabel,
-            database.address,
-            database.username,
-          ].whereType<String>().any(
-            (value) => value.toLowerCase().contains(query),
-          );
-        })
-        .toList(growable: false);
-  }
+  // ---- mutations --------------------------------------------------------
 
   Future<void> _createCurrent() async {
     if (_showingServers) {
@@ -392,46 +418,319 @@ class _InventoryPageState extends State<InventoryPage>
   }
 }
 
-class _InventoryGrid extends StatelessWidget {
+// ---- table shell ---------------------------------------------------------
+
+/// Column plan shared by the header and every row so cells stay aligned.
+/// Fixed pixel widths for compact columns; host/connection flex the rest.
+abstract final class _Cols {
+  static const double id = 56;
+  static const double os = 100;
+  static const double type = 96;
+  static const double role = 110;
+  static const double username = 110;
+  static const double password = 72;
+  static const double references = 56;
+  static const double actions = 84;
+  static const double gap = 8;
+}
+
+class _InventoryTable extends StatelessWidget {
+  final Widget header;
   final int itemCount;
   final IndexedWidgetBuilder itemBuilder;
 
-  const _InventoryGrid({required this.itemCount, required this.itemBuilder});
+  /// Below this width the table scrolls horizontally instead of squeezing its
+  /// fixed data columns.
+  final double minWidth;
+
+  const _InventoryTable({
+    required this.header,
+    required this.itemCount,
+    required this.itemBuilder,
+    required this.minWidth,
+  });
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (constraints.maxWidth < 900) {
-          return ListView.builder(
-            padding: const EdgeInsets.all(12),
-            itemCount: itemCount,
-            itemBuilder: itemBuilder,
-          );
-        }
-        return GridView.builder(
-          padding: const EdgeInsets.all(16),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            mainAxisExtent: 230,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
+        final needsScroll = constraints.maxWidth < minWidth;
+        final table = SizedBox(
+          width: needsScroll ? minWidth : constraints.maxWidth,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                child: header,
+              ),
+              Expanded(
+                child: ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+                  itemCount: itemCount,
+                  itemBuilder: itemBuilder,
+                ),
+              ),
+            ],
           ),
-          itemCount: itemCount,
-          itemBuilder: itemBuilder,
+        );
+        if (!needsScroll) return table;
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: table,
         );
       },
     );
   }
 }
 
-class _ServerCard extends StatelessWidget {
+/// Sortable header cell: click cycles the sort; the active column shows an
+/// ascending/descending arrow.
+class _HeaderCell extends StatelessWidget {
+  final String label;
+  final double? width;
+  final bool active;
+  final bool ascending;
+  final VoidCallback onTap;
+
+  const _HeaderCell({
+    required this.label,
+    this.width,
+    required this.active,
+    required this.ascending,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.of(context);
+    final cell = InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppTokens.radiusChip),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 5),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                label,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: active ? tokens.accent : tokens.textSecondary,
+                ),
+              ),
+            ),
+            if (active)
+              Icon(
+                ascending ? Icons.arrow_upward : Icons.arrow_downward,
+                size: 11,
+                color: tokens.accent,
+              ),
+          ],
+        ),
+      ),
+    );
+    return width == null
+        ? Expanded(child: cell)
+        : SizedBox(
+            width: width,
+            child: Align(alignment: Alignment.centerLeft, child: cell),
+          );
+  }
+}
+
+class _HeaderBar extends StatelessWidget {
+  final List<Widget> cells;
+
+  const _HeaderBar({required this.cells});
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: tokens.tableHeaderBg,
+        borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+      ),
+      child: Row(children: cells),
+    );
+  }
+}
+
+class _ServerTableHeader extends StatelessWidget {
+  final _ServerColumn sort;
+  final bool ascending;
+  final ValueChanged<_ServerColumn> onSort;
+
+  const _ServerTableHeader({
+    required this.sort,
+    required this.ascending,
+    required this.onSort,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    Widget cell(String label, _ServerColumn column, {double? width}) =>
+        _HeaderCell(
+          label: label,
+          width: width,
+          active: sort == column,
+          ascending: ascending,
+          onTap: () => onSort(column),
+        );
+    return _HeaderBar(
+      cells: [
+        cell('ID', _ServerColumn.id, width: _Cols.id),
+        cell('主机', _ServerColumn.host),
+        const SizedBox(width: _Cols.gap),
+        cell('操作系统', _ServerColumn.os, width: _Cols.os),
+        cell('SSH 地址', _ServerColumn.ssh),
+        const SizedBox(width: _Cols.gap),
+        cell('密码', _ServerColumn.password, width: _Cols.password),
+        cell('引用', _ServerColumn.references, width: _Cols.references),
+        const SizedBox(width: _Cols.actions),
+      ],
+    );
+  }
+}
+
+class _DatabaseTableHeader extends StatelessWidget {
+  final _DatabaseColumn sort;
+  final bool ascending;
+  final ValueChanged<_DatabaseColumn> onSort;
+
+  const _DatabaseTableHeader({
+    required this.sort,
+    required this.ascending,
+    required this.onSort,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    Widget cell(String label, _DatabaseColumn column, {double? width}) =>
+        _HeaderCell(
+          label: label,
+          width: width,
+          active: sort == column,
+          ascending: ascending,
+          onTap: () => onSort(column),
+        );
+    return _HeaderBar(
+      cells: [
+        cell('ID', _DatabaseColumn.id, width: _Cols.id),
+        cell('用途', _DatabaseColumn.role, width: _Cols.role),
+        cell('类型', _DatabaseColumn.type, width: _Cols.type),
+        cell('连接', _DatabaseColumn.connection),
+        const SizedBox(width: _Cols.gap),
+        cell('用户名', _DatabaseColumn.username, width: _Cols.username),
+        cell('密码', _DatabaseColumn.password, width: _Cols.password),
+        cell('引用', _DatabaseColumn.references, width: _Cols.references),
+        const SizedBox(width: _Cols.actions),
+      ],
+    );
+  }
+}
+
+// ---- rows ----------------------------------------------------------------
+
+class _TableRowShell extends StatelessWidget {
+  final Key? rowKey;
+  final List<Widget> cells;
+
+  const _TableRowShell({this.rowKey, required this.cells});
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.of(context);
+    return Container(
+      key: rowKey,
+      margin: const EdgeInsets.only(top: 4),
+      decoration: BoxDecoration(
+        color: tokens.cardBg,
+        borderRadius: BorderRadius.circular(AppTokens.radiusRow),
+        border: Border.all(color: tokens.cardBorder),
+      ),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppTokens.radiusRow),
+          hoverColor: tokens.hover,
+          onTap: null,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            child: Row(children: cells),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 已设置 / 未设置 password presence chip.
+class _SecretChip extends StatelessWidget {
+  final bool hasSecret;
+
+  const _SecretChip({required this.hasSecret});
+
+  @override
+  Widget build(BuildContext context) {
+    return StatusChip(
+      kind: hasSecret ? StatusChipKind.ok : StatusChipKind.none,
+      label: hasSecret ? '已设置' : '未设置',
+    );
+  }
+}
+
+/// The 引用 count itself is the clickable affordance opening the usage view.
+class _ReferenceCountButton extends StatelessWidget {
+  final Key? buttonKey;
+  final int count;
+  final VoidCallback onTap;
+
+  const _ReferenceCountButton({
+    this.buttonKey,
+    required this.count,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.of(context);
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Tooltip(
+        message: '查看使用情况',
+        child: InkWell(
+          key: buttonKey,
+          borderRadius: BorderRadius.circular(AppTokens.radiusChip),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+            child: Text(
+              '$count',
+              style: tokens.mono(
+                fontSize: 12.5,
+                color: tokens.accent,
+                weight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ServerRow extends StatelessWidget {
   final ServerView server;
   final VoidCallback onUsage;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
-  const _ServerCard({
+  const _ServerRow({
     required this.server,
     required this.onUsage,
     required this.onEdit,
@@ -440,61 +739,88 @@ class _ServerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      key: ValueKey('server-card-${server.id}'),
-      margin: const EdgeInsets.only(bottom: 10),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _CardTitle(id: server.id, title: server.displayLabel),
-            const SizedBox(height: 12),
-            _MetadataRow(label: '操作系统', value: server.osLabel),
-            const SizedBox(height: 8),
-            _MetadataRow(
-              label: 'SSH',
-              value: server.sshAddress.isEmpty ? '未配置' : server.sshAddress,
-            ),
-            const SizedBox(height: 6),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                IconButton(
-                  key: ValueKey('server-usage-${server.id}'),
-                  tooltip: '查看使用情况',
-                  onPressed: onUsage,
-                  icon: const Icon(Icons.account_tree_outlined),
-                ),
-                IconButton(
-                  key: ValueKey('server-edit-${server.id}'),
-                  tooltip: '编辑服务器',
-                  onPressed: onEdit,
-                  icon: const Icon(Icons.edit_outlined),
-                ),
-                IconButton(
-                  key: ValueKey('server-delete-${server.id}'),
-                  tooltip: '删除服务器',
-                  onPressed: onDelete,
-                  icon: const Icon(Icons.delete_outline),
-                ),
-              ],
-            ),
-          ],
+    final tokens = AppTokens.of(context);
+    return _TableRowShell(
+      rowKey: ValueKey('server-card-${server.id}'),
+      cells: [
+        SizedBox(
+          width: _Cols.id,
+          child: Text(
+            '#${server.id}',
+            style: tokens.mono(fontSize: 12.5, color: tokens.textSecondary),
+          ),
         ),
-      ),
+        Expanded(
+          child: Text(
+            server.displayLabel,
+            style: tokens.mono(fontSize: 12.5, weight: FontWeight.w600),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        const SizedBox(width: _Cols.gap),
+        SizedBox(
+          width: _Cols.os,
+          child: Text(server.osLabel, style: const TextStyle(fontSize: 12.5)),
+        ),
+        Expanded(
+          child: Text(
+            server.sshAddress.isEmpty ? '-' : server.sshAddress,
+            style: tokens.mono(fontSize: 12.5),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        const SizedBox(width: _Cols.gap),
+        SizedBox(
+          width: _Cols.password,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: _SecretChip(hasSecret: server.hasSecret),
+          ),
+        ),
+        SizedBox(
+          width: _Cols.references,
+          child: _ReferenceCountButton(
+            buttonKey: ValueKey('server-usage-${server.id}'),
+            count: server.referenceCount,
+            onTap: onUsage,
+          ),
+        ),
+        SizedBox(
+          width: _Cols.actions,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              IconButton(
+                key: ValueKey('server-edit-${server.id}'),
+                tooltip: '编辑服务器',
+                visualDensity: VisualDensity.compact,
+                iconSize: 16,
+                onPressed: onEdit,
+                icon: const Icon(Icons.edit_outlined),
+              ),
+              IconButton(
+                key: ValueKey('server-delete-${server.id}'),
+                tooltip: '删除服务器',
+                visualDensity: VisualDensity.compact,
+                iconSize: 16,
+                onPressed: onDelete,
+                icon: const Icon(Icons.close),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
 
-class _DatabaseCard extends StatelessWidget {
+class _DatabaseRow extends StatelessWidget {
   final DatabaseView database;
   final VoidCallback onUsage;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
-  const _DatabaseCard({
+  const _DatabaseRow({
     required this.database,
     required this.onUsage,
     required this.onEdit,
@@ -503,164 +829,88 @@ class _DatabaseCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      key: ValueKey('database-card-${database.id}'),
-      margin: const EdgeInsets.only(bottom: 10),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _CardTitle(id: database.id, title: database.roleLabel),
-            const SizedBox(height: 12),
-            _MetadataRow(label: '类型', value: database.typeLabel),
-            const SizedBox(height: 8),
-            _MetadataRow(
-              label: '连接',
-              value: database.address.isEmpty ? '未配置' : database.address,
-            ),
-            const SizedBox(height: 8),
-            _MetadataRow(label: '用户名', value: database.username ?? '-'),
-            const SizedBox(height: 6),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                IconButton(
-                  key: ValueKey('database-usage-${database.id}'),
-                  tooltip: '查看使用情况',
-                  onPressed: onUsage,
-                  icon: const Icon(Icons.account_tree_outlined),
-                ),
-                IconButton(
-                  key: ValueKey('database-edit-${database.id}'),
-                  tooltip: '编辑数据库',
-                  onPressed: onEdit,
-                  icon: const Icon(Icons.edit_outlined),
-                ),
-                IconButton(
-                  key: ValueKey('database-delete-${database.id}'),
-                  tooltip: '删除数据库',
-                  onPressed: onDelete,
-                  icon: const Icon(Icons.delete_outline),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CardTitle extends StatelessWidget {
-  final int id;
-  final String title;
-
-  const _CardTitle({required this.id, required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.primaryContainer,
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Text('#$id'),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
+    final tokens = AppTokens.of(context);
+    return _TableRowShell(
+      rowKey: ValueKey('database-card-${database.id}'),
+      cells: [
+        SizedBox(
+          width: _Cols.id,
           child: Text(
-            title,
-            style: Theme.of(context).textTheme.titleMedium,
+            '#${database.id}',
+            style: tokens.mono(fontSize: 12.5, color: tokens.textSecondary),
+          ),
+        ),
+        SizedBox(
+          width: _Cols.role,
+          child: Text(
+            database.roleLabel,
+            style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
             overflow: TextOverflow.ellipsis,
           ),
         ),
-      ],
-    );
-  }
-}
-
-class _MetadataRow extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _MetadataRow({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
         SizedBox(
-          width: 72,
+          width: _Cols.type,
           child: Text(
-            label,
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              color: Theme.of(context).colorScheme.outline,
-            ),
+            database.typeLabel,
+            style: const TextStyle(fontSize: 12.5),
           ),
         ),
-        Expanded(child: SelectableText(value)),
+        Expanded(
+          child: Text(
+            database.address.isEmpty ? '-' : database.address,
+            style: tokens.mono(fontSize: 12.5),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        const SizedBox(width: _Cols.gap),
+        SizedBox(
+          width: _Cols.username,
+          child: Text(
+            database.username ?? '-',
+            style: tokens.mono(fontSize: 12.5),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        SizedBox(
+          width: _Cols.password,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: _SecretChip(hasSecret: database.hasSecret),
+          ),
+        ),
+        SizedBox(
+          width: _Cols.references,
+          child: _ReferenceCountButton(
+            buttonKey: ValueKey('database-usage-${database.id}'),
+            count: database.referenceCount,
+            onTap: onUsage,
+          ),
+        ),
+        SizedBox(
+          width: _Cols.actions,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              IconButton(
+                key: ValueKey('database-edit-${database.id}'),
+                tooltip: '编辑数据库',
+                visualDensity: VisualDensity.compact,
+                iconSize: 16,
+                onPressed: onEdit,
+                icon: const Icon(Icons.edit_outlined),
+              ),
+              IconButton(
+                key: ValueKey('database-delete-${database.id}'),
+                tooltip: '删除数据库',
+                visualDensity: VisualDensity.compact,
+                iconSize: 16,
+                onPressed: onDelete,
+                icon: const Icon(Icons.close),
+              ),
+            ],
+          ),
+        ),
       ],
-    );
-  }
-}
-
-class _EmptyInventory extends StatelessWidget {
-  final IconData icon;
-  final String message;
-
-  const _EmptyInventory({required this.icon, required this.message});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 56, color: theme.colorScheme.outline),
-          const SizedBox(height: 12),
-          Text(
-            message,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.outline,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _InventoryErrorBanner extends StatelessWidget {
-  final String message;
-  final VoidCallback onRetry;
-
-  const _InventoryErrorBanner({required this.message, required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      key: const ValueKey('inventory-error-banner'),
-      width: double.infinity,
-      color: scheme.errorContainer,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
-        children: [
-          Icon(Icons.error_outline, size: 18, color: scheme.error),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(message, style: TextStyle(color: scheme.error)),
-          ),
-          TextButton(onPressed: onRetry, child: const Text('重试')),
-        ],
-      ),
     );
   }
 }

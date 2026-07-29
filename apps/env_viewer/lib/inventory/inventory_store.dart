@@ -24,10 +24,64 @@ class InventoryStore extends ChangeNotifier {
   bool _loading = false;
   bool _loaded = false;
   String? _error;
+  String _search = '';
   Future<void>? _loadFuture;
 
   List<ServerView> get servers => List.unmodifiable(_servers);
   List<DatabaseView> get databases => List.unmodifiable(_databases);
+
+  String get search => _search;
+
+  /// One query filters both inventories (it survives a tab switch); the
+  /// canonical [servers]/[databases] lists stay unfiltered for other
+  /// consumers (link editor, reference resolution).
+  List<ServerView> get filteredServers {
+    if (_search.isEmpty) return servers;
+    final query = _search.toLowerCase();
+    return _servers
+        .where(
+          (server) =>
+              [
+                server.id.toString(),
+                server.host,
+                server.os,
+                server.osLabel,
+                server.sshAddress,
+              ].whereType<String>().any(
+                (value) => value.toLowerCase().contains(query),
+              ),
+        )
+        .toList(growable: false);
+  }
+
+  List<DatabaseView> get filteredDatabases {
+    if (_search.isEmpty) return databases;
+    final query = _search.toLowerCase();
+    return _databases
+        .where(
+          (database) =>
+              [
+                database.id.toString(),
+                database.role,
+                database.roleLabel,
+                database.type,
+                database.typeLabel,
+                database.address,
+                database.username,
+              ].whereType<String>().any(
+                (value) => value.toLowerCase().contains(query),
+              ),
+        )
+        .toList(growable: false);
+  }
+
+  void setSearch(String value) {
+    final next = value.trim();
+    if (next == _search) return;
+    _search = next;
+    notifyListeners();
+  }
+
   Map<int, ServerView> get serversById =>
       Map.unmodifiable({for (final server in _servers) server.id: server});
   Map<int, DatabaseView> get databasesById => Map.unmodifiable({
@@ -62,7 +116,7 @@ class InventoryStore extends ChangeNotifier {
     } on BackendException catch (exception) {
       _error = exception.message;
     } catch (exception) {
-      _error = '加载资源库存失败：$exception';
+      _error = '加载资源清单失败：$exception';
     } finally {
       _loading = false;
       notifyListeners();

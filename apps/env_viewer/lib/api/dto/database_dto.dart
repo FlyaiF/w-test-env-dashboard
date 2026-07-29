@@ -10,6 +10,9 @@ class DatabaseDto {
   /// Whether the broker holds a login secret for this Database — presence only,
   /// never the secret itself.
   final bool hasSecret;
+
+  /// How many Components use this Database (引用 count).
+  final int referenceCount;
   final ConnectionInfo? connection;
 
   const DatabaseDto({
@@ -17,6 +20,7 @@ class DatabaseDto {
     this.role,
     this.type,
     this.hasSecret = false,
+    this.referenceCount = 0,
     this.connection,
   });
 
@@ -27,6 +31,7 @@ class DatabaseDto {
       role: json['role'] as String?,
       type: json['type'] as String?,
       hasSecret: json['hasSecret'] == true,
+      referenceCount: (json['referenceCount'] as num?)?.toInt() ?? 0,
       connection: conn is Map<String, dynamic>
           ? ConnectionInfo.fromJson(conn)
           : null,

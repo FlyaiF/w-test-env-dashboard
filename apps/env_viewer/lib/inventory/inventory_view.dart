@@ -17,6 +17,9 @@ class ServerView {
   /// Whether the backend broker holds an SSH secret — presence only.
   final bool hasSecret;
 
+  /// How many Components run on this Server (the 引用 column).
+  final int referenceCount;
+
   const ServerView({
     required this.id,
     this.host,
@@ -26,6 +29,7 @@ class ServerView {
     this.sshPort,
     this.sshUsername,
     this.hasSecret = false,
+    this.referenceCount = 0,
   });
 
   String get displayLabel => host ?? '#$id';
@@ -57,6 +61,9 @@ class DatabaseView {
   /// Whether the backend broker holds a login secret — presence only.
   final bool hasSecret;
 
+  /// How many Components use this Database (the 引用 column).
+  final int referenceCount;
+
   const DatabaseView({
     required this.id,
     this.role,
@@ -68,6 +75,7 @@ class DatabaseView {
     this.serviceName,
     this.username,
     this.hasSecret = false,
+    this.referenceCount = 0,
   });
 
   String get address {

@@ -121,6 +121,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    // Management actions live in the expanded row body.
+    await tester.tap(find.text('主服务'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('关联资源'));
     await tester.pumpAndSettle();
 
@@ -198,6 +201,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    // Management actions live in the expanded row body.
+    await tester.tap(find.text('主服务'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('关联资源'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('component-links-database-4')));
@@ -311,6 +317,9 @@ void main() {
 
     await tester.pumpWidget(_catalogHost(client, inventoryStore));
     await tester.pumpAndSettle();
+    // Management actions live in the expanded row body.
+    await tester.tap(find.text('主服务'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('关联资源'));
     await tester.pump();
 
@@ -346,7 +355,7 @@ void main() {
             ]);
           }
           if (request.url.path == '/api/servers') {
-            return _json({'detail': '资源库存暂不可用'}, 503);
+            return _json({'detail': '资源清单暂不可用'}, 503);
           }
           if (request.url.path == '/api/databases') return _json([]);
           return http.Response('not found', 404);
@@ -356,11 +365,14 @@ void main() {
 
       await tester.pumpWidget(_catalogHost(client, inventoryStore));
       await tester.pumpAndSettle();
+      // Management actions live in the expanded row body.
+      await tester.tap(find.text('主服务'));
+      await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('关联资源'));
       await tester.pumpAndSettle();
 
       expect(find.byType(AlertDialog), findsNothing);
-      expect(find.textContaining('资源库存暂不可用'), findsOneWidget);
+      expect(find.textContaining('资源清单暂不可用'), findsOneWidget);
     },
   );
 }

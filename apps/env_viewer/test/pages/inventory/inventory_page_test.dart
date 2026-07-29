@@ -186,11 +186,19 @@ void main() {
       find.byKey(const ValueKey('inventory-search-field')),
       'missing',
     );
-    await tester.pump();
+    // The search is debounced (250ms) before it reaches the store.
+    await tester.pump(const Duration(milliseconds: 300));
     expect(find.byKey(const ValueKey('server-card-7')), findsNothing);
     expect(find.text('没有匹配的服务器'), findsOneWidget);
 
+    // The query survives a tab switch — one query filters both inventories.
     await _switchToDatabases(tester);
+    expect(find.byKey(const ValueKey('database-card-9')), findsNothing);
+    expect(find.text('没有匹配的数据库'), findsOneWidget);
+
+    // Clearing it restores the full table.
+    await tester.tap(find.byTooltip('清除过滤'));
+    await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('database-card-9')), findsOneWidget);
     expect(find.text('db01.internal:1521/ORCL'), findsOneWidget);
     expect(tester.takeException(), isNull);

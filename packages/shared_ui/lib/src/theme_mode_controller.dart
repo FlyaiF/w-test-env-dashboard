@@ -3,15 +3,21 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+/// UI preferences persisted at `~/.test-env-dashboard/ui.json`: theme mode and
+/// the sidebar's manual expand/collapse state. This controller is the single
+/// writer of ui.json so keys never clobber each other.
 class AppThemeController extends ChangeNotifier {
   static const _dirName = '.test-env-dashboard';
   static const _fileName = 'ui.json';
   static const _themeModeKey = 'theme_mode';
+  static const _sidebarExpandedKey = 'sidebar_expanded';
 
   ThemeMode _themeMode = ThemeMode.system;
+  bool _sidebarExpanded = true;
   bool _loaded = false;
 
   ThemeMode get themeMode => _themeMode;
+  bool get sidebarExpanded => _sidebarExpanded;
   bool get loaded => _loaded;
 
   Future<void> load() async {
@@ -22,6 +28,7 @@ class AppThemeController extends ChangeNotifier {
         final data = jsonDecode(content);
         if (data is Map<String, dynamic>) {
           _themeMode = _themeModeFromStorage(data[_themeModeKey]);
+          _sidebarExpanded = data[_sidebarExpandedKey] != false;
         }
       }
     } catch (e) {
@@ -37,12 +44,25 @@ class AppThemeController extends ChangeNotifier {
     _themeMode = mode;
     _loaded = true;
     notifyListeners();
+    await _save();
+  }
 
+  Future<void> setSidebarExpanded(bool expanded) async {
+    if (_sidebarExpanded == expanded) return;
+    _sidebarExpanded = expanded;
+    notifyListeners();
+    await _save();
+  }
+
+  Future<void> _save() async {
     try {
       final file = await _settingsFile(createDirectory: true);
       const encoder = JsonEncoder.withIndent('  ');
       await file.writeAsString(
-        encoder.convert({_themeModeKey: _themeModeToStorage(mode)}),
+        encoder.convert({
+          _themeModeKey: _themeModeToStorage(_themeMode),
+          _sidebarExpandedKey: _sidebarExpanded,
+        }),
       );
     } catch (e) {
       debugPrint('AppThemeController.save error: $e');

@@ -1,0 +1,678 @@
+<title>环境速查 · 视觉方向原型</title>
+<style>
+/* ---------- page chrome (theme-aware) ---------- */
+:root{
+  --pg-bg:#ECEEF0; --pg-text:#26282B; --pg-text2:#70757B; --pg-line:#D5D8DC; --pg-card:#FFFFFF;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --pg-bg:#101214; --pg-text:#DDE0E3; --pg-text2:#8B9096; --pg-line:#2C3034; --pg-card:#191C1F; }
+}
+:root[data-theme="dark"]{ --pg-bg:#101214; --pg-text:#DDE0E3; --pg-text2:#8B9096; --pg-line:#2C3034; --pg-card:#191C1F; }
+:root[data-theme="light"]{ --pg-bg:#ECEEF0; --pg-text:#26282B; --pg-text2:#70757B; --pg-line:#D5D8DC; --pg-card:#FFFFFF; }
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--pg-bg); color:var(--pg-text);
+  font-family:-apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  font-size:14px; line-height:1.6; padding:28px 24px 96px;
+}
+.chrome{max-width:1180px;margin:0 auto}
+.chrome h1{font-size:19px;margin:0 0 4px;letter-spacing:.01em}
+.chrome .sub{color:var(--pg-text2);font-size:13px;max-width:72ch;margin:0 0 20px}
+.chrome .sub b{color:var(--pg-text);font-weight:600}
+.var-cap{display:flex;align-items:baseline;gap:10px;margin:0 0 10px}
+.var-cap .k{font-size:12px;font-weight:700;letter-spacing:.08em;color:var(--pg-text2)}
+.var-cap h2{font-size:15px;margin:0}
+.var-cap p{margin:0;color:var(--pg-text2);font-size:12.5px}
+.win-wrap{overflow-x:auto;border-radius:10px;box-shadow:0 6px 28px rgba(0,0,0,.14)}
+section.variant{display:none}
+section.variant.on{display:block}
+
+/* ---------- floating switcher ---------- */
+.bar{
+  position:fixed;left:50%;bottom:20px;transform:translateX(-50%);
+  display:flex;align-items:center;gap:2px;padding:6px 8px;border-radius:999px;
+  background:#1B1D20;color:#F2F3F4;box-shadow:0 8px 24px rgba(0,0,0,.35);
+  font-size:13px;z-index:50;white-space:nowrap;
+}
+.bar button{
+  background:none;border:0;color:inherit;font:inherit;cursor:pointer;
+  padding:6px 10px;border-radius:999px;
+}
+.bar button:hover{background:rgba(255,255,255,.12)}
+.bar button:focus-visible{outline:2px solid #7CC5C0;outline-offset:1px}
+.bar .lbl{min-width:190px;text-align:center;font-weight:600}
+.bar .sep{width:1px;height:18px;background:rgba(255,255,255,.22);margin:0 6px}
+
+/* =========================================================
+   shared mock layout — styled entirely through variant tokens
+   ========================================================= */
+.win{
+  min-width:1280px;height:700px;
+  background:var(--bg);color:var(--text);
+  font-family:var(--sans);font-size:13px;line-height:1.55;
+  display:flex;overflow:hidden;
+}
+.mock-slot{display:flex;width:100%;height:100%}
+.app{display:flex;width:100%;height:100%}
+.data{font-family:var(--data-font);font-variant-numeric:tabular-nums}
+button{font:inherit;color:inherit;cursor:pointer}
+.win button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+
+/* sidebar */
+.side{width:188px;flex:none;background:var(--side-bg);border-right:var(--frame) solid var(--border);display:flex;flex-direction:column}
+.side .brand{display:flex;align-items:center;gap:8px;padding:14px 14px 12px;font-weight:700;font-size:13.5px}
+.side .conn{width:7px;height:7px;border-radius:50%;background:var(--ok);flex:none;margin-left:auto}
+.side .grp{padding:10px 14px 4px;font-size:11px;color:var(--text2);letter-spacing:.08em}
+.nav-item{display:flex;align-items:center;gap:8px;margin:1px 8px;padding:7px 10px;border:0;background:none;text-align:left;width:calc(100% - 16px);border-radius:var(--r-ctl);color:var(--text2)}
+.nav-item .ic{width:16px;text-align:center;flex:none;font-size:14px;line-height:1}
+.nav-item:hover{background:var(--hover)}
+.nav-item.sel{background:var(--sel-bg);color:var(--accent);font-weight:600;box-shadow:var(--sel-edge)}
+.side .foot{margin-top:auto;padding:8px 0 10px;border-top:1px solid var(--border-soft)}
+
+/* main column */
+.main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--bg)}
+.view{display:none;flex:1;min-height:0;flex-direction:column}
+.view.on{display:flex}
+
+/* page header row */
+.ph{display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:var(--frame) solid var(--border);background:var(--head-bg)}
+.ph h3{font-size:14.5px;margin:0;font-weight:700}
+.ph .cnt{color:var(--text2);font-size:12px}
+.ph .search{margin-left:auto;display:flex;align-items:center;gap:6px;background:var(--field-bg);border:1px solid var(--border-soft);border-radius:var(--r-ctl);padding:5px 10px;color:var(--text2);width:230px;font-size:12.5px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--btn-border);background:var(--btn-bg);border-radius:var(--r-ctl);padding:0 11px;height:27px;line-height:1;font-size:12.5px;color:var(--text)}
+.btn:hover{background:var(--hover)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:600}
+.btn.primary:hover{filter:brightness(1.06)}
+.btn.ghost{border-color:transparent;background:none;color:var(--text2)}
+.btn.ghost:hover{background:var(--hover);color:var(--text)}
+.btn.danger:hover{color:var(--err);border-color:var(--err)}
+
+/* catalog body: roster + detail */
+.cat-body{flex:1;display:flex;min-height:0}
+.roster{width:296px;flex:none;overflow-y:auto;border-right:var(--frame) solid var(--border);background:var(--roster-bg);padding:var(--roster-pad)}
+.env{display:flex;gap:10px;align-items:flex-start;width:100%;text-align:left;border:1px solid transparent;background:none;padding:9px 12px;border-radius:var(--r-row);margin-bottom:var(--row-gap)}
+.env:hover{background:var(--hover)}
+.env.sel{background:var(--sel-bg);border-color:var(--sel-border);box-shadow:var(--sel-edge)}
+.env .nm{font-weight:600;font-size:13px;display:flex;align-items:center;gap:6px}
+.env .meta{color:var(--text2);font-size:11.5px;margin-top:1px}
+.env .body{min-width:0;flex:1}
+
+/* status dot + chip system */
+.dot{width:8px;height:8px;border-radius:50%;flex:none;display:inline-block;margin-top:6px}
+.dot.ok{background:var(--ok)} .dot.err{background:var(--err)} .dot.none{background:transparent;border:1.5px solid var(--text2)}
+.warnflag{color:var(--warn);font-size:11px;font-weight:700}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;border-radius:var(--r-chip);padding:var(--chip-pad);font-weight:600;letter-spacing:.02em}
+.chip i{width:6px;height:6px;border-radius:50%;flex:none;background:currentColor}
+.chip.ok{color:var(--ok);background:var(--ok-bg);border:var(--chip-border) solid var(--ok)}
+.chip.err{color:var(--err);background:var(--err-bg);border:var(--chip-border) solid var(--err)}
+.chip.none{color:var(--text2);background:var(--none-bg);border:var(--chip-border) solid var(--text2)}
+.chip.na{color:var(--text2);background:var(--none-bg);border:var(--chip-border) solid var(--text2)}
+
+/* detail pane */
+.detail{flex:1;overflow-y:auto;padding:var(--detail-pad)}
+.d-head{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+.idb{font-size:11px;font-weight:700;color:var(--accent);background:var(--sel-bg);border-radius:var(--r-chip);padding:2px 7px}
+.d-head h4{font-size:16px;margin:0;font-weight:700}
+.d-head .acts{margin-left:auto;display:flex;gap:6px}
+.memo{color:var(--text2);font-size:12.5px;margin:0 0 14px;max-width:64ch}
+.c-hd{display:flex;align-items:center;margin:6px 0 8px}
+.c-hd h5{font-size:12px;margin:0;color:var(--text2);letter-spacing:.06em;font-weight:700}
+.c-hd .btn{margin-left:auto}
+
+/* component rows */
+.comp{background:var(--card-bg);border:1px solid var(--card-border);border-radius:var(--r-card);margin-bottom:var(--card-gap);box-shadow:var(--card-shadow);overflow:hidden}
+.comp-head{
+  display:grid;align-items:center;gap:12px;padding:var(--comp-pad);cursor:pointer;
+  grid-template-columns:10px 92px 134px 128px minmax(96px,1fr) 72px 74px 14px;
+}
+.comp-head:hover{background:var(--hover)}
+.comp-head .dot{margin-top:0}
+.comp-head .role{font-weight:650;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.comp-head .ver{font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.comp-head .ts{color:var(--text2);font-size:11.5px;white-space:nowrap}
+.comp-head .host{color:var(--text2);font-size:12px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.comp-head .chip{justify-self:start}
+.acts{display:flex;gap:4px;justify-content:flex-end}
+.btn.act{padding:0 6px;min-width:32px;height:25px;font-family:var(--data-font);font-size:12.5px;opacity:.6}
+.comp-head:hover .btn.act{opacity:1}
+.btn.act.ph{visibility:hidden}
+.comp-head .chev{color:var(--text2);justify-self:end;font-size:14px;line-height:1;transition:transform .15s}
+.comp.open .chev{transform:rotate(90deg)}
+.comp-body{display:none;border-top:1px solid var(--border-soft);padding:12px 16px 14px;background:var(--card-body-bg)}
+.comp.open .comp-body{display:block}
+.fail-note{color:var(--err);font-size:12px;margin:0 0 10px;font-weight:600}
+.fgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px 18px;margin-bottom:12px}
+.fv .l{font-size:11px;color:var(--text2);letter-spacing:.04em}
+.fv .v{font-size:12.5px;word-break:break-all}
+.credsec{border-top:1px dashed var(--border-soft);padding-top:10px;margin-top:2px}
+.credsec .t{font-size:11px;color:var(--text2);font-weight:700;letter-spacing:.06em;margin-bottom:6px}
+.credrow{display:flex;align-items:center;gap:10px;font-size:12.5px;padding:3px 0;flex-wrap:wrap}
+.credrow .btn{padding:0 8px;height:23px;font-size:11.5px}
+.mask{letter-spacing:.18em;color:var(--text2)}
+
+/* inventory table */
+.inv-tabs{display:flex;gap:2px;padding:0 18px;border-bottom:var(--frame) solid var(--border);background:var(--head-bg)}
+.inv-tab{border:0;background:none;padding:9px 14px;font-size:13px;color:var(--text2);border-bottom:2px solid transparent;margin-bottom:-1px}
+.inv-tab.sel{color:var(--accent);font-weight:700;border-bottom-color:var(--accent)}
+.inv-scroll{flex:1;overflow:auto;padding:var(--detail-pad)}
+table.inv{width:100%;border-collapse:collapse;background:var(--card-bg);border:1px solid var(--card-border);border-radius:var(--r-card);box-shadow:var(--card-shadow);overflow:hidden}
+table.inv th{font-size:11px;color:var(--text2);text-align:left;letter-spacing:.06em;font-weight:700;padding:9px 14px;border-bottom:1px solid var(--border);background:var(--th-bg)}
+table.inv td{padding:var(--cell-pad);border-bottom:1px solid var(--border-soft);font-size:12.5px;vertical-align:middle}
+table.inv tr:last-child td{border-bottom:0}
+table.inv tr:hover td{background:var(--hover)}
+.pw{display:inline-flex;align-items:center;gap:6px;font-size:12px}
+.pw i{width:7px;height:7px;border-radius:50%}
+.pw.set i{background:var(--ok)} .pw.unset i{background:transparent;border:1.5px solid var(--text2)}
+.pw.unset{color:var(--text2)}
+.refn{font-weight:700}
+.refn.zero{color:var(--text2);font-weight:400}
+td .rowacts{display:flex;gap:4px;justify-content:flex-end}
+td .rowacts .btn{padding:0 8px;height:23px;font-size:11.5px;min-width:28px}
+
+/* =========================================================
+   VARIANT A — 仪表盘 Console
+   ========================================================= */
+.vA{
+  --sans:-apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --data-font:ui-monospace,"SF Mono",Menlo,Consolas,"Cascadia Mono",monospace;
+  --frame:1px; --r-ctl:5px; --r-row:6px; --r-card:6px; --r-chip:4px;
+  --chip-pad:2px 8px; --chip-border:0px;
+  --roster-pad:8px; --row-gap:2px; --detail-pad:16px 20px;
+  --comp-pad:9px 14px; --card-gap:8px; --cell-pad:8px 14px;
+  --card-shadow:none; --sel-edge:inset 3px 0 0 var(--accent);
+}
+.vA[data-mode="light"]{
+  --bg:#F4F4F1; --side-bg:#ECECE8; --head-bg:#F4F4F1; --roster-bg:#F0F0EC;
+  --card-bg:#FBFBF9; --card-body-bg:#F6F6F3; --th-bg:#F1F1ED; --field-bg:#FBFBF9;
+  --text:#26282A; --text2:#71757A; --border:#D3D3CC; --border-soft:#E2E2DB;
+  --card-border:#DBDBD4; --hover:#E9E9E4; --sel-bg:#DFEBEA; --sel-border:#BFD8D6;
+  --accent:#1F7A76; --on-accent:#FFFFFF; --btn-bg:#FBFBF9; --btn-border:#CFCFC8;
+  --ok:#2E7D4F; --warn:#A56D0A; --err:#B4402C;
+  --ok-bg:#E4EFE7; --err-bg:#F5E4E0; --none-bg:#EAEAE5;
+}
+.vA[data-mode="dark"]{
+  --bg:#17181A; --side-bg:#131416; --head-bg:#17181A; --roster-bg:#151618;
+  --card-bg:#1E2023; --card-body-bg:#1A1C1E; --th-bg:#1B1D20; --field-bg:#1E2023;
+  --text:#DCDEE0; --text2:#8B9095; --border:#303337; --border-soft:#26292C;
+  --card-border:#2C2F33; --hover:#232528; --sel-bg:#1D2C2B; --sel-border:#2C4644;
+  --accent:#59B3AD; --on-accent:#10201F; --btn-bg:#1E2023; --btn-border:#3A3D42;
+  --ok:#5CB380; --warn:#D2A24A; --err:#DF6E58;
+  --ok-bg:#1D2B22; --err-bg:#33211D; --none-bg:#232528;
+}
+.vA .ver,.vA .host,.vA .fv .v,.vA .credrow .val,.vA td.mono,.vA .env .meta{font-family:var(--data-font)}
+.vA .env .meta{font-size:11px}
+.vA .chip{font-family:var(--data-font);font-weight:600}
+
+/* =========================================================
+   VARIANT B — 企业蓝 Soft
+   ========================================================= */
+.vB{
+  --sans:-apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --data-font:var(--sans);
+  --frame:1px; --r-ctl:8px; --r-row:10px; --r-card:12px; --r-chip:999px;
+  --chip-pad:3px 10px; --chip-border:0px;
+  --roster-pad:12px; --row-gap:6px; --detail-pad:20px 24px;
+  --comp-pad:13px 18px; --card-gap:12px; --cell-pad:11px 16px;
+  --sel-edge:none;
+}
+.vB[data-mode="light"]{
+  --bg:#F3F6FA; --side-bg:#FFFFFF; --head-bg:#FFFFFF; --roster-bg:#F3F6FA;
+  --card-bg:#FFFFFF; --card-body-bg:#F8FAFD; --th-bg:#F5F8FC; --field-bg:#F3F6FA;
+  --text:#1F2937; --text2:#64748B; --border:#E2E8F1; --border-soft:#EBF0F6;
+  --card-border:#E6EBF3; --hover:#EEF3F9; --sel-bg:#E4EDFB; --sel-border:#C8DAF6;
+  --accent:#3568C9; --on-accent:#FFFFFF; --btn-bg:#FFFFFF; --btn-border:#D5DEEA;
+  --ok:#1E7A43; --warn:#96690D; --err:#B3402E;
+  --ok-bg:#E4F4EA; --err-bg:#FBE9E5; --none-bg:#EDF1F6;
+  --card-shadow:0 1px 3px rgba(16,24,40,.07);
+}
+.vB[data-mode="dark"]{
+  --bg:#131A28; --side-bg:#1A2334; --head-bg:#1A2334; --roster-bg:#131A28;
+  --card-bg:#1E2940; --card-body-bg:#1A2438; --th-bg:#202C45; --field-bg:#162032;
+  --text:#E2E8F0; --text2:#93A1B7; --border:#2B3A57; --border-soft:#243149;
+  --card-border:#2B3A57; --hover:#243453; --sel-bg:#25406E; --sel-border:#33518A;
+  --accent:#82AAF2; --on-accent:#0E1B33; --btn-bg:#1E2940; --btn-border:#37507E;
+  --ok:#6BC58F; --warn:#D9AE58; --err:#E58270;
+  --ok-bg:#1C3226; --err-bg:#3A2420; --none-bg:#233048;
+  --card-shadow:0 1px 3px rgba(0,0,0,.3);
+}
+.vB .chip i{display:none}
+.vB .side .brand{font-size:14px}
+
+/* =========================================================
+   VARIANT C — 工控 Industrial
+   ========================================================= */
+.vC{
+  --sans:-apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --data-font:ui-monospace,"SF Mono",Menlo,Consolas,"Cascadia Mono",monospace;
+  --frame:2px; --r-ctl:0px; --r-row:0px; --r-card:0px; --r-chip:0px;
+  --chip-pad:1px 7px; --chip-border:1.5px;
+  --roster-pad:0px; --row-gap:0px; --detail-pad:14px 18px;
+  --comp-pad:8px 14px; --card-gap:-1px; --cell-pad:7px 14px;
+  --card-shadow:none; --sel-edge:inset 4px 0 0 var(--accent);
+}
+.vC[data-mode="light"]{
+  --bg:#F1F1EE; --side-bg:#E9E9E5; --head-bg:#F1F1EE; --roster-bg:#EFEFEB;
+  --card-bg:#FCFCFA; --card-body-bg:#F4F4F1; --th-bg:#E6E6E1; --field-bg:#FCFCFA;
+  --text:#161616; --text2:#5F5F5C; --border:#161616; --border-soft:#C8C8C2;
+  --card-border:#8E8E88; --hover:#E4E4DF; --sel-bg:#F8E9DD; --sel-border:#161616;
+  --accent:#BC4B00; --on-accent:#FFFFFF; --btn-bg:#FCFCFA; --btn-border:#161616;
+  --ok:#1F6E3D; --warn:#8F5E00; --err:#A82815;
+  --ok-bg:transparent; --err-bg:transparent; --none-bg:transparent;
+}
+.vC[data-mode="dark"]{
+  --bg:#151515; --side-bg:#101010; --head-bg:#151515; --roster-bg:#131313;
+  --card-bg:#1C1C1C; --card-body-bg:#171717; --th-bg:#222222; --field-bg:#1C1C1C;
+  --text:#EDEDEA; --text2:#9A9A94; --border:#B9B9B2; --border-soft:#3A3A36;
+  --card-border:#6F6F68; --hover:#242424; --sel-bg:#33231A; --sel-border:#B9B9B2;
+  --accent:#F0813A; --on-accent:#1A1000; --btn-bg:#1C1C1C; --btn-border:#B9B9B2;
+  --ok:#59B37E; --warn:#D8A94E; --err:#E5674C;
+  --ok-bg:transparent; --err-bg:transparent; --none-bg:transparent;
+}
+.vC .chip{text-transform:uppercase;font-family:var(--data-font)}
+.vC .chip i{display:none}
+.vC .ver,.vC .host,.vC .fv .v,.vC td.mono,.vC .env .meta{font-family:var(--data-font)}
+.vC table.inv td,.vC table.inv th{border-right:1px solid var(--border-soft)}
+.vC table.inv td:last-child,.vC table.inv th:last-child{border-right:0}
+.vC .env{border-bottom:1px solid var(--border-soft)}
+.vC .side .grp{text-transform:uppercase}
+.vC .btn{font-weight:600}
+
+/* =========================================================
+   VARIANT D — 组合方案 (A console base + B selection + icon ops)
+   ========================================================= */
+.vD{
+  --sans:-apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --data-font:ui-monospace,"SF Mono",Menlo,Consolas,"Cascadia Mono",monospace;
+  --frame:1px; --r-ctl:6px; --r-row:9px; --r-card:8px; --r-chip:4px;
+  --chip-pad:2px 8px; --chip-border:0px;
+  --roster-pad:10px; --row-gap:4px; --detail-pad:16px 20px;
+  --comp-pad:9px 14px; --card-gap:8px; --cell-pad:8px 14px;
+  --card-shadow:none; --sel-edge:none;
+}
+.vD[data-mode="light"]{
+  --bg:#F4F4F1; --side-bg:#ECECE8; --head-bg:#F4F4F1; --roster-bg:#F0F0EC;
+  --card-bg:#FBFBF9; --card-body-bg:#F6F6F3; --th-bg:#F1F1ED; --field-bg:#FBFBF9;
+  --text:#26282A; --text2:#71757A; --border:#D3D3CC; --border-soft:#E2E2DB;
+  --card-border:#DBDBD4; --hover:#E9E9E4; --sel-bg:#DBEAE8; --sel-border:#C4DBD8;
+  --accent:#1F7A76; --on-accent:#FFFFFF; --btn-bg:#FBFBF9; --btn-border:#CFCFC8;
+  --ok:#2E7D4F; --warn:#A56D0A; --err:#B4402C;
+  --ok-bg:#E4EFE7; --err-bg:#F5E4E0; --none-bg:#EAEAE5;
+}
+.vD[data-mode="dark"]{
+  --bg:#17181A; --side-bg:#131416; --head-bg:#17181A; --roster-bg:#151618;
+  --card-bg:#1E2023; --card-body-bg:#1A1C1E; --th-bg:#1B1D20; --field-bg:#1E2023;
+  --text:#DCDEE0; --text2:#8B9095; --border:#303337; --border-soft:#26292C;
+  --card-border:#2C2F33; --hover:#232528; --sel-bg:#20312F; --sel-border:#2E4A47;
+  --accent:#59B3AD; --on-accent:#10201F; --btn-bg:#1E2023; --btn-border:#3A3D42;
+  --ok:#5CB380; --warn:#D2A24A; --err:#DF6E58;
+  --ok-bg:#1D2B22; --err-bg:#33211D; --none-bg:#232528;
+}
+.vD .ver,.vD .host,.vD .fv .v,.vD .credrow .val,.vD td.mono,.vD .env .meta{font-family:var(--data-font)}
+.vD .env .meta{font-size:11px}
+.vD .chip{font-family:var(--data-font);font-weight:600}
+.vD .icon-btn{padding:0 6px;min-width:30px;font-size:13px}
+.vD .icon-btn,.vD .btn.act{font-variant-emoji:text}
+.vD .refbtn{background:none;border:0;padding:0;color:var(--accent);font-weight:700;font-family:var(--data-font)}
+.vD .refbtn:hover{text-decoration:underline}
+
+@media (prefers-reduced-motion: reduce){
+  *{transition:none !important}
+}
+</style>
+
+<div class="chrome">
+  <h1>环境速查 · 重构视觉方向原型</h1>
+  <p class="sub">
+    结构已按讨论定稿（左侧环境列表带健康汇总 → 右侧紧凑组件行；清单改为可排序表格），此页只比较<b>视觉语言</b>：配色、字体用法、密度与状态呈现。
+    <b>方向 D 为当前拟定方案</b>（A 底子 + B 选中态 + 图标化操作），A / B / C 保留作对照。各方向使用完全相同的数据。侧栏「环境目录 / 资源清单」可点击切换，组件行可点击展开。
+    用底部悬浮条或键盘 ← → 切换方向，🌓 切换明暗。实际应用将使用 Sarasa Gothic / Mono SC 字体，此预览以系统字体近似。
+  </p>
+
+  <section class="variant" data-v="vD">
+    <div class="var-cap"><span class="k">方向 D</span><h2>组合方案（A + B）</h2>
+      <p>A 的仪表底色与等宽数据列 + B 的柔和圆角选中态；操作压缩为图标或双字（悬停显示完整名称）。</p></div>
+    <div class="win-wrap"><div class="win vD" data-mode="light"><div class="mock-slot"></div></div></div>
+  </section>
+
+  <section class="variant" data-v="vA">
+    <div class="var-cap"><span class="k">方向 A</span><h2>仪表盘 Console</h2>
+      <p>暖灰仪表底色；所有机器数据（版本、主机、时间）用等宽字体对齐成列；颜色只用于状态含义。</p></div>
+    <div class="win-wrap"><div class="win vA" data-mode="light"><div class="mock-slot"></div></div></div>
+  </section>
+
+  <section class="variant" data-v="vB">
+    <div class="var-cap"><span class="k">方向 B</span><h2>企业蓝 Soft</h2>
+      <p>白底卡片 + 阴影 + 大圆角，宽松留白，状态为彩色药丸；熟悉、柔和的企业内部工具风格。</p></div>
+    <div class="win-wrap"><div class="win vB" data-mode="light"><div class="mock-slot"></div></div></div>
+  </section>
+
+  <section class="variant" data-v="vC">
+    <div class="var-cap"><span class="k">方向 C</span><h2>工控 Industrial</h2>
+      <p>零圆角、粗边框、盖章式状态标签、表格满格线；机房设备铭牌式的高对比工业风。</p></div>
+    <div class="win-wrap"><div class="win vC" data-mode="light"><div class="mock-slot"></div></div></div>
+  </section>
+</div>
+
+<div class="bar" role="toolbar" aria-label="原型切换">
+  <button type="button" id="prev" aria-label="上一个方向">◀</button>
+  <span class="lbl" id="lbl">A · 仪表盘 Console</span>
+  <button type="button" id="next" aria-label="下一个方向">▶</button>
+  <span class="sep"></span>
+  <button type="button" id="mode" aria-label="切换明暗">🌓 深色</button>
+</div>
+
+<template id="mock">
+  <div class="app">
+    <nav class="side">
+      <div class="brand">环境速查 <span class="conn" title="已连接后端"></span></div>
+      <div class="grp">环境</div>
+      <button type="button" class="nav-item sel" data-view="catalog"><span class="ic">▤</span>环境目录</button>
+      <button type="button" class="nav-item" data-view="inventory"><span class="ic">▦</span>资源清单</button>
+      <div class="foot">
+        <button type="button" class="nav-item"><span class="ic">⚙</span>设置</button>
+        <button type="button" class="nav-item"><span class="ic">ⓘ</span>关于</button>
+      </div>
+    </nav>
+
+    <div class="main">
+      <!-- ================= 环境目录 ================= -->
+      <div class="view on" data-view="catalog">
+        <div class="ph">
+          <h3>环境目录</h3><span class="cnt">显示 5 / 12 条</span>
+          <div class="search">⌕ 过滤环境 / 组件 / 版本…</div>
+          <button type="button" class="btn primary">＋ 新建环境</button>
+          <button type="button" class="btn ghost">刷新</button>
+        </div>
+        <div class="cat-body">
+          <div class="roster">
+            <button type="button" class="env sel"><span class="dot ok"></span>
+              <span class="body"><span class="nm">UF3.0 联调环境</span>
+              <span class="meta">#7 · 5 组件 · 2 小时前</span></span></button>
+            <button type="button" class="env"><span class="dot err"></span>
+              <span class="body"><span class="nm">O32 回归测试</span>
+              <span class="meta">#3 · 4 组件 · 35 分钟前</span></span></button>
+            <button type="button" class="env"><span class="dot ok"></span>
+              <span class="body"><span class="nm">信创适配验证 <span class="warnflag">⚠ 3 天未采集</span></span>
+              <span class="meta">#9 · 6 组件 · 3 天前</span></span></button>
+            <button type="button" class="env"><span class="dot none"></span>
+              <span class="body"><span class="nm">估值核算 UAT</span>
+              <span class="meta">#12 · 3 组件 · 未采集</span></span></button>
+            <button type="button" class="env"><span class="dot ok"></span>
+              <span class="body"><span class="nm">TA 灰度环境</span>
+              <span class="meta">#5 · 2 组件 · 4 小时前</span></span></button>
+          </div>
+
+          <div class="detail">
+            <div class="d-head">
+              <span class="idb">#7</span><h4>UF3.0 联调环境</h4>
+              <div class="acts">
+                <button type="button" class="btn">◉ 立即采集</button>
+                <button type="button" class="btn ghost">编辑</button>
+                <button type="button" class="btn ghost danger">删除</button>
+              </div>
+            </div>
+            <p class="memo">对接柜台 42 号联调，周三前保持稳定，勿动数据库。</p>
+
+            <div class="c-hd"><h5>组件（5）</h5><button type="button" class="btn ghost">＋ 添加组件</button></div>
+
+            <div class="comp open">
+              <div class="comp-head">
+                <span class="dot ok"></span><span class="role">主服务</span>
+                <span class="ver data">V20250612.1</span>
+                <span class="ts">更新 07-28 09:12</span>
+                <span class="host data">10.20.1.15</span>
+                <span class="chip ok"><i></i>正常</span>
+                <span class="acts">
+                  <button type="button" class="btn act" title="SSH 连接">&gt;_</button>
+                  <button type="button" class="btn act" title="数据库工具">⛁</button>
+                </span>
+                <span class="chev">›</span>
+              </div>
+              <div class="comp-body">
+                <div class="fgrid">
+                  <div class="fv"><div class="l">协议</div><div class="v">T2</div></div>
+                  <div class="fv"><div class="l">监听端口</div><div class="v data">9359</div></div>
+                  <div class="fv"><div class="l">版本探测</div><div class="v">SSH 文件</div></div>
+                  <div class="fv"><div class="l">最近采集</div><div class="v data">07-29 08:02</div></div>
+                  <div class="fv" style="grid-column:span 2"><div class="l">日志位置</div><div class="v data">/home/apps/uf30/logs/server.log</div></div>
+                  <div class="fv" style="grid-column:span 2"><div class="l">URL</div><div class="v data">—</div></div>
+                </div>
+                <div class="credsec">
+                  <div class="t">SSH 信息</div>
+                  <div class="credrow"><span class="val data">root@10.20.1.15:22</span>
+                    <span class="mask">••••••</span>
+                    <button type="button" class="btn ghost">显示密码</button>
+                    <button type="button" class="btn ghost">复制密码</button></div>
+                </div>
+                <div class="credsec">
+                  <div class="t">数据库信息</div>
+                  <div class="credrow"><span class="val data">业务库 · Oracle · 10.20.1.30:1521/uf30</span>
+                    <button type="button" class="btn ghost">复制连接串</button></div>
+                  <div class="credrow"><span class="val data">中转库 · 达梦 · 10.20.1.31:5236</span>
+                    <button type="button" class="btn ghost">复制连接串</button></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="comp">
+              <div class="comp-head">
+                <span class="dot ok"></span><span class="role">网关</span>
+                <span class="ver data">V20250608.3</span>
+                <span class="ts">更新 07-25 18:40</span>
+                <span class="host data">10.20.1.16</span>
+                <span class="chip ok"><i></i>正常</span>
+                <span class="acts">
+                  <button type="button" class="btn act" title="SSH 连接">&gt;_</button>
+                  <button type="button" class="btn act ph" tabindex="-1" aria-hidden="true">⛁</button>
+                </span>
+                <span class="chev">›</span>
+              </div>
+              <div class="comp-body"><div class="fgrid">
+                <div class="fv"><div class="l">协议</div><div class="v">HTTP</div></div>
+                <div class="fv"><div class="l">监听端口</div><div class="v data">7003</div></div>
+                <div class="fv"><div class="l">版本探测</div><div class="v">HTTP 接口</div></div>
+                <div class="fv"><div class="l">最近采集</div><div class="v data">07-29 08:02</div></div>
+              </div></div>
+            </div>
+
+            <div class="comp open">
+              <div class="comp-head">
+                <span class="dot err"></span><span class="role">界面</span>
+                <span class="ver data">—</span>
+                <span class="ts">更新 —</span>
+                <span class="host data">10.20.1.17</span>
+                <span class="chip err"><i></i>失败</span>
+                <span class="acts">
+                  <button type="button" class="btn act" title="SSH 连接">&gt;_</button>
+                  <button type="button" class="btn act ph" tabindex="-1" aria-hidden="true">⛁</button>
+                </span>
+                <span class="chev">›</span>
+              </div>
+              <div class="comp-body">
+                <p class="fail-note">采集失败：SSH 连接超时（10.20.1.17:22）· 07-29 08:02</p>
+                <div class="fgrid">
+                  <div class="fv"><div class="l">协议</div><div class="v">专有</div></div>
+                  <div class="fv"><div class="l">监听端口</div><div class="v data">8100</div></div>
+                  <div class="fv"><div class="l">版本探测</div><div class="v">SSH 文件</div></div>
+                  <div class="fv"><div class="l">最近采集</div><div class="v data">07-29 08:02</div></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="comp">
+              <div class="comp-head">
+                <span class="dot ok"></span><span class="role">专有协议服务</span>
+                <span class="ver data">V5.2.1.3808</span>
+                <span class="ts">更新 07-26 11:03</span>
+                <span class="host data">10.20.1.16</span>
+                <span class="chip ok"><i></i>正常</span>
+                <span class="acts">
+                  <button type="button" class="btn act" title="SSH 连接">&gt;_</button>
+                  <button type="button" class="btn act ph" tabindex="-1" aria-hidden="true">⛁</button>
+                </span>
+                <span class="chev">›</span>
+              </div>
+              <div class="comp-body"><div class="fgrid">
+                <div class="fv"><div class="l">协议</div><div class="v">T2</div></div>
+                <div class="fv"><div class="l">监听端口</div><div class="v data">9360</div></div>
+              </div></div>
+            </div>
+
+            <div class="comp">
+              <div class="comp-head">
+                <span class="dot none"></span><span class="role">文件服务</span>
+                <span class="ver data">—</span>
+                <span class="ts">更新 —</span>
+                <span class="host data">10.20.1.15</span>
+                <span class="chip na">不支持</span>
+                <span class="acts">
+                  <button type="button" class="btn act" title="SSH 连接">&gt;_</button>
+                  <button type="button" class="btn act ph" tabindex="-1" aria-hidden="true">⛁</button>
+                </span>
+                <span class="chev">›</span>
+              </div>
+              <div class="comp-body"><div class="fgrid">
+                <div class="fv"><div class="l">版本探测</div><div class="v">无（不计入健康汇总）</div></div>
+              </div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================= 资源清单 ================= -->
+      <div class="view" data-view="inventory">
+        <div class="ph">
+          <h3>资源清单</h3><span class="cnt">显示 4 / 4 条</span>
+          <div class="search">⌕ 过滤主机 / 地址…</div>
+          <button type="button" class="btn primary">＋ 新建服务器</button>
+          <button type="button" class="btn ghost">刷新</button>
+        </div>
+        <div class="inv-tabs">
+          <button type="button" class="inv-tab sel">服务器（4）</button>
+          <button type="button" class="inv-tab">数据库（6）</button>
+        </div>
+        <div class="inv-scroll">
+          <table class="inv">
+            <thead><tr>
+              <th>ID</th><th>主机 ▾</th><th>操作系统</th><th>SSH 地址</th><th>密码</th><th>引用</th><th></th>
+            </tr></thead>
+            <tbody>
+              <tr>
+                <td class="mono">#2</td><td class="mono">10.20.1.15</td><td>麒麟 V10</td>
+                <td class="mono">root@10.20.1.15</td>
+                <td><span class="pw set"><i></i>已设置</span></td>
+                <td><span class="refn">3</span> 个环境</td>
+                <td><div class="rowacts"><button type="button" class="btn ghost">用途</button><button type="button" class="btn ghost">编辑</button><button type="button" class="btn ghost danger">删除</button></div></td>
+              </tr>
+              <tr>
+                <td class="mono">#4</td><td class="mono">10.20.1.16</td><td>CentOS 7.9</td>
+                <td class="mono">app@10.20.1.16:2222</td>
+                <td><span class="pw set"><i></i>已设置</span></td>
+                <td><span class="refn">2</span> 个环境</td>
+                <td><div class="rowacts"><button type="button" class="btn ghost">用途</button><button type="button" class="btn ghost">编辑</button><button type="button" class="btn ghost danger">删除</button></div></td>
+              </tr>
+              <tr>
+                <td class="mono">#6</td><td class="mono">10.20.1.17</td><td>Windows Server 2016</td>
+                <td class="mono">administrator@10.20.1.17</td>
+                <td><span class="pw unset"><i></i>未设置</span></td>
+                <td><span class="refn">1</span> 个环境</td>
+                <td><div class="rowacts"><button type="button" class="btn ghost">用途</button><button type="button" class="btn ghost">编辑</button><button type="button" class="btn ghost danger">删除</button></div></td>
+              </tr>
+              <tr>
+                <td class="mono">#8</td><td class="mono">win-build-03</td><td>Windows 10</td>
+                <td class="mono">未配置</td>
+                <td><span class="pw unset"><i></i>未设置</span></td>
+                <td><span class="refn zero">0</span></td>
+                <td><div class="rowacts"><button type="button" class="btn ghost">编辑</button><button type="button" class="btn ghost danger">删除</button></div></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+(function(){
+  var tpl = document.getElementById('mock');
+  document.querySelectorAll('.mock-slot').forEach(function(slot){
+    slot.appendChild(tpl.content.cloneNode(true));
+  });
+
+  // per-window wiring: nav view switch + component expand
+  document.querySelectorAll('.win').forEach(function(win){
+    win.querySelectorAll('.nav-item[data-view]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        win.querySelectorAll('.nav-item[data-view]').forEach(function(n){ n.classList.toggle('sel', n===btn); });
+        win.querySelectorAll('.view').forEach(function(v){ v.classList.toggle('on', v.dataset.view===btn.dataset.view); });
+      });
+    });
+    win.querySelectorAll('.comp-head').forEach(function(head){
+      head.addEventListener('click', function(e){
+        if (e.target.closest('.btn')) return;
+        head.parentElement.classList.toggle('open');
+      });
+    });
+  });
+
+  // variant D: compress operation labels to icons / short text, keep full name as tooltip
+  var iconMap = {
+    '刷新':'⟳', '编辑':'✎', '删除':'✕',
+    '◉ 立即采集':'◉ 采集',
+    '显示密码':'👁︎', '复制密码':'⧉', '复制连接串':'⧉',
+    '＋ 添加组件':'＋ 组件'
+  };
+  document.querySelectorAll('.win.vD button.btn').forEach(function(btn){
+    var t = btn.textContent.replace(/\s+/g,' ').trim();
+    if (t === '用途'){ btn.remove(); return; } // 引用计数本身可点击，无需单独按钮
+    if (iconMap[t] !== undefined){
+      btn.title = t.replace('◉ ','');
+      btn.textContent = iconMap[t];
+      if (iconMap[t].length <= 3) btn.classList.add('icon-btn');
+    }
+  });
+  document.querySelectorAll('.win.vD td .refn').forEach(function(n){
+    var td = n.closest('td');
+    if (n.classList.contains('zero')){ td.textContent = '0'; return; }
+    var count = n.textContent.trim();
+    td.innerHTML = '';
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'refbtn'; b.title = '查看使用情况';
+    b.textContent = count + ' 个环境 →';
+    td.appendChild(b);
+  });
+
+  // variant switcher
+  var variants = [
+    {v:'vD', label:'D · 组合方案 (A+B)'},
+    {v:'vA', label:'A · 仪表盘 Console'},
+    {v:'vB', label:'B · 企业蓝 Soft'},
+    {v:'vC', label:'C · 工控 Industrial'}
+  ];
+  var cur = 0;
+  var mode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  var lbl = document.getElementById('lbl');
+  var modeBtn = document.getElementById('mode');
+
+  function render(){
+    document.querySelectorAll('section.variant').forEach(function(s,i){ s.classList.toggle('on', i===cur); });
+    document.querySelectorAll('.win').forEach(function(w){ w.dataset.mode = mode; });
+    lbl.textContent = variants[cur].label;
+    modeBtn.textContent = mode === 'light' ? '🌓 深色' : '🌓 浅色';
+  }
+  function step(d){ cur = (cur + d + variants.length) % variants.length; render(); }
+
+  document.getElementById('prev').addEventListener('click', function(){ step(-1); });
+  document.getElementById('next').addEventListener('click', function(){ step(1); });
+  modeBtn.addEventListener('click', function(){ mode = mode === 'light' ? 'dark' : 'light'; render(); });
+  document.addEventListener('keydown', function(e){
+    if (e.target.closest('input,textarea,[contenteditable]')) return;
+    if (e.key === 'ArrowLeft') step(-1);
+    if (e.key === 'ArrowRight') step(1);
+  });
+  render();
+})();
+</script>

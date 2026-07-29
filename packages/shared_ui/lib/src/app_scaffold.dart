@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'theme.dart';
+
 class NavItem {
   final int index;
   final String label;
@@ -35,6 +37,12 @@ class AppScaffold extends StatefulWidget {
   final String title;
   final Widget? headerTrailing;
 
+  /// Controlled sidebar expansion. When non-null the caller owns the state
+  /// (persisting it, e.g. in ui.json) and must update it via [onSidebarToggle];
+  /// when null the scaffold keeps its own transient state.
+  final bool? sidebarExpanded;
+  final ValueChanged<bool>? onSidebarToggle;
+
   const AppScaffold({
     super.key,
     required this.child,
@@ -44,6 +52,8 @@ class AppScaffold extends StatefulWidget {
     required this.onDestinationSelected,
     required this.title,
     this.headerTrailing,
+    this.sidebarExpanded,
+    this.onSidebarToggle,
   });
 
   @override
@@ -51,12 +61,22 @@ class AppScaffold extends StatefulWidget {
 }
 
 class _AppScaffoldState extends State<AppScaffold> {
-  bool _expanded = true;
+  bool _internalExpanded = true;
   late Set<int> _expandedGroups;
 
   static const _expandedWidth = 200.0;
   static const _collapsedWidth = 56.0;
   static const _animDuration = Duration(milliseconds: 200);
+
+  bool get _expanded => widget.sidebarExpanded ?? _internalExpanded;
+
+  void _toggleExpanded() {
+    final next = !_expanded;
+    if (widget.sidebarExpanded == null) {
+      setState(() => _internalExpanded = next);
+    }
+    widget.onSidebarToggle?.call(next);
+  }
 
   @override
   void initState() {
@@ -67,15 +87,18 @@ class _AppScaffoldState extends State<AppScaffold> {
   @override
   void didUpdateWidget(AppScaffold oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // Navigating keeps the active item's group visible but never collapses the
+    // sidebar — collapse is a manual, persisted choice.
     if (oldWidget.selectedIndex != widget.selectedIndex) {
-      _expandedGroups.add(_activeGroupIndex());
-      setState(() => _expanded = false);
+      setState(() => _expandedGroups.add(_activeGroupIndex()));
     }
   }
 
   int _activeGroupIndex() {
     for (var gi = 0; gi < widget.groups.length; gi++) {
-      if (widget.groups[gi].items.any((item) => item.index == widget.selectedIndex)) {
+      if (widget.groups[gi].items.any(
+        (item) => item.index == widget.selectedIndex,
+      )) {
         return gi;
       }
     }
@@ -85,7 +108,7 @@ class _AppScaffoldState extends State<AppScaffold> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final tokens = AppTokens.of(context);
 
     return Scaffold(
       body: Row(
@@ -95,15 +118,13 @@ class _AppScaffoldState extends State<AppScaffold> {
             curve: Curves.easeInOut,
             width: _expanded ? _expandedWidth : _collapsedWidth,
             clipBehavior: Clip.hardEdge,
-            decoration: BoxDecoration(
-              color: colorScheme.surfaceContainerLow,
-            ),
+            decoration: BoxDecoration(color: tokens.sidebarBg),
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final showExpanded = constraints.maxWidth >= _expandedWidth;
                 return Column(
                   children: [
-                    _buildHeader(theme, colorScheme, showExpanded),
+                    _buildHeader(theme, showExpanded),
                     const Divider(height: 1),
                     const SizedBox(height: 4),
                     Expanded(
@@ -116,7 +137,7 @@ class _AppScaffoldState extends State<AppScaffold> {
                               context,
                               widget.groups[gi],
                               gi,
-                              colorScheme,
+                              tokens,
                               showExpanded,
                             ),
                           ],
@@ -132,7 +153,7 @@ class _AppScaffoldState extends State<AppScaffold> {
                       child: Column(
                         children: [
                           for (final item in widget.footerItems)
-                            _buildItem(context, item, colorScheme, showExpanded),
+                            _buildItem(context, item, tokens, showExpanded),
                         ],
                       ),
                     ),
@@ -148,18 +169,14 @@ class _AppScaffoldState extends State<AppScaffold> {
     );
   }
 
-  Widget _buildHeader(
-    ThemeData theme,
-    ColorScheme colorScheme,
-    bool showExpanded,
-  ) {
+  Widget _buildHeader(ThemeData theme, bool showExpanded) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
       child: Row(
         children: [
           IconButton(
             icon: const Icon(Icons.menu, size: 20),
-            onPressed: () => setState(() => _expanded = !_expanded),
+            onPressed: _toggleExpanded,
             tooltip: _expanded ? '收起侧栏' : '展开侧栏',
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
@@ -190,18 +207,19 @@ class _AppScaffoldState extends State<AppScaffold> {
     BuildContext context,
     NavGroup group,
     int groupIndex,
-    ColorScheme colorScheme,
+    AppTokens tokens,
     bool showExpanded,
   ) {
     final isExpanded = _expandedGroups.contains(groupIndex);
-    final hasActiveItem =
-        group.items.any((item) => item.index == widget.selectedIndex);
+    final hasActiveItem = group.items.any(
+      (item) => item.index == widget.selectedIndex,
+    );
 
     if (!showExpanded) {
       return Column(
         children: [
           for (final item in group.items)
-            _buildItem(context, item, colorScheme, showExpanded),
+            _buildItem(context, item, tokens, showExpanded),
         ],
       );
     }
@@ -210,7 +228,7 @@ class _AppScaffoldState extends State<AppScaffold> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         InkWell(
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(AppTokens.radiusControl),
           onTap: () {
             setState(() {
               if (isExpanded) {
@@ -227,9 +245,7 @@ class _AppScaffoldState extends State<AppScaffold> {
                 Icon(
                   group.icon,
                   size: 16,
-                  color: hasActiveItem
-                      ? colorScheme.primary
-                      : colorScheme.outline,
+                  color: hasActiveItem ? tokens.accent : tokens.textSecondary,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -237,18 +253,19 @@ class _AppScaffoldState extends State<AppScaffold> {
                     group.label,
                     style: TextStyle(
                       fontSize: 12,
-                      fontWeight:
-                          hasActiveItem ? FontWeight.w600 : FontWeight.normal,
+                      fontWeight: hasActiveItem
+                          ? FontWeight.w600
+                          : FontWeight.normal,
                       color: hasActiveItem
-                          ? colorScheme.primary
-                          : colorScheme.outline,
+                          ? tokens.accent
+                          : tokens.textSecondary,
                     ),
                   ),
                 ),
                 Icon(
                   isExpanded ? Icons.expand_more : Icons.chevron_right,
                   size: 16,
-                  color: colorScheme.outline,
+                  color: tokens.textSecondary,
                 ),
               ],
             ),
@@ -256,7 +273,7 @@ class _AppScaffoldState extends State<AppScaffold> {
         ),
         if (isExpanded)
           for (final item in group.items)
-            _buildItem(context, item, colorScheme, showExpanded),
+            _buildItem(context, item, tokens, showExpanded),
       ],
     );
   }
@@ -264,7 +281,7 @@ class _AppScaffoldState extends State<AppScaffold> {
   Widget _buildItem(
     BuildContext context,
     NavItem item,
-    ColorScheme colorScheme,
+    AppTokens tokens,
     bool showExpanded,
   ) {
     final isSelected = item.index == widget.selectedIndex;
@@ -272,44 +289,29 @@ class _AppScaffoldState extends State<AppScaffold> {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 1),
       child: Material(
-        color: isSelected
-            ? colorScheme.primaryContainer.withValues(alpha: 0.5)
-            : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
+        color: isSelected ? tokens.selectionBg : Colors.transparent,
+        borderRadius: BorderRadius.circular(AppTokens.radiusRow),
         child: InkWell(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(AppTokens.radiusRow),
+          hoverColor: tokens.hover,
           onTap: () => widget.onDestinationSelected(item.index),
           child: showExpanded
-              ? _expandedItem(item, isSelected, colorScheme)
-              : _collapsedItem(item, isSelected, colorScheme),
+              ? _expandedItem(item, isSelected, tokens)
+              : _collapsedItem(item, isSelected, tokens),
         ),
       ),
     );
   }
 
-  Widget _expandedItem(
-    NavItem item,
-    bool isSelected,
-    ColorScheme colorScheme,
-  ) {
-    return Container(
+  Widget _expandedItem(NavItem item, bool isSelected, AppTokens tokens) {
+    return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: isSelected
-          ? BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
-              border: Border(
-                left: BorderSide(color: colorScheme.primary, width: 3),
-              ),
-            )
-          : null,
       child: Row(
         children: [
           Icon(
             isSelected ? item.selectedIcon : item.icon,
             size: 20,
-            color: isSelected
-                ? colorScheme.primary
-                : colorScheme.onSurfaceVariant,
+            color: isSelected ? tokens.accent : tokens.textSecondary,
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -317,9 +319,7 @@ class _AppScaffoldState extends State<AppScaffold> {
               item.label,
               style: TextStyle(
                 fontSize: 14,
-                color: isSelected
-                    ? colorScheme.primary
-                    : colorScheme.onSurfaceVariant,
+                color: isSelected ? tokens.accent : tokens.textSecondary,
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
               ),
               overflow: TextOverflow.ellipsis,
@@ -330,11 +330,7 @@ class _AppScaffoldState extends State<AppScaffold> {
     );
   }
 
-  Widget _collapsedItem(
-    NavItem item,
-    bool isSelected,
-    ColorScheme colorScheme,
-  ) {
+  Widget _collapsedItem(NavItem item, bool isSelected, AppTokens tokens) {
     return Tooltip(
       message: item.label,
       preferBelow: false,
@@ -342,20 +338,10 @@ class _AppScaffoldState extends State<AppScaffold> {
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: isSelected
-            ? BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
-                border: Border(
-                  left: BorderSide(color: colorScheme.primary, width: 3),
-                ),
-              )
-            : null,
         child: Icon(
           isSelected ? item.selectedIcon : item.icon,
           size: 20,
-          color: isSelected
-              ? colorScheme.primary
-              : colorScheme.onSurfaceVariant,
+          color: isSelected ? tokens.accent : tokens.textSecondary,
         ),
       ),
     );

@@ -8,18 +8,21 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../catalog/environment_store.dart';
 import '../../catalog/environment_view.dart';
+import '../../config/config_store.dart';
 import '../../inventory/inventory_store.dart';
 import '../../inventory/inventory_view.dart';
+import '../../services/access/access_launcher.dart';
+import '../../services/ssh_tools/ssh_tool.dart';
 import 'catalog_editors.dart';
 import 'catalog_link_editor.dart';
 import 'component_access.dart';
 import 'connection_sections.dart';
 
-/// Browser + curation surface for the Environment Catalog. Lists Environments
-/// from the backend, shows the selected Environment's Components, and drives
-/// create/update/delete of both through the store (slice 03). Each Component
-/// also offers Local Desktop Integration — launch the user's own SSH/DB tool
-/// against its Server/Databases via brokered credentials (slice 06).
+/// The ops glance-and-launch surface (设计方向 D): a scannable Environment
+/// roster on the left (health dot, staleness flag, relative freshness), and on
+/// the right the selected Environment's Components as compact, grid-aligned
+/// rows — expandable per-row to full fields and brokered credentials. Machine
+/// data renders in mono; row-end icon actions launch the user's SSH/DB tools.
 class CatalogPage extends StatefulWidget {
   const CatalogPage({super.key});
 
@@ -31,6 +34,9 @@ class _CatalogPageState extends State<CatalogPage> {
   final _searchController = TextEditingController();
   Timer? _debounce;
   int? _selectedId;
+
+  /// Component ids whose row is expanded to the full detail view.
+  final Set<int> _expandedComponents = {};
 
   @override
   void initState() {
@@ -55,9 +61,49 @@ class _CatalogPageState extends State<CatalogPage> {
 
     return Column(
       children: [
-        _buildHeader(store, envs.length),
-        if (store.error != null) _buildErrorBanner(store),
-        if (store.loading) const LinearProgressIndicator(),
+        PageHeader(
+          title: '环境目录',
+          visibleCount: envs.length,
+          totalCount: store.totalCount,
+          search: FilterHistoryTextField(
+            controller: _searchController,
+            filterText: _searchController.text,
+            hintText: '搜索编号、名称、备注、组件、版本...',
+            onChanged: (v) {
+              setState(() {});
+              _debounce?.cancel();
+              if (v.trim().isEmpty) {
+                store.setSearch('');
+                return;
+              }
+              _debounce = Timer(const Duration(milliseconds: 250), () {
+                store.setSearch(v);
+              });
+            },
+          ),
+          actions: [
+            FilledButton.icon(
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('新建环境'),
+              onPressed: store.loading ? null : _createEnv,
+            ),
+            const SizedBox(width: 8),
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: store.loading ? null : store.load,
+              tooltip: '刷新',
+            ),
+          ],
+        ),
+        if (store.error != null)
+          ErrorBanner(message: store.error!, onRetry: store.load),
+        // Reserved strip: the indicator appears without shifting the layout.
+        SizedBox(
+          height: 3,
+          child: store.loading
+              ? const LinearProgressIndicator(minHeight: 3)
+              : null,
+        ),
         Expanded(
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -68,7 +114,7 @@ class _CatalogPageState extends State<CatalogPage> {
               if (compact) {
                 return Column(
                   children: [
-                    Expanded(child: _buildEnvList(envs, selected)),
+                    Expanded(child: _buildRoster(envs, selected)),
                     const Divider(height: 1),
                     SizedBox(
                       height: 320,
@@ -79,7 +125,7 @@ class _CatalogPageState extends State<CatalogPage> {
               }
               return Row(
                 children: [
-                  SizedBox(width: 420, child: _buildEnvList(envs, selected)),
+                  SizedBox(width: 380, child: _buildRoster(envs, selected)),
                   const VerticalDivider(width: 1),
                   Expanded(child: _buildDetailPane(store, selected)),
                 ],
@@ -91,137 +137,42 @@ class _CatalogPageState extends State<CatalogPage> {
     );
   }
 
-  Widget _buildHeader(EnvironmentStore store, int visibleCount) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final summary = Wrap(
-            spacing: 12,
-            runSpacing: 4,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Text('环境目录', style: theme.textTheme.headlineSmall),
-              Text(
-                '显示 $visibleCount / ${store.totalCount} 条',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.outline,
-                ),
-              ),
-            ],
-          );
-          final search = FilterHistoryTextField(
-            controller: _searchController,
-            filterText: _searchController.text,
-            hintText: '搜索编号、名称、备注、组件、版本...',
-            onChanged: (v) {
-              setState(() {});
-              _debounce?.cancel();
-              _debounce = Timer(const Duration(milliseconds: 250), () {
-                store.setSearch(v);
-              });
-            },
-          );
-          final actions = Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              FilledButton.icon(
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('新建环境'),
-                onPressed: store.loading ? null : _createEnv,
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                icon: const Icon(Icons.refresh),
-                onPressed: store.loading ? null : store.load,
-                tooltip: '刷新',
-              ),
-            ],
-          );
-
-          if (constraints.maxWidth < 900) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Expanded(child: summary),
-                    const SizedBox(width: 12),
-                    actions,
-                  ],
-                ),
-                const SizedBox(height: 8),
-                search,
-              ],
-            );
-          }
-
-          return Row(
-            children: [
-              summary,
-              const Spacer(),
-              SizedBox(width: 340, child: search),
-              const SizedBox(width: 8),
-              actions,
-            ],
+  Widget _buildRoster(List<EnvironmentView> envs, EnvironmentView? selected) {
+    final tokens = AppTokens.of(context);
+    return ColoredBox(
+      color: tokens.rosterBg,
+      child: ListView.builder(
+        padding: const EdgeInsets.fromLTRB(10, 6, 10, 12),
+        itemCount: envs.length,
+        itemBuilder: (context, index) {
+          final env = envs[index];
+          return _RosterRow(
+            env: env,
+            selected: selected?.id == env.id,
+            onTap: () => setState(() => _selectedId = env.id),
           );
         },
       ),
     );
   }
 
-  Widget _buildErrorBanner(EnvironmentStore store) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      color: colorScheme.errorContainer,
-      child: Row(
-        children: [
-          Icon(Icons.error_outline, color: colorScheme.error, size: 18),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              store.error!,
-              style: TextStyle(color: colorScheme.error),
-            ),
-          ),
-          TextButton(onPressed: store.load, child: const Text('重试')),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEnvList(List<EnvironmentView> envs, EnvironmentView? selected) {
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-      itemCount: envs.length,
-      itemBuilder: (context, index) {
-        final env = envs[index];
-        return _EnvListTile(
-          env: env,
-          selected: selected?.id == env.id,
-          onTap: () => setState(() => _selectedId = env.id),
-        );
-      },
-    );
-  }
-
   Widget _buildDetailPane(EnvironmentStore store, EnvironmentView? env) {
+    final tokens = AppTokens.of(context);
     if (env == null) {
       return Center(
         child: Text(
           '选择一个环境查看详情',
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: Theme.of(context).colorScheme.outline,
-          ),
+          style: TextStyle(color: tokens.textSecondary),
         ),
       );
     }
     return _EnvironmentDetail(
       env: env,
       collecting: store.isCollecting(env.id),
+      expandedComponents: _expandedComponents,
+      onToggleComponent: (id) => setState(() {
+        if (!_expandedComponents.remove(id)) _expandedComponents.add(id);
+      }),
       onCollect: () => _collectNow(env),
       onOpenUrl: _launchUrl,
       onEdit: () => _editEnv(env),
@@ -234,29 +185,15 @@ class _CatalogPageState extends State<CatalogPage> {
   }
 
   Widget _buildEmptyState(EnvironmentStore store) {
-    final theme = Theme.of(context);
     final hasSearch = store.search.isNotEmpty;
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            hasSearch ? Icons.search_off : Icons.dns_outlined,
-            size: 56,
-            color: theme.colorScheme.outline,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            hasSearch ? '没有匹配的环境' : '暂无环境',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.outline,
-            ),
-          ),
-        ],
-      ),
+    return EmptyState(
+      icon: hasSearch ? Icons.search_off : Icons.dns_outlined,
+      message: hasSearch ? '没有匹配的环境' : '暂无环境',
     );
   }
 
+  /// Selection survives filtering: the chosen id sticks even while a filter
+  /// hides it, and the first visible Environment stands in meanwhile.
   EnvironmentView? _selectedEnv(List<EnvironmentView> envs) {
     if (envs.isEmpty) return null;
     if (_selectedId != null) {
@@ -356,7 +293,7 @@ class _CatalogPageState extends State<CatalogPage> {
     if (inventory == null) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('资源库存未就绪')));
+      ).showSnackBar(const SnackBar(content: Text('资源清单未就绪')));
       return;
     }
     if (!inventory.loaded) {
@@ -365,7 +302,7 @@ class _CatalogPageState extends State<CatalogPage> {
       if (!inventory.loaded) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(inventory.error ?? '资源库存加载失败')));
+        ).showSnackBar(SnackBar(content: Text(inventory.error ?? '资源清单加载失败')));
         return;
       }
     }
@@ -419,12 +356,22 @@ class _CatalogPageState extends State<CatalogPage> {
   }
 }
 
-class _EnvListTile extends StatelessWidget {
+/// Formats how long ago an instant was, for the roster's freshness column.
+String relativeTimeLabel(DateTime? at, {DateTime? now}) {
+  if (at == null) return '未采集';
+  final delta = (now ?? DateTime.now()).difference(at);
+  if (delta.inMinutes < 1) return '刚刚';
+  if (delta.inMinutes < 60) return '${delta.inMinutes}分钟前';
+  if (delta.inHours < 24) return '${delta.inHours}小时前';
+  return '${delta.inDays}天前';
+}
+
+class _RosterRow extends StatelessWidget {
   final EnvironmentView env;
   final bool selected;
   final VoidCallback onTap;
 
-  const _EnvListTile({
+  const _RosterRow({
     required this.env,
     required this.selected,
     required this.onTap,
@@ -432,75 +379,101 @@ class _EnvListTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      color: selected
-          ? colorScheme.primaryContainer.withValues(alpha: 0.35)
-          : null,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Text(
-                    '#${env.id}',
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      color: colorScheme.primary,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      env.name,
-                      style: theme.textTheme.titleSmall,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(
-                    Icons.widgets_outlined,
-                    size: 15,
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(width: 5),
-                  Text(
-                    '${env.componentCount} 个组件',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  if (env.memo != null) ...[
-                    const SizedBox(width: 12),
+    final tokens = AppTokens.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Material(
+        color: selected ? tokens.selectionBg : Colors.transparent,
+        borderRadius: BorderRadius.circular(AppTokens.radiusRow),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppTokens.radiusRow),
+          hoverColor: tokens.hover,
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: selected
+                ? BoxDecoration(
+                    borderRadius: BorderRadius.circular(AppTokens.radiusRow),
+                    border: Border.all(color: tokens.selectionBorder),
+                  )
+                : null,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    _HealthDot(state: env.health.state),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        env.memo!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: colorScheme.outline,
+                        env.name,
+                        style: const TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
                         ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
+                    if (env.health.isStale)
+                      Tooltip(
+                        message: '数据超过 24 小时未更新',
+                        child: Icon(
+                          Icons.warning_amber_rounded,
+                          size: 15,
+                          color: tokens.warn,
+                        ),
+                      ),
                   ],
-                ],
-              ),
-            ],
+                ),
+                const SizedBox(height: 3),
+                Padding(
+                  padding: const EdgeInsets.only(left: 16),
+                  child: Text(
+                    '#${env.id} · ${env.componentCount}组件 · '
+                    '${relativeTimeLabel(env.health.newestCollectedAt?.toLocal())}',
+                    style: tokens.mono(
+                      fontSize: 11.5,
+                      color: tokens.textSecondary,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Health dot for a roster row: filled green OK, hollow neutral pending,
+/// filled red failed. Shape + color双编码 so state reads without color alone.
+class _HealthDot extends StatelessWidget {
+  final EnvironmentHealthState state;
+
+  const _HealthDot({required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.of(context);
+    return switch (state) {
+      EnvironmentHealthState.ok => _dot(fill: tokens.ok),
+      EnvironmentHealthState.pending => _dot(borderOnly: tokens.textSecondary),
+      EnvironmentHealthState.failed => _dot(fill: tokens.err),
+    };
+  }
+
+  Widget _dot({Color? fill, Color? borderOnly}) {
+    return Container(
+      width: 8,
+      height: 8,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: fill,
+        border: borderOnly == null
+            ? null
+            : Border.all(color: borderOnly, width: 1.4),
       ),
     );
   }
@@ -512,6 +485,8 @@ class _EnvironmentDetail extends StatelessWidget {
   /// True while 立即采集 is in flight for this Environment; the button shows a
   /// spinner and refuses re-entry.
   final bool collecting;
+  final Set<int> expandedComponents;
+  final ValueChanged<int> onToggleComponent;
   final VoidCallback onCollect;
   final Future<void> Function(String url) onOpenUrl;
   final VoidCallback onEdit;
@@ -524,6 +499,8 @@ class _EnvironmentDetail extends StatelessWidget {
   const _EnvironmentDetail({
     required this.env,
     required this.collecting,
+    required this.expandedComponents,
+    required this.onToggleComponent,
     required this.onCollect,
     required this.onOpenUrl,
     required this.onEdit,
@@ -537,65 +514,65 @@ class _EnvironmentDetail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final tokens = AppTokens.of(context);
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 820),
+        constraints: const BoxConstraints(maxWidth: 860),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primaryContainer,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    '#${env.id}',
-                    style: TextStyle(
-                      color: theme.colorScheme.onPrimaryContainer,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
+                IdBadge(id: env.id),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(env.name, style: theme.textTheme.headlineSmall),
                 ),
-                IconButton(
-                  icon: collecting
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.radar),
-                  tooltip: '立即采集',
-                  onPressed: collecting ? null : onCollect,
+                Tooltip(
+                  message: '立即采集',
+                  child: FilledButton.tonalIcon(
+                    icon: collecting
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.radar, size: 16),
+                    label: const Text('采集'),
+                    style: FilledButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                    ),
+                    onPressed: collecting ? null : onCollect,
+                  ),
                 ),
+                const SizedBox(width: 4),
                 IconButton(
-                  icon: const Icon(Icons.edit_outlined),
+                  icon: const Icon(Icons.edit_outlined, size: 16),
                   tooltip: '编辑环境',
+                  visualDensity: VisualDensity.compact,
                   onPressed: onEdit,
                 ),
                 IconButton(
-                  icon: const Icon(Icons.delete_outline),
+                  icon: const Icon(Icons.delete_outline, size: 16),
                   tooltip: '删除环境',
+                  visualDensity: VisualDensity.compact,
                   onPressed: onDelete,
                 ),
               ],
             ),
             if (env.memo != null) ...[
-              const SizedBox(height: 10),
-              SelectableText(env.memo!, style: theme.textTheme.bodyMedium),
+              const SizedBox(height: 8),
+              SelectableText(
+                env.memo!,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: tokens.textSecondary,
+                ),
+              ),
             ],
-            const SizedBox(height: 20),
+            const SizedBox(height: 18),
             Row(
               children: [
                 Text(
@@ -612,28 +589,31 @@ class _EnvironmentDetail extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
             if (env.components.isEmpty)
               Text(
                 '该环境暂无组件',
                 style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.outline,
+                  color: tokens.textSecondary,
                 ),
               )
-            else
+            else ...[
+              const _ComponentGridHeader(),
+              const SizedBox(height: 4),
               ...env.components.map(
-                (c) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: _ComponentCard(
-                    component: c,
-                    environmentName: env.name,
-                    onOpenUrl: onOpenUrl,
-                    onEdit: () => onEditComponent(c),
-                    onLink: () => onLinkComponent(c),
-                    onDelete: () => onDeleteComponent(c),
-                  ),
+                (c) => _ComponentRow(
+                  key: ValueKey(c.id),
+                  component: c,
+                  environmentName: env.name,
+                  expanded: expandedComponents.contains(c.id),
+                  onToggle: () => onToggleComponent(c.id),
+                  onOpenUrl: onOpenUrl,
+                  onEdit: () => onEditComponent(c),
+                  onLink: () => onLinkComponent(c),
+                  onDelete: () => onDeleteComponent(c),
                 ),
               ),
+            ],
           ],
         ),
       ),
@@ -641,19 +621,82 @@ class _EnvironmentDetail extends StatelessWidget {
   }
 }
 
-class _ComponentCard extends StatelessWidget {
-  static final _dateFmt = DateFormat('yyyy-MM-dd HH:mm');
+/// Fixed column plan for the component grid; shared by the header and every
+/// row so the mono data stays vertically aligned.
+abstract final class _Cols {
+  static const double dot = 18;
+  static const double role = 92;
+  static const double version = 134;
+  static const double updated = 128;
+  static const double chip = 72;
+  static const double actions = 60;
+  static const double chevron = 22;
+  static const double gap = 8;
+}
 
+class _ComponentGridHeader extends StatelessWidget {
+  const _ComponentGridHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.of(context);
+    final style = TextStyle(
+      fontSize: 11,
+      fontWeight: FontWeight.w600,
+      color: tokens.textSecondary,
+    );
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: tokens.tableHeaderBg,
+        borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(width: _Cols.dot),
+          SizedBox(
+            width: _Cols.role,
+            child: Text('角色', style: style),
+          ),
+          const SizedBox(width: _Cols.gap),
+          SizedBox(
+            width: _Cols.version,
+            child: Text('版本', style: style),
+          ),
+          const SizedBox(width: _Cols.gap),
+          SizedBox(
+            width: _Cols.updated,
+            child: Text('版本更新', style: style),
+          ),
+          const SizedBox(width: _Cols.gap),
+          Expanded(child: Text('主机', style: style)),
+          SizedBox(
+            width: _Cols.chip,
+            child: Text('状态', style: style),
+          ),
+          const SizedBox(width: _Cols.actions + _Cols.chevron),
+        ],
+      ),
+    );
+  }
+}
+
+class _ComponentRow extends StatefulWidget {
   final ComponentView component;
   final String environmentName;
+  final bool expanded;
+  final VoidCallback onToggle;
   final Future<void> Function(String url) onOpenUrl;
   final VoidCallback onEdit;
   final VoidCallback onLink;
   final VoidCallback onDelete;
 
-  const _ComponentCard({
+  const _ComponentRow({
+    super.key,
     required this.component,
     required this.environmentName,
+    required this.expanded,
+    required this.onToggle,
     required this.onOpenUrl,
     required this.onEdit,
     required this.onLink,
@@ -661,9 +704,19 @@ class _ComponentCard extends StatelessWidget {
   });
 
   @override
+  State<_ComponentRow> createState() => _ComponentRowState();
+}
+
+class _ComponentRowState extends State<_ComponentRow> {
+  static final _dateFmt = DateFormat('yyyy-MM-dd HH:mm');
+  static final _shortFmt = DateFormat('MM-dd HH:mm');
+
+  bool _hovered = false;
+
+  @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final c = component;
+    final tokens = AppTokens.of(context);
+    final c = widget.component;
     // Resolve Server/Database references to friendly labels (ADR-0006); falls
     // back to `#id` when inventory is unavailable.
     final inventory = context.watch<InventoryStore?>();
@@ -675,57 +728,414 @@ class _ComponentCard extends StatelessWidget {
       for (final id in c.databaseIds)
         if (databasesById[id] != null) id: databasesById[id]!,
     };
+
     return Container(
-      padding: const EdgeInsets.all(14),
+      margin: const EdgeInsets.only(bottom: 6),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
+        color: tokens.cardBg,
+        borderRadius: BorderRadius.circular(AppTokens.radiusRow),
+        border: Border.all(color: tokens.cardBorder),
       ),
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            InkWell(
+              onTap: widget.onToggle,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 7,
+                ),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: _Cols.dot,
+                      child: _CollectionDot(state: c.collectionState),
+                    ),
+                    SizedBox(
+                      width: _Cols.role,
+                      child: Text(
+                        c.roleLabel,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: _Cols.gap),
+                    SizedBox(
+                      width: _Cols.version,
+                      child: Text(
+                        c.version ?? '-',
+                        style: tokens.mono(fontSize: 12.5),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: _Cols.gap),
+                    SizedBox(
+                      width: _Cols.updated,
+                      child: Text(
+                        c.versionUpdatedAt == null
+                            ? '-'
+                            : _shortFmt.format(c.versionUpdatedAt!.toLocal()),
+                        style: tokens.mono(
+                          fontSize: 12.5,
+                          color: tokens.textSecondary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: _Cols.gap),
+                    Expanded(
+                      child: Text(
+                        c.serverId == null
+                            ? '-'
+                            : (server?.displayLabel ?? '#${c.serverId}'),
+                        style: tokens.mono(fontSize: 12.5),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    SizedBox(
+                      width: _Cols.chip,
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: StatusChip(
+                          kind: switch (c.collectionState) {
+                            CollectionState.ok => StatusChipKind.ok,
+                            CollectionState.failed => StatusChipKind.err,
+                            CollectionState.unsupported => StatusChipKind.na,
+                            CollectionState.notCollected => StatusChipKind.none,
+                          },
+                          label: c.collectionStatusLabel,
+                        ),
+                      ),
+                    ),
+                    SizedBox(
+                      width: _Cols.actions,
+                      child: AnimatedOpacity(
+                        opacity: _hovered || widget.expanded ? 1.0 : 0.6,
+                        duration: const Duration(milliseconds: 120),
+                        child: _RowLaunchActions(
+                          component: c,
+                          environmentName: widget.environmentName,
+                          databaseLabels: {
+                            for (final id in c.databaseIds)
+                              if (dbRefs[id] != null) id: dbRefs[id]!.menuLabel,
+                          },
+                        ),
+                      ),
+                    ),
+                    SizedBox(
+                      width: _Cols.chevron,
+                      child: Icon(
+                        widget.expanded ? Icons.expand_less : Icons.expand_more,
+                        size: 18,
+                        color: tokens.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (widget.expanded)
+              _ComponentExpandedBody(
+                component: c,
+                server: server,
+                dbRefs: dbRefs,
+                dateFmt: _dateFmt,
+                onOpenUrl: widget.onOpenUrl,
+                onEdit: widget.onEdit,
+                onLink: widget.onLink,
+                onDelete: widget.onDelete,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Collection dot for a component row, mirroring the roster's health language.
+class _CollectionDot extends StatelessWidget {
+  final CollectionState state;
+
+  const _CollectionDot({required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.of(context);
+    final (Color? fill, Color? border) = switch (state) {
+      CollectionState.ok => (tokens.ok, null),
+      CollectionState.failed => (tokens.err, null),
+      CollectionState.unsupported => (tokens.neutralChipBg, tokens.border),
+      CollectionState.notCollected => (null, tokens.textSecondary),
+    };
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        width: 8,
+        height: 8,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: fill,
+          border: border == null ? null : Border.all(color: border, width: 1.4),
+        ),
+      ),
+    );
+  }
+}
+
+/// Row-end fixed icon action column: `>_` SSH 连接 and `⛁` 数据库工具 as uniform
+/// icon buttons; an invisible placeholder keeps column alignment when a
+/// Component lacks the resource.
+class _RowLaunchActions extends StatelessWidget {
+  final ComponentView component;
+  final String environmentName;
+  final Map<int, String> databaseLabels;
+
+  const _RowLaunchActions({
+    required this.component,
+    required this.environmentName,
+    required this.databaseLabels,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final launcher = context.read<AccessLauncher?>();
+    final config = context.watch<ConfigStore?>();
+    final serverId = component.serverId;
+    final databaseIds = component.databaseIds;
+
+    final sshOptions = (launcher != null && serverId != null)
+        ? sshLaunchOptions(
+            launcher,
+            serverId,
+            preferredMode: config?.passwordMode ?? PasswordMode.argv,
+            executablePaths: config?.sshExecutablePaths,
+            preferredToolId: config?.defaultTerminalToolId,
+          )
+        : const <LaunchOption>[];
+    final dbOptions = (launcher != null && databaseIds.isNotEmpty)
+        ? dbLaunchOptions(
+            launcher,
+            databaseIds,
+            connectionName: '$environmentName · ${component.roleLabel}',
+            databaseLabels: databaseLabels,
+            executablePaths: config?.dbExecutablePaths,
+          )
+        : const <LaunchOption>[];
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        _LaunchIconSlot(
+          present: serverId != null,
+          icon: Icons.terminal,
+          tooltip: 'SSH 连接',
+          emptyTooltip: '当前平台没有可用的 SSH 工具',
+          options: sshOptions,
+        ),
+        const SizedBox(width: 2),
+        _LaunchIconSlot(
+          present: databaseIds.isNotEmpty,
+          icon: Icons.storage,
+          tooltip: '数据库工具',
+          emptyTooltip: '当前平台没有可用的数据库工具',
+          options: dbOptions,
+        ),
+      ],
+    );
+  }
+}
+
+/// One uniform-size launch slot. Absent resource → invisible placeholder of
+/// identical size (column alignment); zero installed tools → disabled with an
+/// explanatory tooltip; one option → direct launch; many → popup menu.
+class _LaunchIconSlot extends StatefulWidget {
+  static const double size = 26;
+
+  final bool present;
+  final IconData icon;
+  final String tooltip;
+  final String emptyTooltip;
+  final List<LaunchOption> options;
+
+  const _LaunchIconSlot({
+    required this.present,
+    required this.icon,
+    required this.tooltip,
+    required this.emptyTooltip,
+    required this.options,
+  });
+
+  @override
+  State<_LaunchIconSlot> createState() => _LaunchIconSlotState();
+}
+
+class _LaunchIconSlotState extends State<_LaunchIconSlot> {
+  bool _busy = false;
+
+  Future<void> _run(LaunchOption option) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    LaunchResult result;
+    try {
+      result = await option.run();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(result.message ?? (result.ok ? '已启动' : '启动失败'))),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.of(context);
+    if (!widget.present) {
+      return const SizedBox(
+        width: _LaunchIconSlot.size,
+        height: _LaunchIconSlot.size,
+      );
+    }
+
+    final iconWidget = _busy
+        ? const SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
+        : Icon(widget.icon, size: 16);
+
+    if (widget.options.isEmpty) {
+      return Tooltip(
+        message: widget.emptyTooltip,
+        child: SizedBox(
+          width: _LaunchIconSlot.size,
+          height: _LaunchIconSlot.size,
+          child: Icon(widget.icon, size: 16, color: tokens.border),
+        ),
+      );
+    }
+
+    if (widget.options.length == 1) {
+      return SizedBox(
+        width: _LaunchIconSlot.size,
+        height: _LaunchIconSlot.size,
+        child: IconButton(
+          padding: EdgeInsets.zero,
+          iconSize: 16,
+          icon: iconWidget,
+          color: tokens.accent,
+          tooltip: widget.tooltip,
+          onPressed: _busy ? null : () => _run(widget.options.first),
+        ),
+      );
+    }
+
+    return SizedBox(
+      width: _LaunchIconSlot.size,
+      height: _LaunchIconSlot.size,
+      child: PopupMenuButton<int>(
+        enabled: !_busy,
+        tooltip: widget.tooltip,
+        padding: EdgeInsets.zero,
+        onSelected: (i) => _run(widget.options[i]),
+        itemBuilder: (context) => [
+          for (var i = 0; i < widget.options.length; i++)
+            PopupMenuItem(value: i, child: Text(widget.options[i].label)),
+        ],
+        child: Center(
+          child: IconTheme(
+            data: IconThemeData(color: tokens.accent),
+            child: iconWidget,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ComponentExpandedBody extends StatelessWidget {
+  final ComponentView component;
+  final ServerView? server;
+  final Map<int, DatabaseView> dbRefs;
+  final DateFormat dateFmt;
+  final Future<void> Function(String url) onOpenUrl;
+  final VoidCallback onEdit;
+  final VoidCallback onLink;
+  final VoidCallback onDelete;
+
+  const _ComponentExpandedBody({
+    required this.component,
+    required this.server,
+    required this.dbRefs,
+    required this.dateFmt,
+    required this.onOpenUrl,
+    required this.onEdit,
+    required this.onLink,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = AppTokens.of(context);
+    final c = component;
+    return Container(
+      decoration: BoxDecoration(
+        color: tokens.cardBodyBg,
+        border: Border(top: BorderSide(color: tokens.borderSoft)),
+      ),
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(
-                Icons.widgets_outlined,
-                size: 18,
-                color: theme.colorScheme.primary,
-              ),
-              const SizedBox(width: 8),
               Text(
-                c.roleLabel,
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
+                '详细信息',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: tokens.textSecondary,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
               const Spacer(),
-              _CollectionStatusChip(
-                state: c.collectionState,
-                label: c.collectionStatusLabel,
-              ),
-              const SizedBox(width: 4),
               IconButton(
-                icon: const Icon(Icons.edit_outlined, size: 18),
+                icon: const Icon(Icons.edit_outlined, size: 16),
                 tooltip: '编辑组件',
                 visualDensity: VisualDensity.compact,
                 onPressed: onEdit,
               ),
               IconButton(
-                icon: const Icon(Icons.account_tree_outlined, size: 18),
+                icon: const Icon(Icons.account_tree_outlined, size: 16),
                 tooltip: '关联资源',
                 visualDensity: VisualDensity.compact,
                 onPressed: onLink,
               ),
               IconButton(
-                icon: const Icon(Icons.delete_outline, size: 18),
+                icon: const Icon(Icons.delete_outline, size: 16),
                 tooltip: '删除组件',
                 visualDensity: VisualDensity.compact,
                 onPressed: onDelete,
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          if (c.collectionState == CollectionState.failed &&
+              c.collectionDetail != null) ...[
+            const SizedBox(height: 2),
+            SelectableText(
+              '采集失败：${c.collectionDetail}',
+              style: TextStyle(fontSize: 12, color: tokens.err),
+            ),
+            const SizedBox(height: 6),
+          ],
+          const SizedBox(height: 4),
           _FieldGrid(
             fields: [
               _Field('版本', c.version),
@@ -733,14 +1143,14 @@ class _ComponentCard extends StatelessWidget {
                 '版本更新时间',
                 c.versionUpdatedAt == null
                     ? null
-                    : _dateFmt.format(c.versionUpdatedAt!.toLocal()),
+                    : dateFmt.format(c.versionUpdatedAt!.toLocal()),
               ),
               _Field('版本探测', c.versionProbeLabel),
               _Field(
                 '最近采集',
                 c.lastCollectedAt == null
                     ? null
-                    : _dateFmt.format(c.lastCollectedAt!.toLocal()),
+                    : dateFmt.format(c.lastCollectedAt!.toLocal()),
               ),
               _Field('协议', c.protocol),
               _Field('监听端口', c.listenPort?.toString()),
@@ -754,14 +1164,14 @@ class _ComponentCard extends StatelessWidget {
             ],
           ),
           if (c.url != null) ...[
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
                   child: SelectableText(
                     c.url!,
                     maxLines: 1,
-                    style: theme.textTheme.bodySmall,
+                    style: tokens.mono(fontSize: 12.5),
                   ),
                 ),
                 TextButton.icon(
@@ -773,7 +1183,7 @@ class _ComponentCard extends StatelessWidget {
             ),
           ],
           if (c.serverId != null || c.databaseIds.isNotEmpty) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             const Divider(height: 1),
             const SizedBox(height: 10),
             if (c.serverId != null)
@@ -789,56 +1199,8 @@ class _ComponentCard extends StatelessWidget {
                 databaseIds: c.databaseIds,
                 databaseRefs: dbRefs,
               ),
-            const SizedBox(height: 12),
-            ComponentAccessBar(
-              serverId: c.serverId,
-              databaseIds: c.databaseIds,
-              databaseLabels: {
-                for (final id in c.databaseIds)
-                  if (dbRefs[id] != null) id: dbRefs[id]!.menuLabel,
-              },
-              connectionName: '$environmentName · ${c.roleLabel}',
-            ),
           ],
         ],
-      ),
-    );
-  }
-}
-
-class _CollectionStatusChip extends StatelessWidget {
-  final CollectionState state;
-  final String label;
-
-  const _CollectionStatusChip({required this.state, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final (Color bg, Color fg) = switch (state) {
-      CollectionState.ok => (
-        Colors.green.withValues(alpha: 0.15),
-        Colors.green.shade800,
-      ),
-      CollectionState.failed => (scheme.errorContainer, scheme.error),
-      CollectionState.unsupported => (
-        scheme.surfaceContainerHighest,
-        scheme.onSurfaceVariant,
-      ),
-      CollectionState.notCollected => (
-        scheme.surfaceContainerHighest,
-        scheme.outline,
-      ),
-    };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(color: fg, fontSize: 12, fontWeight: FontWeight.w600),
       ),
     );
   }
@@ -863,7 +1225,7 @@ class _FieldGrid extends StatelessWidget {
         final twoColumns = constraints.maxWidth >= 520;
         return Wrap(
           spacing: 12,
-          runSpacing: 12,
+          runSpacing: 10,
           children: fields
               .map(
                 (f) => SizedBox(
@@ -887,19 +1249,17 @@ class _FieldView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final tokens = AppTokens.of(context);
     final value = field.value?.isNotEmpty == true ? field.value! : '-';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           field.label,
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: theme.colorScheme.outline,
-          ),
+          style: TextStyle(fontSize: 11, color: tokens.textSecondary),
         ),
         const SizedBox(height: 2),
-        SelectableText(value, maxLines: 2, style: theme.textTheme.bodyMedium),
+        SelectableText(value, maxLines: 2, style: tokens.mono()),
       ],
     );
   }

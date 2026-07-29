@@ -16,6 +16,9 @@ class ComponentDto {
   final List<int> databaseIds;
   final String? versionProbe; // DB | SSH_FILE | COMMAND | HTTP | NONE
   final String? collectionStatus; // OK | FAILED | UNSUPPORTED
+
+  /// Why the last collection went non-OK; null after a successful collection.
+  final String? collectionDetail;
   final DateTime? lastCollectedAt;
 
   const ComponentDto({
@@ -31,6 +34,7 @@ class ComponentDto {
     this.databaseIds = const [],
     this.versionProbe,
     this.collectionStatus,
+    this.collectionDetail,
     this.lastCollectedAt,
   });
 
@@ -52,6 +56,7 @@ class ComponentDto {
           const [],
       versionProbe: json['versionProbe'] as String?,
       collectionStatus: json['collectionStatus'] as String?,
+      collectionDetail: json['collectionDetail'] as String?,
       lastCollectedAt: _parseInstant(json['lastCollectedAt']),
     );
   }

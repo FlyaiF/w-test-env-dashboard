@@ -10,13 +10,13 @@ const _envGroup = ui.NavGroup(
   items: [
     ui.NavItem(
       index: 0,
-      label: '总览',
+      label: '环境目录',
       icon: Icons.dashboard_outlined,
       selectedIcon: Icons.dashboard,
     ),
     ui.NavItem(
       index: 1,
-      label: '资源库存',
+      label: '资源清单',
       icon: Icons.inventory_2_outlined,
       selectedIcon: Icons.inventory_2,
     ),
@@ -54,6 +54,8 @@ class AppScaffold extends StatelessWidget {
     final connected = context.select<EnvironmentStore, bool>(
       (s) => s.connected,
     );
+    final themeController = context.watch<ui.AppThemeController>();
+    final tokens = ui.AppTokens.of(context);
 
     return ui.AppScaffold(
       groups: const [_envGroup],
@@ -61,9 +63,11 @@ class AppScaffold extends StatelessWidget {
       selectedIndex: selectedIndex,
       onDestinationSelected: onDestinationSelected,
       title: '环境速查',
+      sidebarExpanded: themeController.sidebarExpanded,
+      onSidebarToggle: themeController.setSidebarExpanded,
       headerTrailing: Icon(
         connected ? Icons.cloud_done : Icons.cloud_off,
-        color: connected ? Colors.green : Colors.red,
+        color: connected ? tokens.ok : tokens.err,
         size: 16,
       ),
       child: child,

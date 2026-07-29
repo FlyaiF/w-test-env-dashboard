@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_ui/shared_ui.dart' show AppThemeController;
 
 void main() {
   testWidgets('opens Resource Inventory from the application navigation', (
@@ -37,16 +38,22 @@ void main() {
           ChangeNotifierProvider<ConfigStore>.value(
             value: ConfigStore(AppConfig.empty()),
           ),
+          ChangeNotifierProvider<AppThemeController>(
+            create: (_) => AppThemeController(),
+          ),
         ],
         child: const MaterialApp(home: HomePage()),
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('资源库存'), findsOneWidget);
-    await tester.tap(find.text('资源库存'));
+    // The sidebar nav item (the page itself is offstage until selected).
+    expect(find.text('资源清单'), findsOneWidget);
+    await tester.tap(find.text('资源清单'));
     await tester.pumpAndSettle();
 
-    expect(find.text('资源清单'), findsOneWidget);
+    // Nav item + page header, and the inventory tabs are now on stage.
+    expect(find.text('资源清单'), findsNWidgets(2));
+    expect(find.text('服务器'), findsOneWidget);
   });
 }

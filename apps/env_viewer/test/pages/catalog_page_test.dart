@@ -81,13 +81,18 @@ void main() {
     expect(find.text('Alpha'), findsWidgets);
     expect(find.text('Beta'), findsOneWidget);
 
-    // First environment is auto-selected; its component renders with the
-    // localized role label and version — read-only (no edit/save controls).
+    // First environment is auto-selected; its component renders as a compact
+    // grid row with the localized role label, version and status chip —
+    // read-only (no edit/save controls).
     expect(find.text('网关'), findsOneWidget);
     expect(find.text('1.2.3'), findsOneWidget);
     expect(find.text('正常'), findsOneWidget); // collection status chip
-    expect(find.text('HTTP 接口'), findsOneWidget); // version probe label
     expect(find.byIcon(Icons.save), findsNothing);
+
+    // Expanding the row reveals the full field grid.
+    await tester.tap(find.text('网关'));
+    await tester.pumpAndSettle();
+    expect(find.text('HTTP 接口'), findsOneWidget); // version probe label
   });
 
   testWidgets('立即采集 button collects the selected environment in place', (
@@ -249,7 +254,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    // The collapsed grid row already shows the resolved host.
     expect(find.text('srv-main'), findsWidgets);
+
+    // Expanding reveals the resolved database reference.
+    await tester.tap(find.text('主服务'));
+    await tester.pumpAndSettle();
     expect(find.text('业务库 · Oracle · db-main:1521/ORCL'), findsOneWidget);
   });
 }

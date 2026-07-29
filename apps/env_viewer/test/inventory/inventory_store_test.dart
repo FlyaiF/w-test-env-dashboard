@@ -440,4 +440,89 @@ void main() {
       expect(environments.single.components.single.roleLabel, '网关');
     });
   });
+
+  group('InventoryStore search', () {
+    InventoryStore storeWith() => InventoryStore(
+      BackendClient(
+        baseUrl: 'http://test',
+        httpClient: MockClient((request) async {
+          if (request.url.path == '/api/servers') {
+            return _jsonResponse([
+              {
+                'id': 1,
+                'host': 'app01.internal',
+                'os': 'LINUX',
+                'ssh': {'host': 'gw.internal', 'port': 22, 'username': 'ops'},
+              },
+              {'id': 2, 'host': 'win01', 'os': 'WINDOWS'},
+            ]);
+          }
+          if (request.url.path == '/api/databases') {
+            return _jsonResponse([
+              {
+                'id': 11,
+                'role': 'business',
+                'type': 'ORACLE',
+                'connection': {'host': 'db-a', 'username': 'app_user'},
+              },
+              {
+                'id': 12,
+                'role': 'intermediate',
+                'type': 'DAMENG',
+                'connection': {'host': 'db-b'},
+              },
+            ]);
+          }
+          return _jsonResponse({'title': 'not found'}, 404);
+        }),
+      ),
+    );
+
+    test('filters servers across id/host/os/ssh, case-insensitively', () async {
+      final store = storeWith();
+      await store.load();
+
+      store.setSearch('APP01');
+      expect(store.filteredServers.map((s) => s.id), [1]);
+
+      store.setSearch('windows');
+      expect(store.filteredServers.map((s) => s.id), [2]);
+
+      store.setSearch('ops@gw');
+      expect(store.filteredServers.map((s) => s.id), [1]);
+
+      store.setSearch('nothing-matches');
+      expect(store.filteredServers, isEmpty);
+    });
+
+    test('filters databases across role/type/address/username', () async {
+      final store = storeWith();
+      await store.load();
+
+      store.setSearch('中转');
+      expect(store.filteredDatabases.map((d) => d.id), [12]);
+
+      store.setSearch('oracle');
+      expect(store.filteredDatabases.map((d) => d.id), [11]);
+
+      store.setSearch('app_user');
+      expect(store.filteredDatabases.map((d) => d.id), [11]);
+    });
+
+    test('one query filters both inventories; blank restores all', () async {
+      final store = storeWith();
+      await store.load();
+
+      store.setSearch('db-a');
+      expect(store.filteredServers, isEmpty);
+      expect(store.filteredDatabases.map((d) => d.id), [11]);
+      // The canonical unfiltered lists stay intact for other consumers.
+      expect(store.servers, hasLength(2));
+      expect(store.databases, hasLength(2));
+
+      store.setSearch('');
+      expect(store.filteredServers, hasLength(2));
+      expect(store.filteredDatabases, hasLength(2));
+    });
+  });
 }

@@ -38,7 +38,8 @@ the URL defaults to `http://localhost:8080` and can be changed in Settings or lo
 - **Credentials**: encrypted and stored by the backend, returned only by explicit broker calls. The
   desktop passes them to a user-selected SSH/DB tool and must not persist brokered secrets.
 - **Client config**: JSON at `~/.test-env-dashboard/config.json`, limited to backend URL and local
-  tool preferences.
+  tool preferences. UI preferences (theme mode, sidebar expanded state) persist separately in
+  `~/.test-env-dashboard/ui.json` via `AppThemeController`.
 - **Archive operations**: in-process Rust via flutter_rust_bridge (the `zipr` crate at repo root);
   `zipr_tool` uses no subprocess.
 

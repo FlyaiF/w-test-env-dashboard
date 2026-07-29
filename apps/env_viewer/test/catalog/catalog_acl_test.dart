@@ -75,6 +75,115 @@ void main() {
     });
   });
 
+  group('EnvironmentHealth rollup', () {
+    final now = DateTime.utc(2026, 7, 29, 12);
+
+    ComponentDto comp(
+      int id, {
+      String? status,
+      DateTime? collectedAt,
+      String? detail,
+    }) {
+      return ComponentDto(
+        id: id,
+        role: 'APP',
+        collectionStatus: status,
+        collectionDetail: detail,
+        lastCollectedAt: collectedAt,
+      );
+    }
+
+    EnvironmentView view(List<ComponentDto> components) => CatalogAcl.toView(
+      EnvironmentDto(id: 1, name: 'E', components: components),
+      now: now,
+    );
+
+    test('any FAILED component makes the environment 异常', () {
+      final health = view([
+        comp(1, status: 'OK', collectedAt: now),
+        comp(2, status: 'FAILED', collectedAt: now),
+      ]).health;
+      expect(health.state, EnvironmentHealthState.failed);
+    });
+
+    test('no failure but an uncollected component means 待采集', () {
+      final health = view([
+        comp(1, status: 'OK', collectedAt: now),
+        comp(2, status: null),
+      ]).health;
+      expect(health.state, EnvironmentHealthState.pending);
+    });
+
+    test('all collectable components OK means 正常', () {
+      final health = view([
+        comp(1, status: 'OK', collectedAt: now),
+        comp(2, status: 'OK', collectedAt: now),
+      ]).health;
+      expect(health.state, EnvironmentHealthState.ok);
+      expect(health.isStale, isFalse);
+    });
+
+    test('UNSUPPORTED components are excluded from the rollup', () {
+      final health = view([
+        comp(1, status: 'OK', collectedAt: now),
+        comp(2, status: 'UNSUPPORTED'),
+      ]).health;
+      expect(health.state, EnvironmentHealthState.ok);
+    });
+
+    test('an environment with only UNSUPPORTED (or no) components is 正常', () {
+      expect(
+        view([comp(1, status: 'UNSUPPORTED')]).health.state,
+        EnvironmentHealthState.ok,
+      );
+      expect(view([]).health.state, EnvironmentHealthState.ok);
+      expect(view([]).health.newestCollectedAt, isNull);
+      expect(view([]).health.isStale, isFalse);
+    });
+
+    test('stale when the newest collection is older than 24h', () {
+      final old = now.subtract(const Duration(hours: 25));
+      final health = view([comp(1, status: 'OK', collectedAt: old)]).health;
+      expect(health.newestCollectedAt, old);
+      expect(health.isStale, isTrue);
+    });
+
+    test('fresh within 24h, and the newest collectable timestamp wins', () {
+      final old = now.subtract(const Duration(hours: 30));
+      final fresh = now.subtract(const Duration(hours: 2));
+      final health = view([
+        comp(1, status: 'OK', collectedAt: old),
+        comp(2, status: 'FAILED', collectedAt: fresh),
+      ]).health;
+      expect(health.newestCollectedAt, fresh);
+      expect(health.isStale, isFalse);
+    });
+
+    test('UNSUPPORTED timestamps do not count toward freshness', () {
+      final old = now.subtract(const Duration(hours: 30));
+      final fresh = now.subtract(const Duration(hours: 1));
+      final health = view([
+        comp(1, status: 'OK', collectedAt: old),
+        comp(2, status: 'UNSUPPORTED', collectedAt: fresh),
+      ]).health;
+      expect(health.newestCollectedAt, old);
+      expect(health.isStale, isTrue);
+    });
+
+    test('never-collected environments are not flagged stale', () {
+      final health = view([comp(1, status: null)]).health;
+      expect(health.newestCollectedAt, isNull);
+      expect(health.isStale, isFalse);
+    });
+
+    test('collectionDetail is mapped onto the component view', () {
+      final c = view([
+        comp(1, status: 'FAILED', detail: 'connection refused'),
+      ]).components.single;
+      expect(c.collectionDetail, 'connection refused');
+    });
+  });
+
   group('CatalogAcl label mapping', () {
     test('known roles map to Chinese labels', () {
       expect(CatalogAcl.roleLabel('GATEWAY'), '网关');

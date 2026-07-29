@@ -9,6 +9,39 @@ library;
 /// so the UI can colour/branch on it without matching raw values.
 enum CollectionState { ok, failed, unsupported, notCollected }
 
+/// Environment-level health rollup: worst-of the collectable Components'
+/// collection outcomes. UNSUPPORTED Components are excluded — they render a
+/// neutral chip and never drag an Environment's health down.
+enum EnvironmentHealthState {
+  /// ● 正常 — every collectable Component collected OK (or nothing to collect).
+  ok,
+
+  /// ○ 待采集 — nothing failed, but at least one Component awaits collection.
+  pending,
+
+  /// ✗ 异常 — at least one Component's collection FAILED.
+  failed,
+}
+
+/// Derived, client-side health for one Environment (no API involved): the
+/// rollup state plus data freshness. [isStale] flags an Environment whose
+/// newest collection across collectable Components is older than the fixed
+/// 24h window; a never-collected Environment is not stale (待采集 covers it).
+class EnvironmentHealth {
+  final EnvironmentHealthState state;
+
+  /// Newest `lastCollectedAt` across collectable Components; null when none
+  /// has ever been collected.
+  final DateTime? newestCollectedAt;
+  final bool isStale;
+
+  const EnvironmentHealth({
+    required this.state,
+    this.newestCollectedAt,
+    this.isStale = false,
+  });
+}
+
 /// One deployable part of an Environment, ready to render.
 class ComponentView {
   final int id;
@@ -49,6 +82,9 @@ class ComponentView {
 
   /// Localized collection-status label (e.g. 正常 / 未采集).
   final String collectionStatusLabel;
+
+  /// Why the last collection went non-OK (probe detail), or null.
+  final String? collectionDetail;
   final DateTime? lastCollectedAt;
 
   const ComponentView({
@@ -67,6 +103,7 @@ class ComponentView {
     required this.versionProbeLabel,
     required this.collectionState,
     required this.collectionStatusLabel,
+    this.collectionDetail,
     this.lastCollectedAt,
   });
 }
@@ -80,11 +117,15 @@ class EnvironmentView {
   final String? memo;
   final List<ComponentView> components;
 
+  /// Client-derived health rollup + staleness for the roster row.
+  final EnvironmentHealth health;
+
   const EnvironmentView({
     required this.id,
     required this.name,
     this.memo,
     this.components = const [],
+    this.health = const EnvironmentHealth(state: EnvironmentHealthState.ok),
   });
 
   int get componentCount => components.length;

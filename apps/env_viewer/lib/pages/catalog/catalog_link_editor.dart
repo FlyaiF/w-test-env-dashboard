@@ -143,7 +143,7 @@ class _ComponentLinksDialogState extends State<_ComponentLinksDialog> {
               const SizedBox(height: 6),
               if (widget.databases.isEmpty && unresolvedDatabaseIds.isEmpty)
                 Text(
-                  '资源库存中暂无数据库',
+                  '资源清单中暂无数据库',
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.outline,
                   ),

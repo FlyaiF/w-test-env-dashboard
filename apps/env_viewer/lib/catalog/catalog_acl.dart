@@ -14,20 +14,60 @@ class CatalogAcl {
   /// Placeholder for an Environment the backend returned without a name.
   static const String unnamedEnvironment = '未命名环境';
 
-  static EnvironmentView toView(EnvironmentDto dto) {
+  /// Fixed data-freshness window: an Environment whose newest collection is
+  /// older than this is flagged ⚠ stale. Deliberately a constant, not a setting.
+  static const Duration staleAfter = Duration(hours: 24);
+
+  /// [now] is injectable for tests; defaults to the wall clock.
+  static EnvironmentView toView(EnvironmentDto dto, {DateTime? now}) {
     final name = (dto.name != null && dto.name!.trim().isNotEmpty)
         ? dto.name!.trim()
         : unnamedEnvironment;
+    final components = dto.components.map(_componentToView).toList();
     return EnvironmentView(
       id: dto.id,
       name: name,
       memo: _blankToNull(dto.memo),
-      components: dto.components.map(_componentToView).toList(),
+      components: components,
+      health: _deriveHealth(components, now ?? DateTime.now()),
     );
   }
 
-  static List<EnvironmentView> toViews(Iterable<EnvironmentDto> dtos) =>
-      dtos.map(toView).toList();
+  static List<EnvironmentView> toViews(
+    Iterable<EnvironmentDto> dtos, {
+    DateTime? now,
+  }) {
+    final at = now ?? DateTime.now();
+    return dtos.map((dto) => toView(dto, now: at)).toList();
+  }
+
+  /// Decision 3: env health = worst-of component collection outcomes,
+  /// excluding UNSUPPORTED components entirely (rollup and freshness alike).
+  static EnvironmentHealth _deriveHealth(
+    List<ComponentView> components,
+    DateTime now,
+  ) {
+    var state = EnvironmentHealthState.ok;
+    DateTime? newest;
+    for (final c in components) {
+      if (c.collectionState == CollectionState.unsupported) continue;
+      if (c.collectionState == CollectionState.failed) {
+        state = EnvironmentHealthState.failed;
+      } else if (c.collectionState == CollectionState.notCollected &&
+          state != EnvironmentHealthState.failed) {
+        state = EnvironmentHealthState.pending;
+      }
+      final at = c.lastCollectedAt;
+      if (at != null && (newest == null || at.isAfter(newest))) {
+        newest = at;
+      }
+    }
+    return EnvironmentHealth(
+      state: state,
+      newestCollectedAt: newest,
+      isStale: newest != null && now.difference(newest) > staleAfter,
+    );
+  }
 
   /// Selectable Component role enums, in display order, for the edit form. Pair
   /// each with [roleLabel] for its localized label.
@@ -66,6 +106,7 @@ class CatalogAcl {
       versionProbeLabel: versionProbeLabel(dto.versionProbe),
       collectionState: _collectionState(dto.collectionStatus),
       collectionStatusLabel: collectionStatusLabel(dto.collectionStatus),
+      collectionDetail: _blankToNull(dto.collectionDetail),
       lastCollectedAt: dto.lastCollectedAt,
     );
   }
