@@ -8,13 +8,32 @@ import '../../inventory/inventory_view.dart';
 const _serverOsCodes = ['LINUX', 'WINDOWS'];
 const _databaseTypeCodes = ['ORACLE', 'DAMENG', 'OCEANBASE', 'OTHER'];
 
-/// Opens the non-secret Server metadata editor. Credentials are deliberately
-/// absent: this surface only edits inventory coordinates.
-Future<ServerInput?> showServerEditor(
+/// What the Server editor hands back: the non-secret metadata payload, plus an
+/// optional write-only [secret]. A null secret means "leave the stored secret
+/// untouched"; a non-null one is transmitted once to the broker and dropped.
+class ServerEditorResult {
+  final ServerInput input;
+  final String? secret;
+
+  const ServerEditorResult(this.input, this.secret);
+}
+
+/// What the Database editor hands back; mirrors [ServerEditorResult].
+class DatabaseEditorResult {
+  final DatabaseInput input;
+  final String? secret;
+
+  const DatabaseEditorResult(this.input, this.secret);
+}
+
+/// Opens the Server editor. The metadata payload stays non-secret; the password
+/// field is write-only — the current secret is never fetched or displayed, and
+/// leaving the field empty keeps it unchanged (ADR-0005).
+Future<ServerEditorResult?> showServerEditor(
   BuildContext context, {
   ServerView? existing,
 }) {
-  return showDialog<ServerInput>(
+  return showDialog<ServerEditorResult>(
     context: context,
     builder: (_) => _ServerEditorDialog(existing: existing),
   );
@@ -35,6 +54,7 @@ class _ServerEditorDialogState extends State<_ServerEditorDialog> {
   late final TextEditingController _sshHost;
   late final TextEditingController _sshPort;
   late final TextEditingController _sshUsername;
+  late final TextEditingController _password;
   late String _os;
 
   bool get _isEdit => widget.existing != null;
@@ -47,6 +67,8 @@ class _ServerEditorDialogState extends State<_ServerEditorDialog> {
     _sshHost = TextEditingController(text: existing?.sshHost ?? '');
     _sshPort = TextEditingController(text: existing?.sshPort?.toString() ?? '');
     _sshUsername = TextEditingController(text: existing?.sshUsername ?? '');
+    // Write-only: never pre-filled, empty means "keep the stored secret".
+    _password = TextEditingController();
     _os = _blankToNull(existing?.os) ?? _serverOsCodes.first;
   }
 
@@ -56,6 +78,7 @@ class _ServerEditorDialogState extends State<_ServerEditorDialog> {
     _sshHost.dispose();
     _sshPort.dispose();
     _sshUsername.dispose();
+    _password.dispose();
     super.dispose();
   }
 
@@ -66,18 +89,19 @@ class _ServerEditorDialogState extends State<_ServerEditorDialog> {
     final sshUsername = _blankToNull(_sshUsername.text);
     final hasSsh =
         sshHost != null || sshPortText.isNotEmpty || sshUsername != null;
+    final input = ServerInput(
+      host: _host.text.trim(),
+      os: _os,
+      ssh: hasSsh
+          ? SshAccessInput(
+              host: sshHost,
+              port: sshPortText.isEmpty ? null : int.parse(sshPortText),
+              username: sshUsername,
+            )
+          : null,
+    );
     Navigator.of(context).pop(
-      ServerInput(
-        host: _host.text.trim(),
-        os: _os,
-        ssh: hasSsh
-            ? SshAccessInput(
-                host: sshHost,
-                port: sshPortText.isEmpty ? null : int.parse(sshPortText),
-                username: sshUsername,
-              )
-            : null,
-      ),
+      ServerEditorResult(input, _secretOrNull(_password.text)),
     );
   }
 
@@ -146,6 +170,21 @@ class _ServerEditorDialogState extends State<_ServerEditorDialog> {
                   controller: _sshUsername,
                   decoration: const InputDecoration(labelText: 'SSH 用户名'),
                 ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  key: const ValueKey('server-password-field'),
+                  controller: _password,
+                  obscureText: true,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  decoration: InputDecoration(
+                    labelText: 'SSH 密码',
+                    hintText: _isEdit ? '留空则不修改密码' : '可选，创建后也可设置',
+                    helperText: _isEdit
+                        ? (widget.existing!.hasSecret ? '当前已设置密码' : '当前未设置密码')
+                        : null,
+                  ),
+                ),
               ],
             ),
           ),
@@ -162,13 +201,14 @@ class _ServerEditorDialogState extends State<_ServerEditorDialog> {
   }
 }
 
-/// Opens the non-secret Database metadata editor. Passwords remain exclusively
-/// in the backend credential broker and are never requested by this dialog.
-Future<DatabaseInput?> showDatabaseEditor(
+/// Opens the Database editor. The metadata payload stays non-secret; the
+/// password field is write-only — the current secret is never fetched or
+/// displayed, and leaving the field empty keeps it unchanged (ADR-0005).
+Future<DatabaseEditorResult?> showDatabaseEditor(
   BuildContext context, {
   DatabaseView? existing,
 }) {
-  return showDialog<DatabaseInput>(
+  return showDialog<DatabaseEditorResult>(
     context: context,
     builder: (_) => _DatabaseEditorDialog(existing: existing),
   );
@@ -190,6 +230,7 @@ class _DatabaseEditorDialogState extends State<_DatabaseEditorDialog> {
   late final TextEditingController _port;
   late final TextEditingController _serviceName;
   late final TextEditingController _username;
+  late final TextEditingController _password;
   late String _type;
 
   bool get _isEdit => widget.existing != null;
@@ -203,6 +244,8 @@ class _DatabaseEditorDialogState extends State<_DatabaseEditorDialog> {
     _port = TextEditingController(text: existing?.port?.toString() ?? '');
     _serviceName = TextEditingController(text: existing?.serviceName ?? '');
     _username = TextEditingController(text: existing?.username ?? '');
+    // Write-only: never pre-filled, empty means "keep the stored secret".
+    _password = TextEditingController();
     _type = _blankToNull(existing?.type) ?? _databaseTypeCodes.first;
   }
 
@@ -213,6 +256,7 @@ class _DatabaseEditorDialogState extends State<_DatabaseEditorDialog> {
     _port.dispose();
     _serviceName.dispose();
     _username.dispose();
+    _password.dispose();
     super.dispose();
   }
 
@@ -227,19 +271,20 @@ class _DatabaseEditorDialogState extends State<_DatabaseEditorDialog> {
         portText.isNotEmpty ||
         serviceName != null ||
         username != null;
+    final input = DatabaseInput(
+      role: _blankToNull(_role.text),
+      type: _type,
+      connection: hasConnection
+          ? DatabaseConnectionInput(
+              host: host,
+              port: portText.isEmpty ? null : int.parse(portText),
+              serviceName: serviceName,
+              username: username,
+            )
+          : null,
+    );
     Navigator.of(context).pop(
-      DatabaseInput(
-        role: _blankToNull(_role.text),
-        type: _type,
-        connection: hasConnection
-            ? DatabaseConnectionInput(
-                host: host,
-                port: portText.isEmpty ? null : int.parse(portText),
-                serviceName: serviceName,
-                username: username,
-              )
-            : null,
-      ),
+      DatabaseEditorResult(input, _secretOrNull(_password.text)),
     );
   }
 
@@ -315,6 +360,21 @@ class _DatabaseEditorDialogState extends State<_DatabaseEditorDialog> {
                   controller: _username,
                   decoration: const InputDecoration(labelText: '用户名'),
                 ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  key: const ValueKey('database-password-field'),
+                  controller: _password,
+                  obscureText: true,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  decoration: InputDecoration(
+                    labelText: '密码',
+                    hintText: _isEdit ? '留空则不修改密码' : '可选，创建后也可设置',
+                    helperText: _isEdit
+                        ? (widget.existing!.hasSecret ? '当前已设置密码' : '当前未设置密码')
+                        : null,
+                  ),
+                ),
               ],
             ),
           ),
@@ -343,3 +403,7 @@ String? _blankToNull(String? value) {
   final trimmed = value?.trim();
   return trimmed == null || trimmed.isEmpty ? null : trimmed;
 }
+
+/// Unlike [_blankToNull], keeps the secret verbatim (passwords may contain
+/// meaningful whitespace); only an effectively empty entry means "unchanged".
+String? _secretOrNull(String value) => value.trim().isEmpty ? null : value;

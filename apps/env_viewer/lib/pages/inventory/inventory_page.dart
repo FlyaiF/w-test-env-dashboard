@@ -276,25 +276,29 @@ class _InventoryPageState extends State<InventoryPage>
 
   Future<void> _createCurrent() async {
     if (_showingServers) {
-      final input = await showServerEditor(context);
-      if (input == null || !mounted) return;
+      final result = await showServerEditor(context);
+      if (result == null || !mounted) return;
       final store = context.read<InventoryStore>();
-      final ok = await store.createServer(input);
+      final ok = await store.createServer(result.input, secret: result.secret);
       if (mounted) _reportMutation(store, ok, '服务器已创建');
       return;
     }
-    final input = await showDatabaseEditor(context);
-    if (input == null || !mounted) return;
+    final result = await showDatabaseEditor(context);
+    if (result == null || !mounted) return;
     final store = context.read<InventoryStore>();
-    final ok = await store.createDatabase(input);
+    final ok = await store.createDatabase(result.input, secret: result.secret);
     if (mounted) _reportMutation(store, ok, '数据库已创建');
   }
 
   Future<void> _editServer(ServerView server) async {
-    final input = await showServerEditor(context, existing: server);
-    if (input == null || !mounted) return;
+    final result = await showServerEditor(context, existing: server);
+    if (result == null || !mounted) return;
     final store = context.read<InventoryStore>();
-    final ok = await store.updateServer(server.id, input);
+    final ok = await store.updateServer(
+      server.id,
+      result.input,
+      secret: result.secret,
+    );
     if (mounted) _reportMutation(store, ok, '服务器已更新');
   }
 
@@ -323,10 +327,14 @@ class _InventoryPageState extends State<InventoryPage>
   }
 
   Future<void> _editDatabase(DatabaseView database) async {
-    final input = await showDatabaseEditor(context, existing: database);
-    if (input == null || !mounted) return;
+    final result = await showDatabaseEditor(context, existing: database);
+    if (result == null || !mounted) return;
     final store = context.read<InventoryStore>();
-    final ok = await store.updateDatabase(database.id, input);
+    final ok = await store.updateDatabase(
+      database.id,
+      result.input,
+      secret: result.secret,
+    );
     if (mounted) _reportMutation(store, ok, '数据库已更新');
   }
 

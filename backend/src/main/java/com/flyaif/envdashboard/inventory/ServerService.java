@@ -20,25 +20,30 @@ public class ServerService {
 
     private final ServerRepository servers;
     private final ResourceUsage usage;
+    private final SecretPresence secretPresence;
 
-    public ServerService(ServerRepository servers, ResourceUsage usage) {
+    public ServerService(ServerRepository servers, ResourceUsage usage, SecretPresence secretPresence) {
         this.servers = servers;
         this.usage = usage;
+        this.secretPresence = secretPresence;
     }
 
     @Transactional(readOnly = true)
     public List<ServerDto> list() {
-        return servers.findAll().stream().map(InventoryMapper::toDto).toList();
+        var withSecret = secretPresence.serverIdsWithSecret();
+        return servers.findAll().stream()
+                .map(server -> InventoryMapper.toDto(server, withSecret.contains(server.getId())))
+                .toList();
     }
 
     @Transactional(readOnly = true)
     public ServerDto get(Long id) {
-        return InventoryMapper.toDto(require(id));
+        return InventoryMapper.toDto(require(id), secretPresence.serverHasSecret(id));
     }
 
     public ServerDto create(ServerRequest request) {
         Server server = new Server(request.host(), request.os(), InventoryMapper.toDomain(request.ssh()));
-        return InventoryMapper.toDto(servers.save(server));
+        return InventoryMapper.toDto(servers.save(server), false);
     }
 
     public ServerDto update(Long id, ServerRequest request) {
@@ -46,7 +51,7 @@ public class ServerService {
         server.setHost(request.host());
         server.setOs(request.os());
         server.setSsh(InventoryMapper.toDomain(request.ssh()));
-        return InventoryMapper.toDto(server);
+        return InventoryMapper.toDto(server, secretPresence.serverHasSecret(id));
     }
 
     public void delete(Long id) {

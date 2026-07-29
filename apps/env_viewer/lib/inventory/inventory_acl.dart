@@ -14,6 +14,7 @@ class InventoryAcl {
     sshHost: _blankToNull(dto.ssh?.host),
     sshPort: dto.ssh?.port,
     sshUsername: _blankToNull(dto.ssh?.username),
+    hasSecret: dto.hasSecret,
   );
 
   static List<ServerView> toServerViews(Iterable<ServerDto> dtos) {
@@ -55,6 +56,7 @@ class InventoryAcl {
       port: connection?.port,
       serviceName: _blankToNull(connection?.serviceName),
       username: _blankToNull(connection?.username),
+      hasSecret: dto.hasSecret,
     );
   }
 

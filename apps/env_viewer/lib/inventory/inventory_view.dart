@@ -14,6 +14,9 @@ class ServerView {
   final int? sshPort;
   final String? sshUsername;
 
+  /// Whether the backend broker holds an SSH secret — presence only.
+  final bool hasSecret;
+
   const ServerView({
     required this.id,
     this.host,
@@ -22,6 +25,7 @@ class ServerView {
     this.sshHost,
     this.sshPort,
     this.sshUsername,
+    this.hasSecret = false,
   });
 
   String get displayLabel => host ?? '#$id';
@@ -50,6 +54,9 @@ class DatabaseView {
   final String? serviceName;
   final String? username;
 
+  /// Whether the backend broker holds a login secret — presence only.
+  final bool hasSecret;
+
   const DatabaseView({
     required this.id,
     this.role,
@@ -60,6 +67,7 @@ class DatabaseView {
     this.port,
     this.serviceName,
     this.username,
+    this.hasSecret = false,
   });
 
   String get address {

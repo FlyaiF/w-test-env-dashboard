@@ -7,9 +7,19 @@ class ServerDto {
   final int id;
   final String? host;
   final String? os; // LINUX | WINDOWS
+
+  /// Whether the broker holds an SSH secret for this Server — presence only,
+  /// never the secret itself.
+  final bool hasSecret;
   final SshAccessInfo? ssh;
 
-  const ServerDto({required this.id, this.host, this.os, this.ssh});
+  const ServerDto({
+    required this.id,
+    this.host,
+    this.os,
+    this.hasSecret = false,
+    this.ssh,
+  });
 
   factory ServerDto.fromJson(Map<String, dynamic> json) {
     final ssh = json['ssh'];
@@ -17,6 +27,7 @@ class ServerDto {
       id: (json['id'] as num).toInt(),
       host: json['host'] as String?,
       os: json['os'] as String?,
+      hasSecret: json['hasSecret'] == true,
       ssh: ssh is Map<String, dynamic> ? SshAccessInfo.fromJson(ssh) : null,
     );
   }

@@ -221,6 +221,28 @@ class BackendClient {
     return _asComponent(body);
   }
 
+  /// Store/rotate a Server's SSH secret (`PUT /api/servers/{id}/secret`). The
+  /// plaintext is transmitted once and encrypted at rest by the backend; the
+  /// client never persists it.
+  Future<void> setServerSecret(int serverId, String secret) async {
+    await _send(
+      'PUT',
+      '/api/servers/$serverId/secret',
+      body: {'secret': secret},
+    );
+  }
+
+  /// Store/rotate a Database's login secret (`PUT /api/databases/{id}/secret`).
+  /// The plaintext is transmitted once and encrypted at rest by the backend;
+  /// the client never persists it.
+  Future<void> setDatabaseSecret(int databaseId, String secret) async {
+    await _send(
+      'PUT',
+      '/api/databases/$databaseId/secret',
+      body: {'secret': secret},
+    );
+  }
+
   /// Fetch an SSH credential bundle for a Server on demand (Access Brokering,
   /// ADR-0005). Returned to the caller to launch a tool with and then dropped;
   /// the client never persists it.

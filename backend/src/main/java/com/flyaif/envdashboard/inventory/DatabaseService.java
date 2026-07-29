@@ -20,26 +20,31 @@ public class DatabaseService {
 
     private final DatabaseRepository databases;
     private final ResourceUsage usage;
+    private final SecretPresence secretPresence;
 
-    public DatabaseService(DatabaseRepository databases, ResourceUsage usage) {
+    public DatabaseService(DatabaseRepository databases, ResourceUsage usage, SecretPresence secretPresence) {
         this.databases = databases;
         this.usage = usage;
+        this.secretPresence = secretPresence;
     }
 
     @Transactional(readOnly = true)
     public List<DatabaseDto> list() {
-        return databases.findAll().stream().map(InventoryMapper::toDto).toList();
+        var withSecret = secretPresence.databaseIdsWithSecret();
+        return databases.findAll().stream()
+                .map(database -> InventoryMapper.toDto(database, withSecret.contains(database.getId())))
+                .toList();
     }
 
     @Transactional(readOnly = true)
     public DatabaseDto get(Long id) {
-        return InventoryMapper.toDto(require(id));
+        return InventoryMapper.toDto(require(id), secretPresence.databaseHasSecret(id));
     }
 
     public DatabaseDto create(DatabaseRequest request) {
         Database database = new Database(
                 request.role(), request.type(), InventoryMapper.toDomain(request.connection()));
-        return InventoryMapper.toDto(databases.save(database));
+        return InventoryMapper.toDto(databases.save(database), false);
     }
 
     public DatabaseDto update(Long id, DatabaseRequest request) {
@@ -47,7 +52,7 @@ public class DatabaseService {
         database.setRole(request.role());
         database.setType(request.type());
         database.setConnection(InventoryMapper.toDomain(request.connection()));
-        return InventoryMapper.toDto(database);
+        return InventoryMapper.toDto(database, secretPresence.databaseHasSecret(id));
     }
 
     public void delete(Long id) {

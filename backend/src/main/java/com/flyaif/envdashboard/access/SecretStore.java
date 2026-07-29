@@ -2,10 +2,12 @@ package com.flyaif.envdashboard.access;
 
 import com.flyaif.envdashboard.access.domain.DatabaseSecret;
 import com.flyaif.envdashboard.access.domain.ServerSecret;
+import com.flyaif.envdashboard.inventory.SecretPresence;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * The single gate between plaintext secrets and their at-rest ciphertext (ADR-0005). Everything in
@@ -18,7 +20,7 @@ import java.util.Optional;
  */
 @Service
 @Transactional
-public class SecretStore {
+public class SecretStore implements SecretPresence {
 
     private final ServerSecretRepository serverSecrets;
     private final DatabaseSecretRepository databaseSecrets;
@@ -62,5 +64,31 @@ public class SecretStore {
     @Transactional(readOnly = true)
     public Optional<String> databaseSecret(Long databaseId) {
         return databaseSecrets.findById(databaseId).map(s -> cipher.decrypt(s.getSecretEnc()));
+    }
+
+    // --- SecretPresence: existence only, no decryption -------------------------------------------
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean serverHasSecret(Long serverId) {
+        return serverSecrets.existsById(serverId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean databaseHasSecret(Long databaseId) {
+        return databaseSecrets.existsById(databaseId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Set<Long> serverIdsWithSecret() {
+        return serverSecrets.allServerIds();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Set<Long> databaseIdsWithSecret() {
+        return databaseSecrets.allDatabaseIds();
     }
 }

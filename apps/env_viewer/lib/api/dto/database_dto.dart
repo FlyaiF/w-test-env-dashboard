@@ -6,9 +6,19 @@ class DatabaseDto {
   final int id;
   final String? role; // free-text, e.g. business | intermediate
   final String? type; // ORACLE | DAMENG | OCEANBASE | OTHER
+
+  /// Whether the broker holds a login secret for this Database — presence only,
+  /// never the secret itself.
+  final bool hasSecret;
   final ConnectionInfo? connection;
 
-  const DatabaseDto({required this.id, this.role, this.type, this.connection});
+  const DatabaseDto({
+    required this.id,
+    this.role,
+    this.type,
+    this.hasSecret = false,
+    this.connection,
+  });
 
   factory DatabaseDto.fromJson(Map<String, dynamic> json) {
     final conn = json['connection'];
@@ -16,6 +26,7 @@ class DatabaseDto {
       id: (json['id'] as num).toInt(),
       role: json['role'] as String?,
       type: json['type'] as String?,
+      hasSecret: json['hasSecret'] == true,
       connection: conn is Map<String, dynamic>
           ? ConnectionInfo.fromJson(conn)
           : null,

@@ -19,7 +19,9 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.Map;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -75,6 +77,54 @@ class InventoryApiIntegrationTest {
         mockMvc.perform(get("/api/servers"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)));
+    }
+
+    @Test
+    void reportsServerSecretPresenceWithoutExposingTheSecret() throws Exception {
+        Server server = servers.save(new Server("host-01", ServerOs.LINUX, null));
+
+        mockMvc.perform(get("/api/servers/{id}", server.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.hasSecret").value(false));
+
+        mockMvc.perform(put("/api/servers/{id}/secret", server.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("secret", "deploy-pw"))))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/servers/{id}", server.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.hasSecret").value(true))
+                .andExpect(content().string(not(containsString("deploy-pw"))));
+
+        mockMvc.perform(get("/api/servers"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].hasSecret").value(true))
+                .andExpect(content().string(not(containsString("deploy-pw"))));
+    }
+
+    @Test
+    void reportsDatabaseSecretPresenceWithoutExposingTheSecret() throws Exception {
+        Database db = databases.save(new Database("business", DatabaseType.ORACLE, null));
+
+        mockMvc.perform(get("/api/databases/{id}", db.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.hasSecret").value(false));
+
+        mockMvc.perform(put("/api/databases/{id}/secret", db.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("secret", "app-pw"))))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/databases/{id}", db.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.hasSecret").value(true))
+                .andExpect(content().string(not(containsString("app-pw"))));
+
+        mockMvc.perform(get("/api/databases"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].hasSecret").value(true))
+                .andExpect(content().string(not(containsString("app-pw"))));
     }
 
     @Test

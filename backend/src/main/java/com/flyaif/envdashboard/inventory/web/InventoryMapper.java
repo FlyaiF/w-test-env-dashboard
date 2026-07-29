@@ -15,12 +15,13 @@ public final class InventoryMapper {
     private InventoryMapper() {
     }
 
-    public static ServerDto toDto(Server server) {
+    public static ServerDto toDto(Server server, boolean hasSecret) {
         return new ServerDto(
                 server.getId(),
                 server.getHost(),
                 server.getOs() == null ? null : server.getOs().name(),
-                toDto(server.getSsh()));
+                toDto(server.getSsh()),
+                hasSecret);
     }
 
     public static SshAccessDto toDto(SshAccess ssh) {
@@ -37,12 +38,13 @@ public final class InventoryMapper {
         return new SshAccess(dto.host(), dto.port(), dto.username());
     }
 
-    public static DatabaseDto toDto(Database database) {
+    public static DatabaseDto toDto(Database database, boolean hasSecret) {
         return new DatabaseDto(
                 database.getId(),
                 database.getRole(),
                 database.getType() == null ? null : database.getType().name(),
-                toDto(database.getConnection()));
+                toDto(database.getConnection()),
+                hasSecret);
     }
 
     public static ConnectionDto toDto(ConnectionDescriptor connection) {

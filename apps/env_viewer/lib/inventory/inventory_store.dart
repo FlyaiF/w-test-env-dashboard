@@ -69,19 +69,35 @@ class InventoryStore extends ChangeNotifier {
     }
   }
 
-  Future<bool> createServer(ServerInput input) =>
-      _mutate(() async => _client.createServer(input));
+  Future<bool> createServer(ServerInput input, {String? secret}) =>
+      _mutateWithSecret(
+        saveMetadata: () async => (await _client.createServer(input)).id,
+        secret: secret,
+        saveSecret: _client.setServerSecret,
+      );
 
-  Future<bool> updateServer(int id, ServerInput input) =>
-      _mutate(() async => _client.updateServer(id, input));
+  Future<bool> updateServer(int id, ServerInput input, {String? secret}) =>
+      _mutateWithSecret(
+        saveMetadata: () async => (await _client.updateServer(id, input)).id,
+        secret: secret,
+        saveSecret: _client.setServerSecret,
+      );
 
   Future<bool> deleteServer(int id) => _mutate(() => _client.deleteServer(id));
 
-  Future<bool> createDatabase(DatabaseInput input) =>
-      _mutate(() async => _client.createDatabase(input));
+  Future<bool> createDatabase(DatabaseInput input, {String? secret}) =>
+      _mutateWithSecret(
+        saveMetadata: () async => (await _client.createDatabase(input)).id,
+        secret: secret,
+        saveSecret: _client.setDatabaseSecret,
+      );
 
-  Future<bool> updateDatabase(int id, DatabaseInput input) =>
-      _mutate(() async => _client.updateDatabase(id, input));
+  Future<bool> updateDatabase(int id, DatabaseInput input, {String? secret}) =>
+      _mutateWithSecret(
+        saveMetadata: () async => (await _client.updateDatabase(id, input)).id,
+        secret: secret,
+        saveSecret: _client.setDatabaseSecret,
+      );
 
   Future<bool> deleteDatabase(int id) =>
       _mutate(() => _client.deleteDatabase(id));
@@ -110,6 +126,49 @@ class InventoryStore extends ChangeNotifier {
     }
 
     await load();
+    return _error == null;
+  }
+
+  /// Save non-secret metadata, then (when [secret] is non-null) hand the
+  /// write-only secret to the broker. A secret failure after a successful
+  /// metadata save still reloads — the metadata change is already canonical —
+  /// but surfaces a targeted message so the user knows to re-enter the
+  /// password, not the whole form.
+  Future<bool> _mutateWithSecret({
+    required Future<int> Function() saveMetadata,
+    required String? secret,
+    required Future<void> Function(int id, String secret) saveSecret,
+  }) async {
+    if (secret == null) return _mutate(saveMetadata);
+
+    final int id;
+    try {
+      id = await saveMetadata();
+    } on BackendException catch (exception) {
+      _error = exception.message;
+      notifyListeners();
+      return false;
+    } catch (exception) {
+      _error = '操作失败：$exception';
+      notifyListeners();
+      return false;
+    }
+
+    String? secretFailure;
+    try {
+      await saveSecret(id, secret);
+    } on BackendException catch (exception) {
+      secretFailure = exception.message;
+    } catch (exception) {
+      secretFailure = '$exception';
+    }
+
+    await load();
+    if (secretFailure != null) {
+      _error = '信息已保存，但密码未更新：$secretFailure，请重新编辑并再次输入密码';
+      notifyListeners();
+      return false;
+    }
     return _error == null;
   }
 }
