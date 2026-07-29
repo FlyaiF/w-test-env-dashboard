@@ -32,7 +32,7 @@ class JdbcUrlBuilderTest {
         Database database = new Database("business", DatabaseType.OCEANBASE, CONNECTION);
 
         assertThat(JdbcUrlBuilder.forDatabase(database))
-                .isEqualTo("jdbc:oceanbase:oracle://db.example:2881/APP");
+                .isEqualTo("jdbc:oceanbase://db.example:2881/APP");
     }
 
     @Test
@@ -44,7 +44,7 @@ class JdbcUrlBuilderTest {
         assertThat(JdbcUrlBuilder.forDatabase(new Database("business", DatabaseType.DAMENG, portless)))
                 .isEqualTo("jdbc:dm://db.example:5236");
         assertThat(JdbcUrlBuilder.forDatabase(new Database("business", DatabaseType.OCEANBASE, portless)))
-                .isEqualTo("jdbc:oceanbase:oracle://db.example:2881/APP");
+                .isEqualTo("jdbc:oceanbase://db.example:2881/APP");
     }
 
     @Test

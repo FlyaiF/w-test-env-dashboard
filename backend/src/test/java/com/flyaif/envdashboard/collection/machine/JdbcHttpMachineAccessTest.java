@@ -59,7 +59,7 @@ class JdbcHttpMachineAccessTest {
                 new ConnectionDescriptor("ob.example", 2881, "APP", "tenant-user"));
 
         assertThat(access.queryScalar(database, "select version from dual")).isEqualTo("4.2.0");
-        assertThat(connectedUrl.get()).isEqualTo("jdbc:oceanbase:oracle://ob.example:2881/APP");
+        assertThat(connectedUrl.get()).isEqualTo("jdbc:oceanbase://ob.example:2881/APP");
         assertThat(loginSeconds.get()).isEqualTo(2); // JDBC API accepts whole seconds, rounded up.
         assertThat(connectedProperties.get())
                 .containsEntry("user", "tenant-user")

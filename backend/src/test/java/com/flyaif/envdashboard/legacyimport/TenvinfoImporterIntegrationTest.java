@@ -166,7 +166,7 @@ class TenvinfoImporterIntegrationTest {
     }
 
     @Test
-    void importsDecodedOceanBaseQueryCredentialsAndOracleModeUrl() {
+    void importsDecodedOceanBaseQueryCredentialsAndRebuildsCanonicalUrl() {
         LegacyEnvRow row = new LegacyEnvRow(104L, "环境 OceanBase",
                 "jdbc:oceanbase:oracle://ob.example:2881/APP"
                         + "?connectTimeout=5000&user=app%40oracle_tenant&password=p%2Bss%26word",
@@ -179,7 +179,7 @@ class TenvinfoImporterIntegrationTest {
         assertThat(database.getConnection().getUsername()).isEqualTo("app@oracle_tenant");
         assertThat(broker.brokerDatabaseCredential(database.getId()).secret()).isEqualTo("p+ss&word");
         assertThat(broker.brokerDatabaseCredential(database.getId()).jdbcUrl())
-                .isEqualTo("jdbc:oceanbase:oracle://ob.example:2881/APP");
+                .isEqualTo("jdbc:oceanbase://ob.example:2881/APP");
     }
 
     @Test
@@ -212,7 +212,7 @@ class TenvinfoImporterIntegrationTest {
         assertThat(broker.brokerDatabaseCredential(damengDb.getId()).jdbcUrl())
                 .isEqualTo("jdbc:dm://dameng-db:5236");
         assertThat(broker.brokerDatabaseCredential(oceanBaseDb.getId()).jdbcUrl())
-                .isEqualTo("jdbc:oceanbase:oracle://ocean-db:2881/APP");
+                .isEqualTo("jdbc:oceanbase://ocean-db:2881/APP");
         assertThat(report.getNotes())
                 .extracting(ImportReport.Note::message)
                 .anyMatch(message -> message.contains("defaulted to 1521 for ORACLE"))

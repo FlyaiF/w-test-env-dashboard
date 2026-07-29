@@ -30,10 +30,11 @@ public final class JdbcUrlBuilder {
         return switch (type) {
             case ORACLE -> "jdbc:oracle:thin:@//" + host + ":" + port + "/" + service;
             case DAMENG -> "jdbc:dm://" + host + ":" + port;
-            // The OceanBase driver uses a distinct protocol for Oracle compatibility mode. The
-            // generic jdbc:oceanbase:// shape selects MySQL mode and cannot run the Oracle SQL used
-            // by the version probe.
-            case OCEANBASE -> "jdbc:oceanbase:oracle://" + host + ":" + port + "/" + service;
+            // OceanBase Connector/J only accepts jdbc:oceanbase[:hamode]://host:port/db, where
+            // hamode is an HA option such as loadbalance — "oracle" is not a valid token there.
+            // MySQL vs Oracle compatibility is decided by the tenant in the username
+            // (user@tenant), never by the URL.
+            case OCEANBASE -> "jdbc:oceanbase://" + host + ":" + port + "/" + service;
             case OTHER -> null;
         };
     }
