@@ -80,6 +80,10 @@ public class Component {
     @Column(name = "collection_status", length = 20)
     private CollectionStatus collectionStatus;
 
+    /** Why the last collection went non-OK (probe detail); null after a successful collection. */
+    @Column(name = "collection_detail", length = 2000)
+    private String collectionDetail;
+
     @Column(name = "last_collected_at")
     private Instant lastCollectedAt;
 
@@ -192,6 +196,14 @@ public class Component {
 
     public void setCollectionStatus(CollectionStatus collectionStatus) {
         this.collectionStatus = collectionStatus;
+    }
+
+    public String getCollectionDetail() {
+        return collectionDetail;
+    }
+
+    public void setCollectionDetail(String collectionDetail) {
+        this.collectionDetail = collectionDetail;
     }
 
     public Instant getLastCollectedAt() {

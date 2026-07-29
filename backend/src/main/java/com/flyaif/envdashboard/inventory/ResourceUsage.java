@@ -10,4 +10,10 @@ public interface ResourceUsage {
     boolean isServerInUse(Long serverId);
 
     boolean isDatabaseInUse(Long databaseId);
+
+    /** How many Components run on each Server; Servers with no references are absent. */
+    java.util.Map<Long, Long> serverReferenceCounts();
+
+    /** How many Components use each Database; Databases with no references are absent. */
+    java.util.Map<Long, Long> databaseReferenceCounts();
 }

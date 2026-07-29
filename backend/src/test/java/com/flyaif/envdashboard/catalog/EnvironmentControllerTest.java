@@ -37,20 +37,20 @@ class EnvironmentControllerTest {
     private static ComponentDto gateway() {
         return new ComponentDto(1L, "GATEWAY", "1.2.3", Instant.parse("2026-01-02T03:04:05Z"),
                 "/var/log/gateway.log", 8080, "https", "https://gw.example/health",
-                5L, List.of(7L, 8L), null, null, null);
+                5L, List.of(7L, 8L), null, null, null, null);
     }
 
     private static EnvironmentDto envA() {
         return new EnvironmentDto(1L, "ENV-A", "first env",
                 List.of(gateway(), new ComponentDto(2L, "APP", null, null, null, null, null, null,
-                        null, List.of(), null, null, null)));
+                        null, List.of(), null, null, null, null)));
     }
 
     @Test
     void listReturnsEnvironmentsEachWithTheirComponents() throws Exception {
         EnvironmentDto envB = new EnvironmentDto(2L, "ENV-B", null,
                 List.of(new ComponentDto(3L, "UI", null, null, null, null, null, null,
-                        null, List.of(), null, null, null)));
+                        null, List.of(), null, null, null, null)));
         given(service.listEnvironments()).willReturn(List.of(envA(), envB));
 
         mockMvc.perform(get("/api/environments"))

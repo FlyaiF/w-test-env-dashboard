@@ -196,6 +196,32 @@ class InventoryApiIntegrationTest {
     }
 
     @Test
+    void listsReportPerResourceReferenceCounts() throws Exception {
+        Server used = servers.save(new Server("host-01", ServerOs.LINUX, null));
+        Server unused = servers.save(new Server("host-02", ServerOs.LINUX, null));
+        Database db = databases.save(new Database("business", DatabaseType.ORACLE, null));
+
+        Environment env = new Environment("ENV-A", null);
+        Component app = new Component(ComponentRole.APP);
+        app.setServerId(used.getId());
+        app.setDatabaseIds(java.util.Set.of(db.getId()));
+        env.addComponent(app);
+        Component gw = new Component(ComponentRole.GATEWAY);
+        gw.setServerId(used.getId());
+        env.addComponent(gw);
+        environments.save(env);
+
+        mockMvc.perform(get("/api/servers"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id==%d)].referenceCount".formatted(used.getId())).value(2))
+                .andExpect(jsonPath("$[?(@.id==%d)].referenceCount".formatted(unused.getId())).value(0));
+
+        mockMvc.perform(get("/api/databases"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].referenceCount").value(1));
+    }
+
+    @Test
     void deletingAReferencedServerIsRefusedWith409() throws Exception {
         Server server = servers.save(new Server("host-01", ServerOs.LINUX, null));
         Environment env = new Environment("ENV-A", null);

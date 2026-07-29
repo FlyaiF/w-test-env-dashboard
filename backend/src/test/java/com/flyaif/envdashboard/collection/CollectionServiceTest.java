@@ -107,6 +107,7 @@ class CollectionServiceTest {
         assertThat(okComp.collectionStatus()).isEqualTo("OK");
         assertThat(okComp.version()).isEqualTo("9.9.9");          // trimmed
         assertThat(okComp.lastCollectedAt()).isNotNull();
+        assertThat(okComp.collectionDetail()).isNull();           // OK clears any prior detail
 
         ComponentDto dbComp = byRole(refreshed, ComponentRole.APP);
         assertThat(dbComp.collectionStatus()).isEqualTo("OK");
@@ -117,9 +118,11 @@ class CollectionServiceTest {
         assertThat(failComp.collectionStatus()).isEqualTo("FAILED");
         assertThat(failComp.version()).isEqualTo("1.0.0");        // NOT blanked by the failure
         assertThat(failComp.lastCollectedAt()).isNotNull();       // but the attempt is recorded
+        assertThat(failComp.collectionDetail()).contains("connection refused");
 
         ComponentDto unsupportedComp = byRole(refreshed, ComponentRole.PRIVATE_PROTO);
         assertThat(unsupportedComp.collectionStatus()).isEqualTo("UNSUPPORTED");
+        assertThat(unsupportedComp.collectionDetail()).isNotNull();
     }
 
     @Test

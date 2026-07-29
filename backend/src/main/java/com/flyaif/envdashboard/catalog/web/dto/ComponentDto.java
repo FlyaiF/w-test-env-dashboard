@@ -22,6 +22,7 @@ public record ComponentDto(
         List<Long> databaseIds,
         String versionProbe,
         String collectionStatus,
+        String collectionDetail,
         Instant lastCollectedAt
 ) {
 }

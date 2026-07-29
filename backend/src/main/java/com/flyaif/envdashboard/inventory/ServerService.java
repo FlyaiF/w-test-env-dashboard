@@ -31,19 +31,23 @@ public class ServerService {
     @Transactional(readOnly = true)
     public List<ServerDto> list() {
         var withSecret = secretPresence.serverIdsWithSecret();
+        var referenceCounts = usage.serverReferenceCounts();
         return servers.findAll().stream()
-                .map(server -> InventoryMapper.toDto(server, withSecret.contains(server.getId())))
+                .map(server -> InventoryMapper.toDto(
+                        server,
+                        withSecret.contains(server.getId()),
+                        referenceCounts.getOrDefault(server.getId(), 0L)))
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public ServerDto get(Long id) {
-        return InventoryMapper.toDto(require(id), secretPresence.serverHasSecret(id));
+        return InventoryMapper.toDto(require(id), secretPresence.serverHasSecret(id), referenceCount(id));
     }
 
     public ServerDto create(ServerRequest request) {
         Server server = new Server(request.host(), request.os(), InventoryMapper.toDomain(request.ssh()));
-        return InventoryMapper.toDto(servers.save(server), false);
+        return InventoryMapper.toDto(servers.save(server), false, 0L);
     }
 
     public ServerDto update(Long id, ServerRequest request) {
@@ -51,7 +55,7 @@ public class ServerService {
         server.setHost(request.host());
         server.setOs(request.os());
         server.setSsh(InventoryMapper.toDomain(request.ssh()));
-        return InventoryMapper.toDto(server, secretPresence.serverHasSecret(id));
+        return InventoryMapper.toDto(server, secretPresence.serverHasSecret(id), referenceCount(id));
     }
 
     public void delete(Long id) {
@@ -65,5 +69,9 @@ public class ServerService {
 
     private Server require(Long id) {
         return servers.findById(id).orElseThrow(() -> new ServerNotFoundException(id));
+    }
+
+    private long referenceCount(Long id) {
+        return usage.serverReferenceCounts().getOrDefault(id, 0L);
     }
 }

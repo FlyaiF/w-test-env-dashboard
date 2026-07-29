@@ -70,6 +70,7 @@ public final class EnvironmentMapper {
                 List.copyOf(component.getDatabaseIds()),
                 name(component.getVersionProbe()),
                 name(component.getCollectionStatus()),
+                component.getCollectionDetail(),
                 component.getLastCollectedAt());
     }
 

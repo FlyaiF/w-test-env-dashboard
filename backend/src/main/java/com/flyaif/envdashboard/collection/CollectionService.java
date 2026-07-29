@@ -89,19 +89,30 @@ public class CollectionService {
         apply(component, result);
     }
 
+    /** Longest failure detail persisted; matches the collection_detail column width. */
+    private static final int MAX_DETAIL_LENGTH = 2000;
+
     private void apply(Component component, ProbeResult result) {
         component.setCollectionStatus(result.status());
         component.setLastCollectedAt(clock.instant());
         // Only a successful probe overwrites the version; a failure leaves known-good data in place.
         switch (result.status()) {
             case OK -> {
+                component.setCollectionDetail(null);
                 component.setVersion(result.version());
                 if (result.versionUpdatedAt() != null) {
                     component.setVersionUpdatedAt(result.versionUpdatedAt());
                 }
             }
-            case FAILED, UNSUPPORTED -> { /* keep prior version/versionUpdatedAt */ }
+            case FAILED, UNSUPPORTED -> component.setCollectionDetail(truncate(result.detail()));
         }
+    }
+
+    private static String truncate(String detail) {
+        if (detail == null || detail.length() <= MAX_DETAIL_LENGTH) {
+            return detail;
+        }
+        return detail.substring(0, MAX_DETAIL_LENGTH);
     }
 
     private ProbeContext context(Component component, VersionProbe probe) {

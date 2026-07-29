@@ -31,20 +31,24 @@ public class DatabaseService {
     @Transactional(readOnly = true)
     public List<DatabaseDto> list() {
         var withSecret = secretPresence.databaseIdsWithSecret();
+        var referenceCounts = usage.databaseReferenceCounts();
         return databases.findAll().stream()
-                .map(database -> InventoryMapper.toDto(database, withSecret.contains(database.getId())))
+                .map(database -> InventoryMapper.toDto(
+                        database,
+                        withSecret.contains(database.getId()),
+                        referenceCounts.getOrDefault(database.getId(), 0L)))
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public DatabaseDto get(Long id) {
-        return InventoryMapper.toDto(require(id), secretPresence.databaseHasSecret(id));
+        return InventoryMapper.toDto(require(id), secretPresence.databaseHasSecret(id), referenceCount(id));
     }
 
     public DatabaseDto create(DatabaseRequest request) {
         Database database = new Database(
                 request.role(), request.type(), InventoryMapper.toDomain(request.connection()));
-        return InventoryMapper.toDto(databases.save(database), false);
+        return InventoryMapper.toDto(databases.save(database), false, 0L);
     }
 
     public DatabaseDto update(Long id, DatabaseRequest request) {
@@ -52,7 +56,7 @@ public class DatabaseService {
         database.setRole(request.role());
         database.setType(request.type());
         database.setConnection(InventoryMapper.toDomain(request.connection()));
-        return InventoryMapper.toDto(database, secretPresence.databaseHasSecret(id));
+        return InventoryMapper.toDto(database, secretPresence.databaseHasSecret(id), referenceCount(id));
     }
 
     public void delete(Long id) {
@@ -66,5 +70,9 @@ public class DatabaseService {
 
     private Database require(Long id) {
         return databases.findById(id).orElseThrow(() -> new DatabaseNotFoundException(id));
+    }
+
+    private long referenceCount(Long id) {
+        return usage.databaseReferenceCounts().getOrDefault(id, 0L);
     }
 }
