@@ -20,6 +20,13 @@ const _envGroup = ui.NavGroup(
       icon: Icons.inventory_2_outlined,
       selectedIcon: Icons.inventory_2,
     ),
+    // Index 4: pages 2/3 predate this page and keep their footer indices.
+    ui.NavItem(
+      index: 4,
+      label: '日志文件',
+      icon: Icons.article_outlined,
+      selectedIcon: Icons.article,
+    ),
   ],
 );
 

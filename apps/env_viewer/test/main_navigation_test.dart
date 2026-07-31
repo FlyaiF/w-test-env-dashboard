@@ -4,6 +4,7 @@ import 'package:env_viewer/config/config_service.dart';
 import 'package:env_viewer/config/config_store.dart';
 import 'package:env_viewer/inventory/inventory_store.dart';
 import 'package:env_viewer/main.dart';
+import 'package:env_viewer/remote_files/remote_file_store.dart';
 import 'package:env_viewer/services/access/access_launcher.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -41,6 +42,9 @@ void main() {
           ChangeNotifierProvider<AppThemeController>(
             create: (_) => AppThemeController(),
           ),
+          ChangeNotifierProvider<RemoteFileStore>(
+            create: (_) => RemoteFileStore(client),
+          ),
         ],
         child: const MaterialApp(home: HomePage()),
       ),
@@ -55,5 +59,10 @@ void main() {
     // Nav item + page header, and the inventory tabs are now on stage.
     expect(find.text('资源清单'), findsNWidgets(2));
     expect(find.text('服务器'), findsOneWidget);
+
+    // The 日志文件 page is reachable from the same nav group.
+    await tester.tap(find.text('日志文件'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('从左侧选择组件'), findsOneWidget);
   });
 }

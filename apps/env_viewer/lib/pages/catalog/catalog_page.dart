@@ -11,8 +11,11 @@ import '../../catalog/environment_view.dart';
 import '../../config/config_store.dart';
 import '../../inventory/inventory_store.dart';
 import '../../inventory/inventory_view.dart';
+import '../../remote_files/remote_file_store.dart';
 import '../../services/access/access_launcher.dart';
+import '../../services/remote_file/remote_file_session.dart';
 import '../../services/ssh_tools/ssh_tool.dart';
+import '../remote_files/open_remote_file.dart';
 import 'catalog_editors.dart';
 import 'catalog_link_editor.dart';
 import 'component_access.dart';
@@ -633,7 +636,7 @@ abstract final class _Cols {
   static const double version = 134;
   static const double updated = 128;
   static const double chip = 72;
-  static const double actions = 60;
+  static const double actions = 88;
   static const double chevron = 22;
   static const double gap = 8;
 }
@@ -936,6 +939,11 @@ class _RowLaunchActions extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
+        _LogLaunchSlot(
+          component: component,
+          environmentName: environmentName,
+        ),
+        const SizedBox(width: 2),
         _LaunchIconSlot(
           present: serverId != null,
           icon: Icons.terminal,
@@ -952,6 +960,63 @@ class _RowLaunchActions extends StatelessWidget {
           options: dbOptions,
         ),
       ],
+    );
+  }
+}
+
+/// The 查看日志 slot: one click brokers credentials, opens the component's
+/// 日志位置 in follow mode, and jumps to the 日志文件 page. Disabled with an
+/// explanatory tooltip when the component lacks a linked Server or a 日志位置.
+class _LogLaunchSlot extends StatelessWidget {
+  final ComponentView component;
+  final String environmentName;
+
+  const _LogLaunchSlot({
+    required this.component,
+    required this.environmentName,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.of(context);
+    final store = context.read<RemoteFileStore?>();
+    final serverId = component.serverId;
+    final logLocation = component.logLocation;
+    final ready = store != null &&
+        serverId != null &&
+        logLocation != null &&
+        logLocation.isNotEmpty;
+
+    if (!ready) {
+      return Tooltip(
+        message: serverId == null ? '未关联运行主机' : '未配置日志位置',
+        child: SizedBox(
+          width: _LaunchIconSlot.size,
+          height: _LaunchIconSlot.size,
+          child: Icon(Icons.article_outlined, size: 16, color: tokens.border),
+        ),
+      );
+    }
+
+    return SizedBox(
+      width: _LaunchIconSlot.size,
+      height: _LaunchIconSlot.size,
+      child: IconButton(
+        padding: EdgeInsets.zero,
+        iconSize: 16,
+        icon: const Icon(Icons.article_outlined),
+        color: tokens.accent,
+        tooltip: '查看日志',
+        onPressed: () => openRemoteFile(
+          context,
+          store: store,
+          serverId: serverId,
+          title: '$environmentName · ${component.roleLabel}',
+          path: logLocation,
+          mode: RemoteFileMode.follow,
+          jumpToPage: true,
+        ),
+      ),
     );
   }
 }

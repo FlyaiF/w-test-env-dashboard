@@ -90,6 +90,8 @@ LEGACY_JDBC_URL=... LEGACY_DB_USERNAME=... LEGACY_DB_PASSWORD=... scripts/import
 - `apps/env_viewer/lib/catalog/catalog_acl.dart` — DTO-to-view anti-corruption mapping
 - `apps/env_viewer/lib/config/config_store.dart` — backend URL and local tool preferences
 - `apps/env_viewer/lib/services/access/access_launcher.dart` — brokers credentials and launches tools
+- `apps/env_viewer/lib/services/remote_file/remote_file_session.dart` — in-app SSH tail/SFTP view of remote logs/files (docs/remote-file-viewer.md)
+- `apps/env_viewer/lib/remote_files/remote_file_store.dart` — 日志文件 tab state and brokered open flow
 - `apps/env_viewer/lib/pages/catalog/catalog_page.dart` — main environment catalog UI
 - `apps/env_viewer/lib/pages/inventory/inventory_page.dart` — shared resource management and reverse references
 - `backend/src/main/java/com/flyaif/envdashboard/catalog/` — Environment/Component domain and API
