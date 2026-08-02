@@ -1,7 +1,7 @@
 name: env_viewer
 description: "测试环境速查工具"
 publish_to: 'none'
-version: 1.2.1+4
+version: 1.2.2+5
 
 environment:
   sdk: ^3.11.4
