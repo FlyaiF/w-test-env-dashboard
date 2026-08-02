@@ -38,6 +38,11 @@ abstract class DbTool {
   String get displayName;
   bool get isAvailableOnPlatform;
 
+  /// Whether this tool can open a database of [type] (`ORACLE` | `DAMENG` |
+  /// `OCEANBASE` | `OTHER` | null). Engine-specific tools (e.g. PL/SQL
+  /// Developer) narrow this; the default is engine-agnostic.
+  bool supportsType(String? type) => true;
+
   /// Absolute executable path, or null if the tool is not installed. Prefers
   /// [override] when provided, else checks default install locations.
   Future<String?> detectExecutable({String? override});

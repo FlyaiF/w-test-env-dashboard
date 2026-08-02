@@ -14,9 +14,58 @@ import '../../services/ssh_tools/ssh_tool_registry.dart';
 class LaunchOption {
   /// Already-localized menu/button label (e.g. a tool's display name).
   final String label;
+
+  /// Menu section this option belongs to (e.g. a database's label when a
+  /// Component uses several). Null renders flat; consecutive options sharing a
+  /// group render under one header.
+  final String? group;
+
   final Future<LaunchResult> Function() run;
 
-  const LaunchOption(this.label, this.run);
+  const LaunchOption(this.label, this.run, {this.group});
+}
+
+/// Popup entries for a launch menu: options sharing a [LaunchOption.group]
+/// render under a small disabled header with a divider between groups; ungrouped
+/// options render flat. Values index into [options].
+List<PopupMenuEntry<int>> launchMenuEntries(
+  BuildContext context,
+  List<LaunchOption> options,
+) {
+  final theme = Theme.of(context);
+  final entries = <PopupMenuEntry<int>>[];
+  String? currentGroup;
+  for (var i = 0; i < options.length; i++) {
+    final option = options[i];
+    if (option.group != null && option.group != currentGroup) {
+      if (entries.isNotEmpty) entries.add(const PopupMenuDivider(height: 8));
+      entries.add(
+        PopupMenuItem<int>(
+          enabled: false,
+          height: 30,
+          child: Text(
+            option.group!,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.outline,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      );
+    }
+    currentGroup = option.group;
+    entries.add(
+      PopupMenuItem<int>(
+        value: i,
+        height: 36,
+        child: Padding(
+          padding: EdgeInsets.only(left: option.group == null ? 0 : 10),
+          child: Text(option.label),
+        ),
+      ),
+    );
+  }
+  return entries;
 }
 
 /// Build the SSH launch options for a Server: one per installed SSH tool. An
@@ -52,15 +101,18 @@ List<LaunchOption> sshLaunchOptions(
   ];
 }
 
-/// Build the DB launch options for a Component's Databases: the cross product of
-/// referenced databases and installed DB tools. When several databases are in
-/// play the label is qualified by id so the menu stays unambiguous.
+/// Build the DB launch options for a Component's Databases: per database, one
+/// option per installed DB tool that supports its engine ([DbTool.supportsType],
+/// via [databaseTypes]). With several databases the options carry the database
+/// label as their menu [LaunchOption.group] so the menu renders sectioned
+/// instead of as a flat cross product.
 List<LaunchOption> dbLaunchOptions(
   AccessLauncher launcher,
   List<int> databaseIds, {
   List<DbTool>? tools,
   String? connectionName,
   Map<int, String>? databaseLabels,
+  Map<int, String?>? databaseTypes,
   Map<String, String>? executablePaths,
 }) {
   final available = tools ?? DbToolRegistry.availableOnPlatform;
@@ -68,17 +120,19 @@ List<LaunchOption> dbLaunchOptions(
   return [
     for (final databaseId in databaseIds)
       for (final tool in available)
-        LaunchOption(
-          qualify
-              ? '${databaseLabels?[databaseId] ?? '#$databaseId'} · ${tool.displayName}'
-              : tool.displayName,
-          () => launcher.launchDb(
-            databaseId,
-            tool,
-            name: connectionName,
-            executableOverride: executablePaths?[tool.id],
+        if (databaseTypes == null || tool.supportsType(databaseTypes[databaseId]))
+          LaunchOption(
+            tool.displayName,
+            group: qualify
+                ? (databaseLabels?[databaseId] ?? '#$databaseId')
+                : null,
+            () => launcher.launchDb(
+              databaseId,
+              tool,
+              name: connectionName,
+              executableOverride: executablePaths?[tool.id],
+            ),
           ),
-        ),
   ];
 }
 
@@ -99,6 +153,10 @@ class ComponentAccessBar extends StatelessWidget {
   /// back to `#id`.
   final Map<int, String>? databaseLabels;
 
+  /// Raw engine type per database id (`ORACLE` | ...), used to keep
+  /// engine-specific tools out of the menu for databases they can't open.
+  final Map<int, String?>? databaseTypes;
+
   /// Human label used to name launched connections (e.g. in DBeaver).
   final String? connectionName;
 
@@ -107,6 +165,7 @@ class ComponentAccessBar extends StatelessWidget {
     required this.serverId,
     required this.databaseIds,
     this.databaseLabels,
+    this.databaseTypes,
     this.connectionName,
   });
 
@@ -144,6 +203,7 @@ class ComponentAccessBar extends StatelessWidget {
               databaseIds,
               connectionName: connectionName,
               databaseLabels: databaseLabels,
+              databaseTypes: databaseTypes,
               executablePaths: config.dbExecutablePaths,
             ),
             emptyTooltip: '当前平台没有可用的数据库工具',
@@ -224,24 +284,31 @@ class _LaunchButtonState extends State<_LaunchButton> {
       );
     }
 
+    final theme = Theme.of(context);
     return PopupMenuButton<int>(
       enabled: !_busy,
       tooltip: widget.label,
+      position: PopupMenuPosition.under,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       onSelected: (i) => _run(widget.options[i]),
-      itemBuilder: (context) => [
-        for (var i = 0; i < widget.options.length; i++)
-          PopupMenuItem(value: i, child: Text(widget.options[i].label)),
-      ],
+      itemBuilder: (context) => launchMenuEntries(context, widget.options),
+      // Styled to sit beside sibling TextButtons as an equal, not a bare Row.
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            icon,
-            const SizedBox(width: 6),
-            Text(widget.label),
-            const Icon(Icons.arrow_drop_down, size: 18),
-          ],
+        child: DefaultTextStyle.merge(
+          style: TextStyle(color: theme.colorScheme.primary),
+          child: IconTheme.merge(
+            data: IconThemeData(color: theme.colorScheme.primary),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                icon,
+                const SizedBox(width: 6),
+                Text(widget.label),
+                const Icon(Icons.arrow_drop_down, size: 18),
+              ],
+            ),
+          ),
         ),
       ),
     );

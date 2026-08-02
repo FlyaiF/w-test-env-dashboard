@@ -1,5 +1,6 @@
 import 'db_tool.dart';
 import 'tools/dbeaver_tool.dart';
+import 'tools/plsqldev_tool.dart';
 
 /// Registry of built-in DB tools, mirroring `SshToolRegistry`. Adding a tool is
 /// one entry here plus a class implementing [DbTool]; the launcher and settings
@@ -7,6 +8,7 @@ import 'tools/dbeaver_tool.dart';
 class DbToolRegistry {
   static final List<DbTool> _all = [
     DbeaverTool(),
+    PlsqldevTool(),
   ];
 
   static List<DbTool> get all => List.unmodifiable(_all);

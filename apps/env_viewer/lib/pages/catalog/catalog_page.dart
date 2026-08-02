@@ -900,6 +900,10 @@ class _ComponentRowState extends State<_ComponentRow> {
                             for (final id in c.databaseIds)
                               if (dbRefs[id] != null) id: dbRefs[id]!.menuLabel,
                           },
+                          databaseTypes: {
+                            for (final id in c.databaseIds)
+                              if (dbRefs[id] != null) id: dbRefs[id]!.type,
+                          },
                         ),
                       ),
                     ),
@@ -970,11 +974,13 @@ class _RowLaunchActions extends StatelessWidget {
   final ComponentView component;
   final String environmentName;
   final Map<int, String> databaseLabels;
+  final Map<int, String?> databaseTypes;
 
   const _RowLaunchActions({
     required this.component,
     required this.environmentName,
     required this.databaseLabels,
+    required this.databaseTypes,
   });
 
   @override
@@ -999,6 +1005,7 @@ class _RowLaunchActions extends StatelessWidget {
             databaseIds,
             connectionName: '$environmentName · ${component.roleLabel}',
             databaseLabels: databaseLabels,
+            databaseTypes: databaseTypes,
             executablePaths: config?.dbExecutablePaths,
           )
         : const <LaunchOption>[];
@@ -1181,11 +1188,10 @@ class _LaunchIconSlotState extends State<_LaunchIconSlot> {
         enabled: !_busy,
         tooltip: widget.tooltip,
         padding: EdgeInsets.zero,
+        position: PopupMenuPosition.under,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         onSelected: (i) => _run(widget.options[i]),
-        itemBuilder: (context) => [
-          for (var i = 0; i < widget.options.length; i++)
-            PopupMenuItem(value: i, child: Text(widget.options[i].label)),
-        ],
+        itemBuilder: (context) => launchMenuEntries(context, widget.options),
         child: Center(
           child: IconTheme(
             data: IconThemeData(color: tokens.accent),

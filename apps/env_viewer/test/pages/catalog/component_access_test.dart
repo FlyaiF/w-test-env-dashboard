@@ -85,7 +85,14 @@ class _FakeDbTool extends DbTool {
   @override
   final String displayName;
 
-  _FakeDbTool(this.id, this.displayName);
+  /// When set, the tool only supports databases of this engine type.
+  final String? supportedType;
+
+  _FakeDbTool(this.id, this.displayName, {this.supportedType});
+
+  @override
+  bool supportsType(String? type) =>
+      supportedType == null || type == supportedType;
 
   @override
   bool get isAvailableOnPlatform => true;
@@ -170,18 +177,19 @@ void main() {
       expect(launcher.dbCalls.single.name, 'env · gateway');
     });
 
-    test('several databases produce a qualified cross product', () async {
+    test('several databases group the options instead of qualifying labels', () async {
       final launcher = _FakeLauncher();
       final tools = [_FakeDbTool('dbeaver', 'DBeaver')];
 
       final options = dbLaunchOptions(launcher, [9, 12], tools: tools);
 
-      expect(options.map((o) => o.label), ['#9 · DBeaver', '#12 · DBeaver']);
+      expect(options.map((o) => o.label), ['DBeaver', 'DBeaver']);
+      expect(options.map((o) => o.group), ['#9', '#12']);
       await options[1].run();
       expect(launcher.dbCalls.single.databaseId, 12);
     });
 
-    test('resolved labels qualify the multi-db menu instead of #id', () {
+    test('resolved labels name the multi-db groups instead of #id', () {
       final options = dbLaunchOptions(
         _FakeLauncher(),
         [9, 12],
@@ -189,10 +197,50 @@ void main() {
         databaseLabels: {9: '业务库 10.20.155.175', 12: '中转库 10.20.155.180'},
       );
 
-      expect(options.map((o) => o.label), [
-        '业务库 10.20.155.175 · DBeaver',
-        '中转库 10.20.155.180 · DBeaver',
+      expect(options.map((o) => o.group), [
+        '业务库 10.20.155.175',
+        '中转库 10.20.155.180',
       ]);
+      // A single database keeps a flat, ungrouped menu.
+      expect(
+        dbLaunchOptions(
+          _FakeLauncher(),
+          [9],
+          tools: [_FakeDbTool('dbeaver', 'DBeaver')],
+        ).single.group,
+        isNull,
+      );
+    });
+
+    test('engine-specific tools are filtered out per database type', () {
+      final oracleOnly = _FakeDbTool('plsqldev', 'PL/SQL Developer',
+          supportedType: 'ORACLE');
+      final generic = _FakeDbTool('dbeaver', 'DBeaver');
+
+      final options = dbLaunchOptions(
+        _FakeLauncher(),
+        [9, 12],
+        tools: [generic, oracleOnly],
+        databaseTypes: {9: 'ORACLE', 12: 'DAMENG'},
+      );
+
+      expect(
+        options.map((o) => '${o.group}:${o.label}'),
+        ['#9:DBeaver', '#9:PL/SQL Developer', '#12:DBeaver'],
+      );
+    });
+
+    test('without type information every tool stays listed', () {
+      final oracleOnly = _FakeDbTool('plsqldev', 'PL/SQL Developer',
+          supportedType: 'ORACLE');
+
+      final options = dbLaunchOptions(
+        _FakeLauncher(),
+        [9],
+        tools: [oracleOnly],
+      );
+
+      expect(options.map((o) => o.label), ['PL/SQL Developer']);
     });
 
     test('a configured executable path is passed through as the override', () async {
