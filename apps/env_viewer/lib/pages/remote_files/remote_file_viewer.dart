@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_ui/shared_ui.dart';
 
 import '../../remote_files/remote_file_store.dart';
@@ -145,6 +148,13 @@ class _Toolbar extends StatelessWidget {
               onPressed: session.reconnect,
             ),
           IconButton(
+            icon: const Icon(Icons.copy_all, size: 16),
+            tooltip: '复制全部',
+            visualDensity: VisualDensity.compact,
+            onPressed:
+                session.buffer.isEmpty ? null : () => _copyAll(context, session),
+          ),
+          IconButton(
             icon: const Icon(Icons.download, size: 16),
             tooltip: '下载完整文件',
             visualDensity: VisualDensity.compact,
@@ -155,6 +165,24 @@ class _Toolbar extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  /// Copy the whole buffer (what the viewer holds — the ring may have dropped
+  /// older lines) with the platform's line ending, so pastes keep their lines
+  /// even in EOL-picky Windows editors.
+  Future<void> _copyAll(BuildContext context, RemoteFileSession session) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final buffer = session.buffer;
+    final eol = Platform.isWindows ? '\r\n' : '\n';
+    final text = StringBuffer();
+    for (var i = 0; i < buffer.length; i++) {
+      if (i > 0) text.write(eol);
+      text.write(buffer.lineAt(i));
+    }
+    await Clipboard.setData(ClipboardData(text: text.toString()));
+    messenger.showSnackBar(
+      SnackBar(content: Text('已复制 ${buffer.length} 行')),
     );
   }
 
@@ -260,6 +288,13 @@ class _FailureBody extends StatelessWidget {
 }
 
 class _LineList extends StatelessWidget {
+  /// Lines per rendered paragraph. One `Text` per line would break multi-line
+  /// copy: `SelectionArea` concatenates per-widget selections with no `\n`
+  /// between them, so a selection spanning widgets pastes as a single line.
+  /// Chunking keeps real newlines inside each paragraph while the ListView
+  /// still virtualizes (by chunk) over the 10k-line ring buffer.
+  static const int chunkSize = 64;
+
   final RemoteFileSession session;
 
   const _LineList({required this.session});
@@ -269,27 +304,45 @@ class _LineList extends StatelessWidget {
     final tokens = AppTokens.of(context);
     final buffer = session.buffer;
     final follow = session.mode == RemoteFileMode.follow;
+    final chunkCount = (buffer.length + chunkSize - 1) ~/ chunkSize;
     return SelectionArea(
       child: ListView.builder(
         // 跟随: reversed so the newest line hugs the bottom and the view
         // sticks there as lines stream in.
         reverse: follow,
         padding: const EdgeInsets.all(10),
-        itemCount: buffer.length,
+        itemCount: chunkCount,
         itemBuilder: (context, i) {
-          final line = buffer.lineAt(follow ? buffer.length - 1 - i : i);
-          final isErr = line.contains('ERROR');
-          final isWarn = !isErr && line.contains('WARN');
-          return Text(
-            line.isEmpty ? ' ' : line,
-            style: tokens.mono(
-              fontSize: 12,
-              color: isErr
-                  ? tokens.err
-                  : isWarn
-                      ? tokens.warn
-                      : null,
-            ),
+          final chunk = follow ? chunkCount - 1 - i : i;
+          final start = chunk * chunkSize;
+          var end = start + chunkSize;
+          if (end > buffer.length) end = buffer.length;
+
+          final spans = <TextSpan>[];
+          for (var l = start; l < end; l++) {
+            final line = buffer.lineAt(l);
+            final isErr = line.contains('ERROR');
+            final isWarn = !isErr && line.contains('WARN');
+            spans.add(
+              TextSpan(
+                text: l == start ? line : '\n$line',
+                style: isErr
+                    ? TextStyle(color: tokens.err)
+                    : isWarn
+                        ? TextStyle(color: tokens.warn)
+                        : null,
+              ),
+            );
+          }
+          if (end < buffer.length) {
+            // Chunk-boundary newline: copied as a line break, rendered at
+            // near-zero height so no visible blank line appears every chunk.
+            spans.add(
+              const TextSpan(text: '\n', style: TextStyle(fontSize: 0.1)),
+            );
+          }
+          return Text.rich(
+            TextSpan(style: tokens.mono(fontSize: 12), children: spans),
           );
         },
       ),

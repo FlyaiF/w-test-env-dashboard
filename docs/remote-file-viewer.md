@@ -24,8 +24,15 @@ information.
    switching re-decodes in place (`fast_gbk`).
 6. **History**: ~10,000-line in-memory ring buffer per tab, no disk spill; a 下载 action SFTPs the
    complete file to a user-chosen location instead.
+   Lines render as 64-line paragraphs (not one Text per line) so a drag-selection copies with its
+   line breaks — `SelectionArea` joins per-widget selections without `\n`; a 复制全部 action copies
+   the whole buffer with the platform's EOL (`\r\n` on Windows).
 7. **Free path opens**: server dropdown (from the Resource Inventory) + path field + mode toggle on
-   the page; presets stay one `logLocation` per component — no extra schema fields.
+   the page; presets stay one `logLocation` per component — no extra schema fields. The path field
+   tracks the active tab's path (without clobbering hand edits) and autocompletes from two sources:
+   keyword matches over known paths (open tabs + component 日志位置), and live SFTP directory
+   listings borrowed from a connected session on the selected server (per-directory cached;
+   best-effort — no session, no remote suggestions, never a new connection just to complete).
 8. Tabs keep streaming while the user navigates elsewhere but do not survive app restart; dropped
    connections offer manual 重连.
 
