@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_ui/shared_ui.dart';
@@ -579,6 +580,26 @@ class _EnvironmentDetail extends StatelessWidget {
                 ),
               ),
             ],
+            if (env.seeUrl != null ||
+                env.components.any((c) => c.url != null)) ...[
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 12,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  if (env.seeUrl != null)
+                    _UrlChip(label: 'SEE', url: env.seeUrl!, onOpen: onOpenUrl),
+                  for (final c in env.components)
+                    if (c.url != null)
+                      _UrlChip(
+                        label: c.roleLabel,
+                        url: c.url!,
+                        onOpen: onOpenUrl,
+                      ),
+                ],
+              ),
+            ],
             const SizedBox(height: 18),
             Row(
               children: [
@@ -624,6 +645,52 @@ class _EnvironmentDetail extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Copy a URL for sharing — the raw stored string, no normalization.
+Future<void> _copyUrl(BuildContext context, String url) async {
+  final messenger = ScaffoldMessenger.of(context);
+  await Clipboard.setData(ClipboardData(text: url));
+  messenger.showSnackBar(const SnackBar(content: Text('已复制链接')));
+}
+
+/// One elevated link action in the environment header: the labeled button opens
+/// the URL in the browser (full URL in the tooltip), the icon beside it copies
+/// the raw value for sharing.
+class _UrlChip extends StatelessWidget {
+  final String label;
+  final String url;
+  final Future<void> Function(String url) onOpen;
+
+  const _UrlChip({
+    required this.label,
+    required this.url,
+    required this.onOpen,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Tooltip(
+          message: url,
+          child: TextButton.icon(
+            icon: const Icon(Icons.open_in_new, size: 16),
+            label: Text(label),
+            style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+            onPressed: () => onOpen(url),
+          ),
+        ),
+        IconButton(
+          icon: const Icon(Icons.copy_outlined, size: 14),
+          tooltip: '复制链接',
+          visualDensity: VisualDensity.compact,
+          onPressed: () => _copyUrl(context, url),
+        ),
+      ],
     );
   }
 }
@@ -1247,6 +1314,12 @@ class _ComponentExpandedBody extends StatelessWidget {
                   icon: const Icon(Icons.open_in_new, size: 16),
                   label: const Text('打开'),
                   onPressed: () => onOpenUrl(c.url!),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.copy_outlined, size: 14),
+                  tooltip: '复制链接',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => _copyUrl(context, c.url!),
                 ),
               ],
             ),

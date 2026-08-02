@@ -28,6 +28,7 @@ class CatalogAcl {
       id: dto.id,
       name: name,
       memo: _blankToNull(dto.memo),
+      seeUrl: _blankToNull(dto.seeUrl),
       components: components,
       health: _deriveHealth(components, now ?? DateTime.now()),
     );

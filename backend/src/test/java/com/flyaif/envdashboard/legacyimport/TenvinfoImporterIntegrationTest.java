@@ -84,7 +84,7 @@ class TenvinfoImporterIntegrationTest {
                 "https://alpha.test/health",                    // E_URL
                 "2.4.1",                                        // E_VERSION
                 Instant.parse("2026-06-20T08:30:00Z"),          // E_UPDATETIME
-                null,                                           // E_SEEURL
+                "https://see.example/acm/env/100",              // E_SEEURL
                 "10.0.1.10:22&deploy/secret",                   // E_WEBSERVERADDR
                 "/var/log/app.log",                             // E_WEBLOGPATH
                 "QA 主测试环境",                                  // E_MEMO
@@ -102,6 +102,7 @@ class TenvinfoImporterIntegrationTest {
         Environment env = all.get(0);
         assertThat(env.getName()).isEqualTo("环境 Alpha");
         assertThat(env.getMemo()).isEqualTo("QA 主测试环境");
+        assertThat(env.getSeeUrl()).isEqualTo("https://see.example/acm/env/100");
         assertThat(env.getComponents()).hasSize(1);
 
         Component component = env.getComponents().get(0);
@@ -218,6 +219,41 @@ class TenvinfoImporterIntegrationTest {
                 .anyMatch(message -> message.contains("defaulted to 1521 for ORACLE"))
                 .anyMatch(message -> message.contains("defaulted to 5236 for DAMENG"))
                 .anyMatch(message -> message.contains("defaulted to 2881 for OCEANBASE"));
+    }
+
+    @Test
+    void seeUrlIsEnvironmentLevelAndNeverBecomesTheComponentUrl() {
+        // E_SEEURL with a blank E_URL: the old fallback smuggled the SEE console link into
+        // component.url; now each legacy column maps to exactly one place.
+        LegacyEnvRow row = new LegacyEnvRow(108L, "环境 SEE Only",
+                "app/pw@db:1521/ORCL", null,
+                null,                                   // E_URL blank
+                "1.0", null,
+                "https://see.example/acm/env/108",      // E_SEEURL
+                null, null, null, "oracle");
+
+        importer.run(source(row), false);
+
+        Environment env = environments.findAll().get(0);
+        assertThat(env.getSeeUrl()).isEqualTo("https://see.example/acm/env/108");
+        assertThat(env.getComponents().get(0).getUrl()).isNull();
+    }
+
+    @Test
+    void rowWithOnlySeeUrlYieldsAnEnvironmentWithoutComponents() {
+        // seeUrl is not component-level data, so it alone must not conjure up a Component.
+        LegacyEnvRow row = new LegacyEnvRow(109L, "环境 SEE Bare",
+                null, null, null, null, null,
+                "https://see.example/acm/env/109",
+                null, null, null, null);
+
+        ImportReport report = importer.run(source(row), false);
+
+        assertThat(report.getImportedEnvironments()).containsExactly(109L);
+        assertThat(report.getComponentsCreated()).isZero();
+        Environment env = environments.findAll().get(0);
+        assertThat(env.getSeeUrl()).isEqualTo("https://see.example/acm/env/109");
+        assertThat(env.getComponents()).isEmpty();
     }
 
     @Test

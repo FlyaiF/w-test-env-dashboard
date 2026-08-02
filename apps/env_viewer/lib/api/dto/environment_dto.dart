@@ -8,12 +8,14 @@ class EnvironmentDto {
   final int id;
   final String? name;
   final String? memo;
+  final String? seeUrl;
   final List<ComponentDto> components;
 
   const EnvironmentDto({
     required this.id,
     this.name,
     this.memo,
+    this.seeUrl,
     this.components = const [],
   });
 
@@ -22,6 +24,7 @@ class EnvironmentDto {
       id: (json['id'] as num).toInt(),
       name: json['name'] as String?,
       memo: json['memo'] as String?,
+      seeUrl: json['seeUrl'] as String?,
       components:
           (json['components'] as List?)
               ?.map((e) => ComponentDto.fromJson(e as Map<String, dynamic>))

@@ -35,6 +35,10 @@ public class Environment {
     @Column(name = "memo", length = 1000)
     private String memo;
 
+    /** Link to this environment's console in SEE, the company's environment-management platform. */
+    @Column(name = "see_url", length = 500)
+    private String seeUrl;
+
     @OneToMany(mappedBy = "environment", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Component> components = new ArrayList<>();
 
@@ -86,6 +90,14 @@ public class Environment {
 
     public void setMemo(String memo) {
         this.memo = memo;
+    }
+
+    public String getSeeUrl() {
+        return seeUrl;
+    }
+
+    public void setSeeUrl(String seeUrl) {
+        this.seeUrl = seeUrl;
     }
 
     public List<Component> getComponents() {

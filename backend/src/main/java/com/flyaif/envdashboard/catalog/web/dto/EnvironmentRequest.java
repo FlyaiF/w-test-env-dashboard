@@ -13,6 +13,7 @@ import java.util.List;
 public record EnvironmentRequest(
         @NotBlank String name,
         String memo,
+        String seeUrl,
         @Valid List<ComponentRequest> components
 ) {
 }

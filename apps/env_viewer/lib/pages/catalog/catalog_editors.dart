@@ -49,6 +49,7 @@ class _EnvironmentEditorDialogState extends State<_EnvironmentEditorDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _name;
   late final TextEditingController _memo;
+  late final TextEditingController _seeUrl;
 
   bool get _isEdit => widget.existing != null;
 
@@ -57,12 +58,14 @@ class _EnvironmentEditorDialogState extends State<_EnvironmentEditorDialog> {
     super.initState();
     _name = TextEditingController(text: widget.existing?.name ?? '');
     _memo = TextEditingController(text: widget.existing?.memo ?? '');
+    _seeUrl = TextEditingController(text: widget.existing?.seeUrl ?? '');
   }
 
   @override
   void dispose() {
     _name.dispose();
     _memo.dispose();
+    _seeUrl.dispose();
     super.dispose();
   }
 
@@ -72,6 +75,7 @@ class _EnvironmentEditorDialogState extends State<_EnvironmentEditorDialog> {
       EnvironmentInput(
         name: _name.text.trim(),
         memo: _blankToNull(_memo.text),
+        seeUrl: _blankToNull(_seeUrl.text),
       ),
     );
   }
@@ -99,6 +103,14 @@ class _EnvironmentEditorDialogState extends State<_EnvironmentEditorDialog> {
                 controller: _memo,
                 decoration: const InputDecoration(labelText: '备注'),
                 maxLines: 2,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _seeUrl,
+                decoration: const InputDecoration(
+                  labelText: 'SEE 地址',
+                  hintText: '该环境在 SEE 管理平台中的控制台链接',
+                ),
               ),
             ],
           ),

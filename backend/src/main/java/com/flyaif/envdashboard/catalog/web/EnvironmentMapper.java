@@ -53,6 +53,7 @@ public final class EnvironmentMapper {
                 environment.getId(),
                 environment.getName(),
                 environment.getMemo(),
+                environment.getSeeUrl(),
                 components);
     }
 

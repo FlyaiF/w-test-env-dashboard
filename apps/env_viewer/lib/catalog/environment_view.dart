@@ -115,6 +115,9 @@ class EnvironmentView {
   /// Display name, never null (falls back to a placeholder for an unnamed row).
   final String name;
   final String? memo;
+
+  /// Link to this environment's console in SEE (公司环境管理平台), if recorded.
+  final String? seeUrl;
   final List<ComponentView> components;
 
   /// Client-derived health rollup + staleness for the roster row.
@@ -124,6 +127,7 @@ class EnvironmentView {
     required this.id,
     required this.name,
     this.memo,
+    this.seeUrl,
     this.components = const [],
     this.health = const EnvironmentHealth(state: EnvironmentHealthState.ok),
   });

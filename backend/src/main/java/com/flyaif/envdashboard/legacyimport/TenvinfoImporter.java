@@ -94,6 +94,9 @@ public class TenvinfoImporter {
         }
 
         Environment environment = new Environment(name, blankToNull(row.memo()));
+        // E_SEEURL is the environment's console in SEE (公司环境管理平台) — an environment-level
+        // fact, mapped 1:1; it never doubles as a component reachability url.
+        environment.setSeeUrl(blankToNull(row.seeUrl()));
         Component component = buildComponent(row, dryRun, report, serverByKey, databaseByKey);
         if (component != null) {
             environment.addComponent(component);
@@ -112,7 +115,7 @@ public class TenvinfoImporter {
     private Component buildComponent(LegacyEnvRow row, boolean dryRun, ImportReport report,
                                      Map<String, Server> serverByKey, Map<String, Database> databaseByKey) {
         Server server = resolveServer(row, dryRun, report, serverByKey);
-        String url = resolveUrl(row, report);
+        String url = blankToNull(row.url());
         String version = blankToNull(row.version());
         String logLocation = blankToNull(row.webLogPath());
 
@@ -158,20 +161,6 @@ public class TenvinfoImporter {
             ids.add(intermediateDb.getId());
         }
         return ids;
-    }
-
-    /** E_URL is the canonical reachability URL; fall back to E_SEEURL, noting when both are present. */
-    private String resolveUrl(LegacyEnvRow row, ImportReport report) {
-        String url = blankToNull(row.url());
-        String seeUrl = blankToNull(row.seeUrl());
-        if (url == null) {
-            return seeUrl;
-        }
-        if (seeUrl != null && !seeUrl.equals(url)) {
-            report.note(row.eNo(), "E_SEEURL \"" + LegacyValueRedactor.redact(seeUrl)
-                    + "\" dropped; a Component has a single url (kept E_URL)");
-        }
-        return url;
     }
 
     private Server resolveServer(LegacyEnvRow row, boolean dryRun, ImportReport report,

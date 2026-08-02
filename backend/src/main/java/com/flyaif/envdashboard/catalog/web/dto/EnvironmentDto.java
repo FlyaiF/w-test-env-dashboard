@@ -10,6 +10,7 @@ public record EnvironmentDto(
         Long id,
         String name,
         String memo,
+        String seeUrl,
         List<ComponentDto> components
 ) {
 }

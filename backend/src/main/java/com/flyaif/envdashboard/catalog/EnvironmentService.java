@@ -62,6 +62,7 @@ public class EnvironmentService {
     @Transactional
     public EnvironmentDto createEnvironment(EnvironmentRequest request) {
         Environment environment = new Environment(request.name(), request.memo());
+        environment.setSeeUrl(normalizeSeeUrl(request.seeUrl()));
         if (request.components() != null) {
             request.components().forEach(c -> environment.addComponent(EnvironmentMapper.toDomain(c)));
         }
@@ -78,6 +79,7 @@ public class EnvironmentService {
         Environment environment = require(id);
         environment.setName(request.name());
         environment.setMemo(request.memo());
+        environment.setSeeUrl(normalizeSeeUrl(request.seeUrl()));
         return EnvironmentMapper.toDto(environment);
     }
 
@@ -112,6 +114,15 @@ public class EnvironmentService {
         Component component = environment.findComponent(componentId)
                 .orElseThrow(() -> new ComponentNotFoundException(componentId));
         environment.removeComponent(component);
+    }
+
+    /** Lenient by design: legacy SEE links may be odd-shaped, so no scheme check — just trim/blank→null. */
+    private static String normalizeSeeUrl(String seeUrl) {
+        if (seeUrl == null) {
+            return null;
+        }
+        String trimmed = seeUrl.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private Environment require(Long id) {

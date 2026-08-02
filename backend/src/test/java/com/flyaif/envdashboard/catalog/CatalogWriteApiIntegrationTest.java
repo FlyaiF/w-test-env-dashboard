@@ -71,6 +71,7 @@ class CatalogWriteApiIntegrationTest {
         String body = json.writeValueAsString(Map.of(
                 "name", "ENV-A",
                 "memo", "first env",
+                "seeUrl", "  https://see.example/acm/env/a  ",
                 "components", List.of(
                         Map.of("role", "GATEWAY", "version", "1.2.3",
                                 "versionUpdatedAt", "2026-01-02T03:04:05Z",
@@ -85,6 +86,8 @@ class CatalogWriteApiIntegrationTest {
                 .andExpect(jsonPath("$.id").exists())
                 .andExpect(jsonPath("$.name").value("ENV-A"))
                 .andExpect(jsonPath("$.memo").value("first env"))
+                // Lenient normalization: trimmed, never scheme-checked.
+                .andExpect(jsonPath("$.seeUrl").value("https://see.example/acm/env/a"))
                 .andExpect(jsonPath("$.components", hasSize(2)))
                 .andExpect(jsonPath("$.components[?(@.role=='GATEWAY')].id").exists())
                 .andExpect(jsonPath("$.components[?(@.role=='GATEWAY')].version").value("1.2.3"))
@@ -139,6 +142,29 @@ class CatalogWriteApiIntegrationTest {
                 .andExpect(jsonPath("$.name").value("NEW"))
                 .andExpect(jsonPath("$.memo").value("new memo"))
                 .andExpect(jsonPath("$.components", hasSize(1)));
+    }
+
+    @Test
+    void updateSetsAndClearsTheSeeUrl() throws Exception {
+        Environment env = new Environment("ENV-A", null);
+        env.setSeeUrl("https://see.example/acm/env/old");
+        Long id = environments.save(env).getId();
+
+        String cleared = json.writeValueAsString(Map.of("name", "ENV-A", "seeUrl", "   "));
+
+        // Blank clears the link rather than storing whitespace.
+        mockMvc.perform(put("/api/environments/{id}", id)
+                        .contentType(MediaType.APPLICATION_JSON).content(cleared))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.seeUrl").value((Object) null));
+
+        String set = json.writeValueAsString(
+                Map.of("name", "ENV-A", "seeUrl", "https://see.example/acm/env/new"));
+
+        mockMvc.perform(put("/api/environments/{id}", id)
+                        .contentType(MediaType.APPLICATION_JSON).content(set))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.seeUrl").value("https://see.example/acm/env/new"));
     }
 
     @Test

@@ -72,6 +72,7 @@ public class LocalSeedData implements CommandLineRunner {
         secrets.putDatabaseSecret(configDb.getId(), "cfg-pw");
 
         Environment alpha = new Environment("测试环境 Alpha", "QA 主测试环境");
+        alpha.setSeeUrl("https://see.example.internal/acm/app.htm#/dashboard/env/alpha");
         Component alphaGateway = new Component(ComponentRole.GATEWAY);
         alphaGateway.setVersion("2.4.1");
         alphaGateway.setVersionUpdatedAt(Instant.parse("2026-06-20T08:30:00Z"));

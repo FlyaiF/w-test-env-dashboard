@@ -8,6 +8,7 @@ import 'package:env_viewer/inventory/inventory_store.dart';
 import 'package:env_viewer/pages/catalog/catalog_page.dart';
 import 'package:env_viewer/services/access/access_launcher.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -83,16 +84,65 @@ void main() {
 
     // First environment is auto-selected; its component renders as a compact
     // grid row with the localized role label, version and status chip —
-    // read-only (no edit/save controls).
-    expect(find.text('网关'), findsOneWidget);
+    // read-only (no edit/save controls). The role label appears twice: once in
+    // the header link chip (the component has a url) and once in the grid row.
+    expect(find.text('网关'), findsNWidgets(2));
     expect(find.text('1.2.3'), findsOneWidget);
     expect(find.text('正常'), findsOneWidget); // collection status chip
     expect(find.byIcon(Icons.save), findsNothing);
 
-    // Expanding the row reveals the full field grid.
-    await tester.tap(find.text('网关'));
+    // Expanding the row (the grid entry, not the header chip) reveals the
+    // full field grid.
+    await tester.tap(find.text('网关').last);
     await tester.pumpAndSettle();
     expect(find.text('HTTP 接口'), findsOneWidget); // version probe label
+  });
+
+  testWidgets('header link chips open-and-copy the SEE and component urls', (
+    tester,
+  ) async {
+    final store = _storeReturning([
+      {
+        'id': 1,
+        'name': 'Alpha',
+        'memo': null,
+        'seeUrl': 'https://see.example/acm/env/1',
+        'components': [
+          {'id': 10, 'role': 'GATEWAY', 'url': 'https://alpha.test/gw'},
+        ],
+      },
+    ]);
+
+    final copied = <String?>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied.add((call.arguments as Map)['text'] as String?);
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+
+    await tester.pumpWidget(_wrap(store));
+    await tester.pumpAndSettle();
+
+    // One chip per link: SEE (environment-level) and the component's url.
+    expect(find.widgetWithText(TextButton, 'SEE'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, '网关'), findsOneWidget);
+    expect(find.byIcon(Icons.copy_outlined), findsNWidgets(2));
+
+    // The copy action shares the raw stored value and confirms via snackbar.
+    await tester.tap(find.byIcon(Icons.copy_outlined).first);
+    await tester.pumpAndSettle();
+    expect(copied, ['https://see.example/acm/env/1']);
+    expect(find.text('已复制链接'), findsOneWidget);
   });
 
   testWidgets('立即采集 button collects the selected environment in place', (

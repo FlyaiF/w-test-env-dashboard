@@ -12,6 +12,7 @@ void main() {
           id: 1,
           name: 'Alpha',
           memo: '  集成环境  ',
+          seeUrl: '  https://see.example/acm/env/1  ',
           components: [
             ComponentDto(
               id: 10,
@@ -29,6 +30,7 @@ void main() {
       expect(view.id, 1);
       expect(view.name, 'Alpha');
       expect(view.memo, '集成环境'); // trimmed
+      expect(view.seeUrl, 'https://see.example/acm/env/1'); // trimmed
       expect(view.componentCount, 1);
 
       final c = view.components.single;

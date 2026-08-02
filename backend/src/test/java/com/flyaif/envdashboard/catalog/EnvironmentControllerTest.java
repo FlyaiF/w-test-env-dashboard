@@ -41,14 +41,14 @@ class EnvironmentControllerTest {
     }
 
     private static EnvironmentDto envA() {
-        return new EnvironmentDto(1L, "ENV-A", "first env",
+        return new EnvironmentDto(1L, "ENV-A", "first env", "https://see.example/acm/env/1",
                 List.of(gateway(), new ComponentDto(2L, "APP", null, null, null, null, null, null,
                         null, List.of(), null, null, null, null)));
     }
 
     @Test
     void listReturnsEnvironmentsEachWithTheirComponents() throws Exception {
-        EnvironmentDto envB = new EnvironmentDto(2L, "ENV-B", null,
+        EnvironmentDto envB = new EnvironmentDto(2L, "ENV-B", null, null,
                 List.of(new ComponentDto(3L, "UI", null, null, null, null, null, null,
                         null, List.of(), null, null, null, null)));
         given(service.listEnvironments()).willReturn(List.of(envA(), envB));
@@ -68,6 +68,7 @@ class EnvironmentControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("ENV-A"))
                 .andExpect(jsonPath("$.memo").value("first env"))
+                .andExpect(jsonPath("$.seeUrl").value("https://see.example/acm/env/1"))
                 .andExpect(jsonPath("$.components", hasSize(2)))
                 .andExpect(jsonPath("$.components[?(@.role=='GATEWAY')].version").value("1.2.3"))
                 .andExpect(jsonPath("$.components[?(@.role=='GATEWAY')].versionUpdatedAt")
