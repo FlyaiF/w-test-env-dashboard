@@ -53,13 +53,23 @@ zip。15 秒内没有 marker 视为坏版本：杀掉新进程、恢复 `.backup
 已知限制：macOS 助手按 CI runner 架构编译（arm64）；Intel Mac 上助手无法启动时
 更新会报错但应用照常运行，需手动更新。
 
+## 首次安装：下载页
+
+后端根路径（如 `http://backend-host:8080/`）提供一个静态下载页
+（`backend/src/main/resources/static/index.html`）：按平台展示最新版本、大小与更新
+说明，下载走同一套 `/api/client-updates` 接口，并按访问者系统标注推荐平台。还没有
+客户端的同事只需要这一个链接；装好之后由应用内的自动更新接管。目录为空或功能未
+开启时页面显示“暂无可下载的版本”。
+
 ## 发布流程（版本真源 = pubspec）
 
 1. 改 `apps/env_viewer/pubspec.yaml` 的 `version:`，需要说明时写
    `docs/releases/<version>.md`（中文，可选），提交。
 2. 打 tag `v<version>` 并推送。CI 校验 tag 与 pubspec 一致（不一致直接失败），
    产物命名 `env_viewer-<version>-<platform>.zip`，notes 以
-   `env_viewer-<version>.notes.md` 附在 GitHub Release。
+   `env_viewer-<version>.notes.md` 附在 GitHub Release；后端 jar 同样以 tag 版本
+   命名（`-Drevision`，如 `env-dashboard-backend-1.2.0.jar`；非 tag 构建仍为
+   `0.1.0-SNAPSHOT`）。
 3. CI 完成后执行：
 
    ```bash

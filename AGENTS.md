@@ -51,7 +51,8 @@ Principal HTTP routes are `/api/environments`, `/api/servers`, `/api/databases`,
   dropped into `envdashboard.client-updates.dir` (`CLIENT_UPDATES_DIR`; blank = disabled) via
   `/api/client-updates/env_viewer/{latest,download}`. The client shows a non-intrusive download
   icon, verifies SHA-256, and hands off to the bundled `env_viewer_updater` helper, which swaps the
-  install and rolls back if the new build fails to start. Updates are never forced.
+  install and rolls back if the new build fails to start. Updates are never forced. The backend
+  root (`/`) serves a static first-install download page backed by the same routes.
 
 ## Common Commands
 

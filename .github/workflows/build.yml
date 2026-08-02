@@ -33,8 +33,14 @@ jobs:
       # The Oracle Testcontainers test is tagged "oracle-it" and excluded here;
       # run it on demand with -Dgroups=oracle-it -DexcludedGroups=.
       # Release packaging enables every JDBC driver used by version probes.
+      # Tagged builds stamp the jar with the release version via -Drevision.
       - name: Build and test backend
-        run: mvn -B -f backend/pom.xml -Pprobe-drivers clean verify
+        run: |
+          REVISION_FLAG=""
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            REVISION_FLAG="-Drevision=${GITHUB_REF_NAME#v}"
+          fi
+          mvn -B -f backend/pom.xml -Pprobe-drivers $REVISION_FLAG clean verify
 
       - name: Verify probe drivers are packaged
         shell: bash

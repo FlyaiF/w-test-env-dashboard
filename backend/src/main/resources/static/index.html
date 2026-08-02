@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>测试环境速查工具 — 下载</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --text: #1f2329; --secondary: #646a73;
+    --border: #dee0e3; --accent: #245bdb; --accent-text: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17181a; --card: #202124; --text: #e8eaed; --secondary: #9aa0a6;
+      --border: #3c4043; --accent: #4c7bf4; --accent-text: #ffffff;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    display: flex; min-height: 100vh; align-items: center; justify-content: center;
+  }
+  main { width: min(680px, calc(100vw - 32px)); padding: 40px 0; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--secondary); font-size: 13px; margin: 0 0 24px; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 560px) { .cards { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 20px; display: flex; flex-direction: column; gap: 8px;
+  }
+  .card h2 { font-size: 15px; margin: 0; display: flex; align-items: center; gap: 8px; }
+  .badge {
+    font-size: 11px; color: var(--accent); border: 1px solid var(--accent);
+    border-radius: 999px; padding: 1px 8px; font-weight: normal;
+  }
+  .meta { color: var(--secondary); font-size: 12px; min-height: 1em; }
+  .btn {
+    margin-top: auto; display: inline-block; text-align: center; text-decoration: none;
+    background: var(--accent); color: var(--accent-text); border-radius: 8px;
+    padding: 9px 0; font-size: 14px;
+  }
+  .btn[aria-disabled="true"] { opacity: .45; pointer-events: none; }
+  .notes {
+    margin-top: 20px; background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px 20px; font-size: 13px; line-height: 1.7;
+    white-space: pre-wrap; display: none;
+  }
+  .notes h3 { margin: 0 0 6px; font-size: 13px; color: var(--secondary); font-weight: normal; }
+  .empty {
+    margin-top: 20px; color: var(--secondary); font-size: 13px; display: none;
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>测试环境速查工具</h1>
+  <p class="sub">env_viewer 桌面客户端 · 安装后应用会自动提示后续更新</p>
+
+  <div class="cards">
+    <div class="card" id="card-windows">
+      <h2>Windows <span class="badge" hidden>推荐</span></h2>
+      <div class="meta">正在获取版本信息…</div>
+      <a class="btn" aria-disabled="true">下载</a>
+    </div>
+    <div class="card" id="card-macos">
+      <h2>macOS <span class="badge" hidden>推荐</span></h2>
+      <div class="meta">正在获取版本信息…</div>
+      <a class="btn" aria-disabled="true">下载</a>
+    </div>
+  </div>
+
+  <div class="notes" id="notes"></div>
+  <p class="empty" id="empty">暂无可下载的版本，请联系管理员发布。</p>
+</main>
+
+<script>
+  const fmtSize = (bytes) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  const isMac = /Mac/i.test(navigator.platform || navigator.userAgent);
+  document.querySelector(`#card-${isMac ? 'macos' : 'windows'} .badge`).hidden = false;
+
+  let anyAvailable = false;
+  Promise.all(['windows', 'macos'].map(async (platform) => {
+    const card = document.getElementById(`card-${platform}`);
+    const meta = card.querySelector('.meta');
+    const btn = card.querySelector('.btn');
+    try {
+      const res = await fetch(`api/client-updates/env_viewer/latest?platform=${platform}`);
+      if (res.status !== 200) { meta.textContent = '暂未发布'; return; }
+      const info = await res.json();
+      anyAvailable = true;
+      meta.textContent = `版本 ${info.version} · ${fmtSize(info.sizeBytes)}`;
+      btn.textContent = '下载';
+      btn.removeAttribute('aria-disabled');
+      btn.href = `api/client-updates/env_viewer/download?platform=${platform}&version=${info.version}`;
+      if (info.notes && info.notes.trim()) {
+        const notes = document.getElementById('notes');
+        notes.innerHTML = '<h3>更新说明</h3>';
+        notes.appendChild(document.createTextNode(info.notes.trim()));
+        notes.style.display = 'block';
+      }
+    } catch {
+      meta.textContent = '无法连接后端';
+    }
+  })).then(() => {
+    document.getElementById('empty').style.display = anyAvailable ? 'none' : 'block';
+  });
+</script>
+</body>
+</html>

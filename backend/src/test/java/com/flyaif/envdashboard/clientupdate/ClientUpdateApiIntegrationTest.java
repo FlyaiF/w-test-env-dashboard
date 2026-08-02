@@ -15,6 +15,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -85,6 +86,15 @@ class ClientUpdateApiIntegrationTest {
                 .andExpect(header().string("Content-Disposition",
                         "attachment; filename=\"env_viewer-1.9.0-windows.zip\""))
                 .andExpect(content().bytes(bytes));
+    }
+
+    /** First-install entry point: the static download page ships with the backend. */
+    @Test
+    void downloadPageIsServed() throws Exception {
+        // ASCII marker: MockMvc decodes the body as ISO-8859-1, garbling CJK.
+        mockMvc.perform(get("/index.html"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("client-updates/env_viewer")));
     }
 
     @Test
