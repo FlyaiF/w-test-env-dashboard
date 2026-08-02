@@ -117,6 +117,26 @@ class RemoteFileSession extends ChangeNotifier {
   /// Re-run the whole session: fresh tail (follow) or fresh read (view).
   Future<void> reconnect() => connect();
 
+  /// Entry names in [dirPath] over this session's live connection, directories
+  /// suffixed with `/`. Used to autocomplete sibling paths in the 日志文件
+  /// free-path bar. Empty when not connected or the listing fails — completion
+  /// is best-effort and must never surface a connection error of its own.
+  Future<List<String>> listDirectory(String dirPath) async {
+    final client = _client;
+    if (client == null || _disposed) return const [];
+    try {
+      final sftp = await client.sftp();
+      final entries = await sftp.listdir(dirPath);
+      return [
+        for (final e in entries)
+          if (e.filename != '.' && e.filename != '..')
+            e.attr.isDirectory ? '${e.filename}/' : e.filename,
+      ];
+    } catch (_) {
+      return const [];
+    }
+  }
+
   Future<void> _startTail(SSHClient client, int generation) async {
     final session = await client.execute(
       'tail -n 200 -f ${shellQuote(path)}',

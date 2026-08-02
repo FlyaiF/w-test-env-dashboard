@@ -6,6 +6,7 @@ import '../../catalog/environment_store.dart';
 import '../../catalog/environment_view.dart';
 import '../../inventory/inventory_store.dart';
 import '../../inventory/inventory_view.dart';
+import '../../remote_files/path_suggestions.dart';
 import '../../remote_files/remote_file_store.dart';
 import '../../services/remote_file/remote_file_session.dart';
 import 'open_remote_file.dart';
@@ -24,11 +25,42 @@ class RemoteFilesPage extends StatefulWidget {
 
 class _RemoteFilesPageState extends State<RemoteFilesPage> {
   final _pathController = TextEditingController();
+  final _pathFocus = FocusNode();
+  final _pathScroll = ScrollController();
+
+  /// Directory listings borrowed from live sessions, memoized as futures per
+  /// `serverId:dir`: a typing burst shares the in-flight request instead of
+  /// firing one listdir per keystroke, and a completed success is reused for
+  /// the page's lifetime. Empty results (incl. failures — listDirectory never
+  /// throws) are evicted on completion so a later attempt can retry.
+  final _dirCache = <String, Future<List<String>>>{};
+
   RemoteFileMode _freeMode = RemoteFileMode.follow;
 
   /// Server picked in the free-path bar; falls back to the active tab's
   /// server, then the first known server.
   int? _freeServerId;
+
+  /// Last path this page auto-filled from the active tab. Lets tab switches
+  /// keep the bar in sync while never clobbering a hand-edited value: the
+  /// field is only rewritten while it is empty or still holds our own fill.
+  String? _autoFilledPath;
+
+  /// Seed the free-path bar with the active tab's path so opening a sibling
+  /// file is an edit of the tail, not a full retype.
+  void _syncPathToActiveTab(RemoteFileStore store) {
+    final activePath = store.activeTab?.session.path;
+    if (activePath == null || activePath.isEmpty) return;
+    final current = _pathController.text.trim();
+    if (current.isNotEmpty && current != _autoFilledPath) return;
+    _autoFilledPath = activePath;
+    if (current == activePath) return;
+    _pathController.value = TextEditingValue(
+      text: activePath,
+      selection: TextSelection.collapsed(offset: activePath.length),
+    );
+    _scrollPathToEnd();
+  }
 
   @override
   void initState() {
@@ -45,12 +77,76 @@ class _RemoteFilesPageState extends State<RemoteFilesPage> {
   @override
   void dispose() {
     _pathController.dispose();
+    _pathFocus.dispose();
+    _pathScroll.dispose();
     super.dispose();
+  }
+
+  /// A long path overflows the bar head-first, hiding the filename — the part
+  /// that matters. After any programmatic fill, pin the viewport to the tail
+  /// (typing keeps it there anyway, since the caret sits at the end).
+  void _scrollPathToEnd() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_pathScroll.hasClients) return;
+      _pathScroll.jumpTo(_pathScroll.position.maxScrollExtent);
+    });
+  }
+
+  /// Paths the app already knows for [serverId]: open-tab paths first (the
+  /// user's current working set), then component 日志位置 presets.
+  List<String> _knownPathsFor(RemoteFileStore store, int? serverId) {
+    if (serverId == null) return const [];
+    final paths = <String>[];
+    for (final tab in store.tabs) {
+      if (tab.serverId == serverId && !paths.contains(tab.session.path)) {
+        paths.add(tab.session.path);
+      }
+    }
+    for (final env in context.read<EnvironmentStore>().environments) {
+      for (final c in env.components) {
+        final log = c.logLocation;
+        if (c.serverId == serverId &&
+            log != null &&
+            log.isNotEmpty &&
+            !paths.contains(log)) {
+          paths.add(log);
+        }
+      }
+    }
+    return paths;
+  }
+
+  Future<List<String>> _pathSuggestions(
+    RemoteFileStore store,
+    int? serverId,
+    String input,
+  ) {
+    final session = serverId == null ? null : store.liveSessionFor(serverId);
+    DirectoryLister? lister;
+    if (session != null) {
+      lister = (dir) {
+        final key = '$serverId:$dir';
+        final cached = _dirCache[key];
+        if (cached != null) return cached;
+        final future = session.listDirectory(dir);
+        _dirCache[key] = future;
+        future.then((entries) {
+          if (entries.isEmpty) _dirCache.remove(key);
+        });
+        return future;
+      };
+    }
+    return buildPathSuggestions(
+      input: input,
+      knownPaths: _knownPathsFor(store, serverId),
+      listDirectory: lister,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final store = context.watch<RemoteFileStore>();
+    _syncPathToActiveTab(store);
     return Column(
       children: [
         PageHeader(
@@ -139,15 +235,30 @@ class _RemoteFilesPageState extends State<RemoteFilesPage> {
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: TextField(
-              controller: _pathController,
-              style: tokens.mono(fontSize: 12.5),
-              decoration: const InputDecoration(
-                isDense: true,
-                border: OutlineInputBorder(),
-                hintText: '/path/to/remote/file — 任意远程文件路径',
-              ),
-              onSubmitted: (_) => _openFreePath(store, effectiveServerId),
+            child: RawAutocomplete<String>(
+              textEditingController: _pathController,
+              focusNode: _pathFocus,
+              optionsBuilder: (value) =>
+                  _pathSuggestions(store, effectiveServerId, value.text),
+              onSelected: (_) => _scrollPathToEnd(),
+              optionsViewBuilder: (context, onSelected, options) =>
+                  _SuggestionOverlay(options: options, onSelected: onSelected),
+              fieldViewBuilder: (context, controller, focusNode, _) {
+                // Enter always opens the typed path; suggestions are picked by
+                // click so completion can never hijack a deliberate open.
+                return TextField(
+                  controller: controller,
+                  focusNode: focusNode,
+                  scrollController: _pathScroll,
+                  style: tokens.mono(fontSize: 12.5),
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                    hintText: '/path/to/remote/file — 关键字或路径，自动补全',
+                  ),
+                  onSubmitted: (_) => _openFreePath(store, effectiveServerId),
+                );
+              },
             ),
           ),
           const SizedBox(width: 8),
@@ -193,6 +304,9 @@ class _RemoteFilesPageState extends State<RemoteFilesPage> {
     final label = inventory.serversById[serverId]?.displayLabel ?? '#$serverId';
     final segments = path.split('/').where((s) => s.isNotEmpty).toList();
     final name = segments.isEmpty ? path : segments.last;
+    // The typed path is now the active tab's path; treat it as our own fill so
+    // later tab switches keep syncing instead of seeing it as a hand edit.
+    _autoFilledPath = path;
     await openRemoteFile(
       context,
       store: store,
@@ -200,6 +314,89 @@ class _RemoteFilesPageState extends State<RemoteFilesPage> {
       title: '$label · $name',
       path: path,
       mode: _freeMode,
+    );
+  }
+}
+
+/// The autocomplete dropdown for the free-path bar: a compact mono list of
+/// completed paths (directories end in `/` — picking one continues the walk).
+class _SuggestionOverlay extends StatelessWidget {
+  final Iterable<String> options;
+  final ValueChanged<String> onSelected;
+
+  const _SuggestionOverlay({required this.options, required this.onSelected});
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.of(context);
+    return Align(
+      alignment: Alignment.topLeft,
+      child: Material(
+        elevation: 4,
+        borderRadius: BorderRadius.circular(8),
+        clipBehavior: Clip.antiAlias,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 260, maxWidth: 560),
+          child: ListView.builder(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            shrinkWrap: true,
+            itemCount: options.length,
+            itemBuilder: (context, i) {
+              final option = options.elementAt(i);
+              final isDir = option.endsWith('/');
+              // Rows differ in their tail, so the tail leads: name first,
+              // parent directory dimmed after it (an end-ellipsis on the full
+              // path would render every sibling identical).
+              final stem =
+                  isDir ? option.substring(0, option.length - 1) : option;
+              final cut = stem.lastIndexOf('/');
+              final name =
+                  cut < 0 ? option : '${stem.substring(cut + 1)}${isDir ? '/' : ''}';
+              final dir = cut < 0 ? '' : stem.substring(0, cut + 1);
+              return InkWell(
+                onTap: () => onSelected(option),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                  child: Row(
+                    children: [
+                      Icon(
+                        isDir ? Icons.folder_outlined : Icons.description_outlined,
+                        size: 14,
+                        color: tokens.textSecondary,
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          name,
+                          style: tokens.mono(fontSize: 12),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (dir.isNotEmpty) ...[
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            dir,
+                            style: tokens.mono(
+                              fontSize: 11,
+                              color: tokens.textSecondary,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.right,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
     );
   }
 }

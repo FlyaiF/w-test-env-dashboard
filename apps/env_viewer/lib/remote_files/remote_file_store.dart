@@ -186,6 +186,26 @@ class RemoteFileStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// A connected session on [serverId] whose SSH connection can be borrowed
+  /// for directory listings (path autocompletion), preferring the active tab.
+  /// Null when no tab on that server has a live connection — completion then
+  /// degrades to known-path suggestions rather than dialing a new session.
+  RemoteFileSession? liveSessionFor(int serverId) {
+    final active = activeTab;
+    if (active != null &&
+        active.serverId == serverId &&
+        active.session.status == RemoteFileStatus.connected) {
+      return active.session;
+    }
+    for (final tab in _tabs) {
+      if (tab.serverId == serverId &&
+          tab.session.status == RemoteFileStatus.connected) {
+        return tab.session;
+      }
+    }
+    return null;
+  }
+
   void close(int index) {
     if (index < 0 || index >= _tabs.length) return;
     _tabs.removeAt(index).session.dispose();
