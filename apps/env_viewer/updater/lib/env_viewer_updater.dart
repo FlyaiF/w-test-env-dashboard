@@ -78,12 +78,15 @@ class SystemProcessOps implements ProcessOps {
   @override
   Future<bool> isAlive(int pid) async {
     if (Platform.isWindows) {
+      // CSV output is locale-independent and quotes the PID as its own field.
       final result = await Process.run('tasklist', [
         '/FI',
         'PID eq $pid',
+        '/FO',
+        'CSV',
         '/NH',
       ]);
-      return (result.stdout as String).contains(' $pid ');
+      return (result.stdout as String).contains('"$pid"');
     }
     final result = await Process.run('kill', ['-0', '$pid']);
     return result.exitCode == 0;
@@ -111,6 +114,9 @@ class SystemProcessOps implements ProcessOps {
     final process = await Process.start(
       executable,
       const [],
+      // The app must not inherit the helper's cwd (the temp dir, which may be
+      // cleaned up); give it its own directory like an Explorer/Finder launch.
+      workingDirectory: File(executable).parent.path,
       environment: environment,
       mode: ProcessStartMode.detached,
     );
@@ -179,6 +185,14 @@ class Updater {
     log('update start: pid=${args.waitPid} install=${args.installPath} '
         'zip=${args.zipPath} platform=${args.platform}');
     try {
+      // The launching app spawns us with an inherited cwd that on Windows is
+      // usually the install directory itself — and a process's cwd locks the
+      // directory against the very rename this helper exists to do.
+      Directory.current = Directory.systemTemp;
+    } on Object catch (e) {
+      log('cannot move cwd off the install dir: $e');
+    }
+    try {
       await _waitForAppExit();
       await _swapIn();
     } on Object catch (e) {
@@ -213,6 +227,22 @@ class Updater {
     log('app pid ${args.waitPid} exited');
   }
 
+  /// Rename with retries: on Windows the freshly-exited app, antivirus, or the
+  /// indexer can hold transient locks on the install tree.
+  Future<void> _rename(Directory from, String to) async {
+    Object? lastError;
+    for (var attempt = 0; attempt < 10; attempt++) {
+      try {
+        from.renameSync(to);
+        return;
+      } on FileSystemException catch (e) {
+        lastError = e;
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      }
+    }
+    throw UpdaterException('无法移动 ${from.path} -> $to: $lastError');
+  }
+
   Future<void> _swapIn() async {
     if (!_install.existsSync()) {
       throw UpdaterException('安装目录不存在: ${args.installPath}');
@@ -225,13 +255,13 @@ class Updater {
     }
 
     if (_backup.existsSync()) _backup.deleteSync(recursive: true);
-    _install.renameSync(_backup.path);
+    await _rename(_install, _backup.path);
     log('moved old install to ${_backup.path}');
     try {
-      _extractedRoot.renameSync(args.installPath);
+      await _rename(_extractedRoot, args.installPath);
     } on Object {
       // Same-volume rename should not fail; if it does, put the old one back.
-      _backup.renameSync(args.installPath);
+      await _rename(_backup, args.installPath);
       rethrow;
     }
     if (_staging.existsSync()) _staging.deleteSync(recursive: true);
@@ -278,7 +308,7 @@ class Updater {
   Future<void> _rollback() async {
     log('rolling back to previous version');
     if (_install.existsSync()) _install.deleteSync(recursive: true);
-    _backup.renameSync(args.installPath);
+    await _rename(_backup, args.installPath);
     try {
       await ops.launchApp(_appExecutable, const {});
       log('previous version relaunched');

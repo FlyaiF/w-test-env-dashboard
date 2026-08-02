@@ -104,6 +104,10 @@ class AppUpdateStore extends ChangeNotifier {
           '--platform', platform,
           '--log', _updaterLogPath(),
         ],
+        // Never let the helper inherit this process's cwd: on Windows that is
+        // the install directory, and a cwd lock there would make the helper's
+        // own rename of the install fail.
+        workingDirectory: workDir.path,
         mode: ProcessStartMode.detached,
       );
       exit(0);

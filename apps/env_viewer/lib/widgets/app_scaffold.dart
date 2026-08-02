@@ -73,8 +73,12 @@ class AppScaffold extends StatelessWidget {
       title: '环境速查',
       sidebarExpanded: themeController.sidebarExpanded,
       onSidebarToggle: themeController.setSidebarExpanded,
-      headerTrailing: Row(
-        mainAxisSize: MainAxisSize.min,
+      // Wrap, not Row: in the collapsed rail this sits in ~44px of width and
+      // must fold the indicators vertically instead of overflowing.
+      headerTrailing: Wrap(
+        alignment: WrapAlignment.center,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        runSpacing: 6,
         children: [
           const UpdateButton(),
           Icon(

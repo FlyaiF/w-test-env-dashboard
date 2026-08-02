@@ -170,34 +170,52 @@ class _AppScaffoldState extends State<AppScaffold> {
   }
 
   Widget _buildHeader(ThemeData theme, bool showExpanded) {
+    final menuButton = IconButton(
+      icon: const Icon(Icons.menu, size: 20),
+      onPressed: _toggleExpanded,
+      tooltip: _expanded ? '收起侧栏' : '展开侧栏',
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+    );
+
+    // Collapsed rail: headerTrailing (status/update indicators) must stay
+    // visible, so it stacks under the menu button instead of vanishing.
+    if (!showExpanded) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+        child: Column(
+          children: [
+            menuButton,
+            if (widget.headerTrailing != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: widget.headerTrailing!,
+              ),
+          ],
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
       child: Row(
         children: [
-          IconButton(
-            icon: const Icon(Icons.menu, size: 20),
-            onPressed: _toggleExpanded,
-            tooltip: _expanded ? '收起侧栏' : '展开侧栏',
-            visualDensity: VisualDensity.compact,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-          ),
-          if (showExpanded) ...[
-            const SizedBox(width: 4),
-            if (widget.headerTrailing != null) ...[
-              widget.headerTrailing!,
-              const SizedBox(width: 6),
-            ],
-            Expanded(
-              child: Text(
-                widget.title,
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
+          menuButton,
+          const SizedBox(width: 4),
+          if (widget.headerTrailing != null) ...[
+            widget.headerTrailing!,
+            const SizedBox(width: 6),
           ],
+          Expanded(
+            child: Text(
+              widget.title,
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ],
       ),
     );
