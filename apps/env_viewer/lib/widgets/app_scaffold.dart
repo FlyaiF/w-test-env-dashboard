@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_ui/shared_ui.dart' as ui;
 
 import '../catalog/environment_store.dart';
+import 'update_button.dart';
 
 const _envGroup = ui.NavGroup(
   label: '环境',
@@ -72,10 +73,16 @@ class AppScaffold extends StatelessWidget {
       title: '环境速查',
       sidebarExpanded: themeController.sidebarExpanded,
       onSidebarToggle: themeController.setSidebarExpanded,
-      headerTrailing: Icon(
-        connected ? Icons.cloud_done : Icons.cloud_off,
-        color: connected ? tokens.ok : tokens.err,
-        size: 16,
+      headerTrailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const UpdateButton(),
+          Icon(
+            connected ? Icons.cloud_done : Icons.cloud_off,
+            color: connected ? tokens.ok : tokens.err,
+            size: 16,
+          ),
+        ],
       ),
       child: child,
     );

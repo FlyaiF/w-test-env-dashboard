@@ -47,6 +47,12 @@ Principal HTTP routes are `/api/environments`, `/api/servers`, `/api/databases`,
 `PUT /api/components/{id}/links`, `POST /api/environments/{id}/refresh`, and the on-demand
 `/credentials` plus `/secret` routes under Servers/Databases. Health is at `/actuator/health`.
 
+- **Client self-update** (docs/client-update.md): the backend serves `env_viewer` release zips
+  dropped into `envdashboard.client-updates.dir` (`CLIENT_UPDATES_DIR`; blank = disabled) via
+  `/api/client-updates/env_viewer/{latest,download}`. The client shows a non-intrusive download
+  icon, verifies SHA-256, and hands off to the bundled `env_viewer_updater` helper, which swaps the
+  install and rolls back if the new build fails to start. Updates are never forced.
+
 ## Common Commands
 
 ```bash
@@ -80,6 +86,11 @@ LEGACY_JDBC_URL=... LEGACY_DB_USERNAME=... LEGACY_DB_PASSWORD=... scripts/import
 # Release-shaped local build: verifies/package backend with probe drivers, then builds both apps.
 # The backend jar is deployed separately; it is not embedded in env_viewer.
 ./scripts/build_release.sh macos    # also: windows, linux
+
+# Publish a tagged env_viewer release to the backend's client-updates directory
+# (after CI finishes; see docs/client-update.md).
+UPDATE_SSH_TARGET=user@backend-host UPDATE_REMOTE_DIR=/opt/env-dashboard/client-updates \
+  scripts/publish_update.sh v1.2.0
 ```
 
 ## Key Files
@@ -90,6 +101,8 @@ LEGACY_JDBC_URL=... LEGACY_DB_USERNAME=... LEGACY_DB_PASSWORD=... scripts/import
 - `apps/env_viewer/lib/catalog/catalog_acl.dart` — DTO-to-view anti-corruption mapping
 - `apps/env_viewer/lib/config/config_store.dart` — backend URL and local tool preferences
 - `apps/env_viewer/lib/services/access/access_launcher.dart` — brokers credentials and launches tools
+- `apps/env_viewer/lib/services/update/app_update_store.dart` — self-update check/download/handoff
+- `apps/env_viewer/updater/` — pure-Dart swap-and-rollback helper (`dart compile exe`, bundled)
 - `apps/env_viewer/lib/services/remote_file/remote_file_session.dart` — in-app SSH tail/SFTP view of remote logs/files (docs/remote-file-viewer.md)
 - `apps/env_viewer/lib/remote_files/remote_file_store.dart` — 日志文件 tab state and brokered open flow
 - `apps/env_viewer/lib/pages/catalog/catalog_page.dart` — main environment catalog UI
@@ -99,6 +112,8 @@ LEGACY_JDBC_URL=... LEGACY_DB_USERNAME=... LEGACY_DB_PASSWORD=... scripts/import
 - `backend/src/main/java/com/flyaif/envdashboard/collection/` — scheduler, probes, machine access
 - `backend/src/main/java/com/flyaif/envdashboard/access/` — encrypted secrets and credential broker
 - `backend/src/main/java/com/flyaif/envdashboard/legacyimport/` — one-time `TENVINFO` importer
+- `backend/src/main/java/com/flyaif/envdashboard/clientupdate/` — client self-update distribution
+- `scripts/publish_update.sh` — copies a tagged release into the backend's client-updates dir
 - `backend/src/main/resources/db/migration/` — normalized schema migrations
 - `apps/zipr_tool/lib/services/zipr_service.dart` — Rust FFI wrapper for archive operations
 - `apps/zipr_tool/rust/Cargo.toml` — FFI crate; depends on the repo-root `zipr` submodule
@@ -138,3 +153,7 @@ LEGACY_JDBC_URL=... LEGACY_DB_USERNAME=... LEGACY_DB_PASSWORD=... scripts/import
 - CI checks out the public `zipr` submodule only for `zipr_tool` jobs.
 - Fonts live once at root `assets/fonts/`; `scripts/sync_assets.sh` populates each app's gitignored
   `assets/fonts/` directory for reliable Flutter bundling on every platform.
+- `apps/env_viewer/pubspec.yaml` is the release-version source of truth: tag `v<version>` must match
+  it (CI fails otherwise), and release zips are named `env_viewer-<version>-<platform>.zip` — the
+  exact filenames the backend's client-updates directory scan expects. Optional Chinese release
+  notes live at `docs/releases/<version>.md`.

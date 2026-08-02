@@ -52,6 +52,15 @@ cd "$PROJECT_DIR/apps/env_viewer"
 flutter clean
 flutter pub get
 
+# Self-update swap/rollback helper (docs/client-update.md): a standalone Dart
+# binary bundled with the app, because a running app cannot replace itself.
+build_updater() {
+    local out="$1"
+    (cd "$PROJECT_DIR/apps/env_viewer/updater" \
+        && dart pub get \
+        && dart compile exe bin/env_viewer_updater.dart -o "$out")
+}
+
 case "$PLATFORM" in
     macos)
         flutter build macos --release
@@ -62,6 +71,8 @@ case "$PLATFORM" in
         rm -rf "$APP/Contents/Resources/jdbc"
         test ! -e "$APP/Contents/Resources/go_sidecar"
         test ! -e "$APP/Contents/Resources/jdbc"
+        build_updater "$APP/Contents/Resources/env_viewer_updater"
+        test -x "$APP/Contents/Resources/env_viewer_updater"
         echo "  Created $APP"
         ;;
     windows)
@@ -71,6 +82,8 @@ case "$PLATFORM" in
         rm -rf "$RUNNER_DIR/data/jdbc"
         test ! -e "$RUNNER_DIR/data/go_sidecar.exe"
         test ! -e "$RUNNER_DIR/data/jdbc"
+        build_updater "$RUNNER_DIR/env_viewer_updater.exe"
+        test -e "$RUNNER_DIR/env_viewer_updater.exe"
         echo "  Created $RUNNER_DIR/env_viewer.exe"
         ;;
     linux)

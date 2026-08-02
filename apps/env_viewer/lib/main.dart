@@ -17,6 +17,7 @@ import 'pages/inventory/inventory_page.dart';
 import 'pages/remote_files/remote_files_page.dart';
 import 'pages/settings/settings_page.dart';
 import 'remote_files/remote_file_store.dart';
+import 'services/update/app_update_store.dart';
 import 'widgets/app_scaffold.dart';
 
 void main() async {
@@ -50,6 +51,13 @@ void main() async {
       configStore: configStore,
     ),
   );
+
+  // If the updater helper launched us it is waiting for proof this build works
+  // before deleting the previous version; the first rendered frame is that
+  // proof (docs/client-update.md).
+  WidgetsBinding.instance.addPostFrameCallback(
+    (_) => AppUpdateStore.signalStartedOkIfRequested(),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -77,6 +85,11 @@ class MyApp extends StatelessWidget {
         // Open remote-log/file tabs; brokers SSH credentials per open and
         // keeps sessions alive while the user navigates elsewhere.
         ChangeNotifierProvider(create: (_) => RemoteFileStore(backendClient)),
+        // Startup self-update poll; on offer, the scaffold header shows the
+        // accented download button (the only update UI surface).
+        ChangeNotifierProvider(
+          create: (_) => AppUpdateStore(backendClient)..checkForUpdate(),
+        ),
       ],
       child: Consumer<AppThemeController>(
         builder: (context, themeController, _) {

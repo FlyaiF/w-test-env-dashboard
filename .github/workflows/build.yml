@@ -91,6 +91,15 @@ jobs:
           unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
           flutter test
 
+      # The self-update helper is a pure-Dart package compiled per platform in
+      # the build jobs; its swap/rollback logic is checked once here.
+      - name: Analyze and test updater helper
+        working-directory: apps/env_viewer/updater
+        run: |
+          dart pub get
+          dart analyze
+          dart test
+
   env-viewer-macos:
     runs-on: macos-latest
     steps:
@@ -116,8 +125,24 @@ jobs:
         run: |
           COMMIT=$(git rev-parse --short HEAD)
           BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          VERSION=$(sed -n 's/^version: *\([0-9][0-9.]*\)+.*/\1/p' apps/env_viewer/pubspec.yaml)
+          test -n "$VERSION"
           echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
           echo "build_time=$BUILD_TIME" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      # pubspec is the version source of truth; a release tag that disagrees
+      # would ship a client that misidentifies itself to the update check.
+      - name: Verify tag matches pubspec version
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          if [ "$TAG_VERSION" != "$VERSION" ]; then
+            echo "Tag v$TAG_VERSION does not match pubspec version $VERSION" >&2
+            exit 1
+          fi
 
       - name: Build env_viewer
         working-directory: apps/env_viewer
@@ -131,7 +156,19 @@ jobs:
             --dart-define=COMMIT="$COMMIT" \
             --dart-define=BUILD_TIME="$BUILD_TIME"
 
+      # Self-update swap/rollback helper (docs/client-update.md), compiled as a
+      # standalone binary because the app cannot replace itself while running.
+      - name: Bundle updater helper
+        working-directory: apps/env_viewer/updater
+        run: |
+          dart pub get
+          dart compile exe bin/env_viewer_updater.dart -o env_viewer_updater
+          cp env_viewer_updater \
+            "../build/macos/Build/Products/Release/env_viewer.app/Contents/Resources/env_viewer_updater"
+
       - name: Package
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
         run: |
           RELEASE_DIR="apps/env_viewer/build/macos/Build/Products/Release"
           APP="$RELEASE_DIR/env_viewer.app"
@@ -139,12 +176,13 @@ jobs:
           rm -rf "$APP/Contents/Resources/jdbc"
           test ! -e "$APP/Contents/Resources/go_sidecar"
           test ! -e "$APP/Contents/Resources/jdbc"
-          (cd "$RELEASE_DIR" && zip -r -y "env_viewer-macos.zip" "env_viewer.app")
+          test -x "$APP/Contents/Resources/env_viewer_updater"
+          (cd "$RELEASE_DIR" && zip -r -y "env_viewer-$VERSION-macos.zip" "env_viewer.app")
 
       - uses: actions/upload-artifact@v7
         with:
           name: env_viewer-macos
-          path: apps/env_viewer/build/macos/Build/Products/Release/env_viewer-macos.zip
+          path: apps/env_viewer/build/macos/Build/Products/Release/env_viewer-*-macos.zip
           if-no-files-found: error
 
   zipr-tool-macos:
@@ -240,8 +278,25 @@ jobs:
         run: |
           COMMIT=$(git rev-parse --short HEAD)
           BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          VERSION=$(sed -n 's/^version: *\([0-9][0-9.]*\)+.*/\1/p' apps/env_viewer/pubspec.yaml)
+          test -n "$VERSION"
           echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
           echo "build_time=$BUILD_TIME" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      # pubspec is the version source of truth; a release tag that disagrees
+      # would ship a client that misidentifies itself to the update check.
+      - name: Verify tag matches pubspec version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          if [ "$TAG_VERSION" != "$VERSION" ]; then
+            echo "Tag v$TAG_VERSION does not match pubspec version $VERSION" >&2
+            exit 1
+          fi
 
       - name: Build env_viewer
         working-directory: apps/env_viewer
@@ -256,20 +311,34 @@ jobs:
             --dart-define=COMMIT="$COMMIT" \
             --dart-define=BUILD_TIME="$BUILD_TIME"
 
+      # Self-update swap/rollback helper (docs/client-update.md), compiled as a
+      # standalone binary because the app cannot replace itself while running.
+      - name: Bundle updater helper
+        working-directory: apps/env_viewer/updater
+        shell: bash
+        run: |
+          dart pub get
+          dart compile exe bin/env_viewer_updater.dart -o env_viewer_updater.exe
+          cp env_viewer_updater.exe \
+            "../build/windows/x64/runner/Release/env_viewer_updater.exe"
+
       - name: Package
         shell: bash
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
         run: |
           RELEASE_DIR="apps/env_viewer/build/windows/x64/runner/Release"
           rm -f "$RELEASE_DIR/data/go_sidecar.exe"
           rm -rf "$RELEASE_DIR/data/jdbc"
           test ! -e "$RELEASE_DIR/data/go_sidecar.exe"
           test ! -e "$RELEASE_DIR/data/jdbc"
-          (cd "$RELEASE_DIR" && 7z a -tzip "../env_viewer-windows.zip" ./*)
+          test -e "$RELEASE_DIR/env_viewer_updater.exe"
+          (cd "$RELEASE_DIR" && 7z a -tzip "../env_viewer-$VERSION-windows.zip" ./*)
 
       - uses: actions/upload-artifact@v7
         with:
           name: env_viewer-windows
-          path: apps/env_viewer/build/windows/x64/runner/env_viewer-windows.zip
+          path: apps/env_viewer/build/windows/x64/runner/env_viewer-*-windows.zip
           if-no-files-found: error
 
   zipr-tool-windows:
@@ -347,15 +416,27 @@ jobs:
     permissions:
       contents: write
     steps:
+      # Checkout only to pick up the optional checked-in release notes.
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
       - name: Download all artifacts
         uses: actions/download-artifact@v8
         with:
           path: artifacts
 
+      # Optional Chinese release notes: docs/releases/<version>.md, attached
+      # under the sidecar name the backend updates directory expects, so
+      # publish_update.sh can copy it verbatim. Absent file = release without notes.
       - name: Collect release files
         run: |
           mkdir -p release
           find artifacts -type f \( -name "*.zip" -o -name "env-dashboard-backend-*.jar" \) -exec cp {} release/ \;
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [ -f "docs/releases/$VERSION.md" ]; then
+            cp "docs/releases/$VERSION.md" "release/env_viewer-$VERSION.notes.md"
+          fi
           ls -la release/
 
       - name: Create GitHub Release

@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
+import 'dto/client_update_dto.dart';
 import 'dto/component_dto.dart';
 import 'dto/component_input.dart';
 import 'dto/component_links_input.dart';
@@ -262,6 +263,60 @@ class BackendClient {
       throw const BackendException('后端返回了无法识别的数据库凭据');
     }
     return DatabaseCredential.fromJson(body);
+  }
+
+  /// The newest published client build for [platform] (`windows`/`macos`), or
+  /// null when the backend has updates disabled or nothing published (204).
+  Future<ClientUpdateDto?> latestClientUpdate(String platform) async {
+    final body = await _getJson(
+      '/api/client-updates/env_viewer/latest?platform=$platform',
+    );
+    if (body == null) return null;
+    if (body is! Map<String, dynamic>) {
+      throw const BackendException('后端返回了无法识别的更新信息');
+    }
+    return ClientUpdateDto.fromJson(body);
+  }
+
+  /// Streams the exact [version] update zip to [destination]. [onProgress]
+  /// reports (receivedBytes, totalBytes); total is -1 when the backend does
+  /// not announce a length.
+  Future<void> downloadClientUpdate({
+    required String platform,
+    required String version,
+    required File destination,
+    void Function(int received, int total)? onProgress,
+  }) async {
+    final uri = Uri.parse(
+      '$baseUrl/api/client-updates/env_viewer/download'
+      '?platform=$platform&version=$version',
+    );
+    final http.StreamedResponse response;
+    try {
+      response = await _http.send(http.Request('GET', uri));
+    } on SocketException {
+      throw const BackendException('无法连接后端服务，请确认服务已启动');
+    } on http.ClientException {
+      throw const BackendException('无法连接后端服务，请确认服务已启动');
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw BackendException(
+        _errorMessage(await http.Response.fromStream(response)),
+      );
+    }
+    final total = response.contentLength ?? -1;
+    var received = 0;
+    final sink = destination.openWrite();
+    try {
+      await for (final chunk in response.stream) {
+        sink.add(chunk);
+        received += chunk.length;
+        onProgress?.call(received, total);
+      }
+      await sink.flush();
+    } finally {
+      await sink.close();
+    }
   }
 
   EnvironmentDto _asEnvironment(dynamic body) {

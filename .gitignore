@@ -37,3 +37,7 @@ config.json
 # OS
 Thumbs.db
 *.swp
+
+# Compiled self-update helper (built by CI / build_release.sh)
+apps/env_viewer/updater/env_viewer_updater
+apps/env_viewer/updater/env_viewer_updater.exe

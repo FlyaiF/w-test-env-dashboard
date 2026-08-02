@@ -6,6 +6,7 @@ import 'package:env_viewer/inventory/inventory_store.dart';
 import 'package:env_viewer/main.dart';
 import 'package:env_viewer/remote_files/remote_file_store.dart';
 import 'package:env_viewer/services/access/access_launcher.dart';
+import 'package:env_viewer/services/update/app_update_store.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -44,6 +45,9 @@ void main() {
           ),
           ChangeNotifierProvider<RemoteFileStore>(
             create: (_) => RemoteFileStore(client),
+          ),
+          ChangeNotifierProvider<AppUpdateStore>(
+            create: (_) => AppUpdateStore(client),
           ),
         ],
         child: const MaterialApp(home: HomePage()),

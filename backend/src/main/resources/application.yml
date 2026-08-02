@@ -14,6 +14,11 @@ spring:
 # Version Collection (slice 05): the scheduled sweep cadence and on/off switch. Interval and delays
 # are ISO-8601 durations. Disabled in the local/test profiles (they drive Collection manually).
 envdashboard:
+  # Desktop-client self-update (docs/client-update.md): the directory the
+  # operator drops env_viewer release zips into (scripts/publish_update.sh).
+  # Blank (the default) disables the feature — clients get 204 and stay quiet.
+  client-updates:
+    dir: ${CLIENT_UPDATES_DIR:}
   collection:
     scheduler-enabled: true
     interval: PT5M
