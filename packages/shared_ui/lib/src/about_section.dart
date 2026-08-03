@@ -1,10 +1,6 @@
 import 'package:flutter/material.dart';
 
-class LabelValueRow {
-  final String label;
-  final String value;
-  const LabelValueRow(this.label, this.value);
-}
+import 'primitives.dart';
 
 class Section extends StatelessWidget {
   final String title;
@@ -29,31 +25,7 @@ class Section extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            for (final row in rows)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: 100,
-                      child: Text(
-                        row.label,
-                        style: TextStyle(color: theme.colorScheme.outline),
-                      ),
-                    ),
-                    Expanded(
-                      child: SelectableText(
-                        row.value,
-                        style: const TextStyle(
-                          fontFamily: 'Sarasa Mono SC',
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+            ...rows,
           ],
         ),
       ),

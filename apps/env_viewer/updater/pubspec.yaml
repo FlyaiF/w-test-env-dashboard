@@ -1,0 +1,13 @@
+name: env_viewer_updater
+description: >-
+  Standalone swap-and-rollback helper for env_viewer self-update. Compiled with
+  `dart compile exe` (no Flutter dependency) and shipped inside the app bundle.
+publish_to: 'none'
+version: 1.0.0
+
+environment:
+  sdk: ^3.11.4
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.30.0

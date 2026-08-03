@@ -4,23 +4,55 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A monorepo with two separate Flutter desktop apps that share a small UI package. The UI of both apps is in Chinese.
+A monorepo with two Flutter desktop apps, a central backend for the environment dashboard, and a
+shared UI package. The UI of both apps is in Chinese.
 
-- **env_viewer** (`apps/env_viewer/`) — test environment dashboard, backed by Oracle via a Go HTTP sidecar. Lists/searches/manages test environments and streams remote logs over SSH.
-- **zipr_tool** (`apps/zipr_tool/`) — archive viewer/patcher (zip/jar/war/ear) backed by a Rust library via flutter_rust_bridge FFI.
-- **shared_ui** (`packages/shared_ui/`) — generic AppScaffold, theme, About primitives, FilterHistoryTextField.
+- **env_viewer** (`apps/env_viewer/`) — thin desktop client for browsing and curating test
+  environments, collecting live versions, and launching the user's SSH/DB tools with credentials
+  brokered on demand.
+- **backend** (`backend/`) — Spring Boot/Java service that owns the normalized catalog, resource
+  inventory, encrypted secrets, version collection, and the HTTP API consumed by `env_viewer`.
+- **zipr_tool** (`apps/zipr_tool/`) — archive viewer/patcher (zip/jar/war/ear) backed by a Rust library
+  through flutter_rust_bridge FFI.
+- **shared_ui** (`packages/shared_ui/`) — generic AppScaffold, theme, About primitives, and
+  FilterHistoryTextField.
+- **go_sidecar** (`go_sidecar/`) — retained legacy, pre-redesign implementation and migration
+  reference. It is not part of the active `env_viewer` runtime, development script, CI build, or
+  release package.
 
 ## Architecture
 
-**env_viewer** spawns the **Go sidecar** (`go_sidecar/`) as a subprocess. They communicate via HTTP on localhost with a dynamically allocated port. The sidecar writes `PORT=<num>` to stdout on startup; Flutter's `SidecarManager` reads it and configures `SidecarClient`.
+`env_viewer` is a thin HTTP client. `BackendClient` talks to one separately deployed Spring backend;
+the URL defaults to `http://localhost:8080` and can be changed in Settings or locked with
+`ENV_DASHBOARD_BACKEND_URL`. The app does not spawn a local backend and ships no database drivers.
 
-- **State management**: Provider pattern with `ChangeNotifier` (`EnvService`, `SidecarManager`, `ZiprService`)
-- **Database**: Oracle via `go-ora/v2`, table `TENVINFO`, pooled connections
-- **SSH log streaming**: `dartssh2` parses `E_WEBSERVERADDR` format `"server:port&username/password"` to `tail -f` remote logs
-- **Archive ops**: in-process Rust via `flutter_rust_bridge` (the `zipr` crate at repo root). No subprocess.
-- **Config persistence**: env_viewer only — JSON at `~/.test-env-dashboard/config.json`
+- **Client state**: Provider + `ChangeNotifier` (`EnvironmentStore`, `InventoryStore`, `ConfigStore`). Backend data is
+  canonical; the client keeps only presentation state and DTO/view mappings.
+- **Backend domains**: Environment Catalog, Resource Inventory (`Server`/`Database`), Version
+  Collection, and Access Brokering. Components reference shared resources by ID.
+- **Backend database**: H2 in Oracle compatibility mode for the `local` profile; Oracle 11g for
+  `prod`. Oracle, Dameng, and OceanBase JDBC drivers are included in release jars via the Maven
+  `probe-drivers` profile.
+- **Version collection**: scheduled/manual backend probes update component version,
+  `versionUpdatedAt`, `lastCollectedAt`, and per-component status.
+- **Credentials**: encrypted and stored by the backend, returned only by explicit broker calls. The
+  desktop passes them to a user-selected SSH/DB tool and must not persist brokered secrets.
+- **Client config**: JSON at `~/.test-env-dashboard/config.json`, limited to backend URL and local
+  tool preferences. UI preferences (theme mode, sidebar expanded state) persist separately in
+  `~/.test-env-dashboard/ui.json` via `AppThemeController`.
+- **Archive operations**: in-process Rust via flutter_rust_bridge (the `zipr` crate at repo root);
+  `zipr_tool` uses no subprocess.
 
-**Go API endpoints**: `GET/POST /api/envs`, `GET/PUT/DELETE /api/envs/{id}`, `POST /api/db/test`, `GET /health`
+Principal HTTP routes are `/api/environments`, `/api/servers`, `/api/databases`,
+`PUT /api/components/{id}/links`, `POST /api/environments/{id}/refresh`, and the on-demand
+`/credentials` plus `/secret` routes under Servers/Databases. Health is at `/actuator/health`.
+
+- **Client self-update** (docs/client-update.md): the backend serves `env_viewer` release zips
+  dropped into `envdashboard.client-updates.dir` (`CLIENT_UPDATES_DIR`; blank = disabled) via
+  `/api/client-updates/env_viewer/{latest,download}`. The client shows a non-intrusive download
+  icon, verifies SHA-256, and hands off to the bundled `env_viewer_updater` helper, which swaps the
+  install and rolls back if the new build fails to start. Updates are never forced. The backend
+  root (`/`) serves a static first-install download page backed by the same routes.
 
 ## Common Commands
 
@@ -28,54 +60,101 @@ A monorepo with two separate Flutter desktop apps that share a small UI package.
 # One-time per checkout / after pulling new font files
 ./scripts/sync_assets.sh
 
-# env_viewer
-cd apps/env_viewer && flutter pub get
-cd apps/env_viewer && flutter run -d macos
+# backend — Java 21 + Maven; local profile is H2 with seed data
+./scripts/dev_backend.sh run
+mvn -f backend/pom.xml verify
+mvn -f backend/pom.xml -Pprobe-drivers verify  # release-shaped jar, all probe drivers
+mvn -f backend/pom.xml test -Dgroups=oracle-it -DexcludedGroups=  # optional Oracle 11g check
+
+# env_viewer — start the backend separately first, or set ENV_DASHBOARD_BACKEND_URL
+./scripts/dev_env_viewer.sh
+./scripts/dev_env_viewer.sh run
 cd apps/env_viewer && flutter analyze
 cd apps/env_viewer && flutter test
 
-# zipr_tool
-cd apps/zipr_tool && flutter pub get
-cd apps/zipr_tool && flutter run -d macos
+# zipr_tool (requires the public zipr submodule)
+git submodule update --init --recursive
+./scripts/dev_zipr_tool.sh run
 cd apps/zipr_tool && flutter analyze
 cd apps/zipr_tool && flutter test
 
-# Go sidecar (used only by env_viewer)
-cd go_sidecar && go build -o ../build/sidecar/go_sidecar .
+# One-time legacy TENVINFO -> new-schema import (slice 07; ADR-0004, PRD §8).
+# Dry run by default; --apply writes. Source = old Oracle; target = backend datasource.
+LEGACY_JDBC_URL=jdbc:oracle:thin:@oldhost:1521/ORCL LEGACY_DB_USERNAME=app LEGACY_DB_PASSWORD=secret \
+  scripts/import_tenvinfo.sh
+LEGACY_JDBC_URL=... LEGACY_DB_USERNAME=... LEGACY_DB_PASSWORD=... scripts/import_tenvinfo.sh --apply
 
-# Release builds — builds both apps, embeds go_sidecar in env_viewer only
+# Release-shaped local build: verifies/package backend with probe drivers, then builds both apps.
+# The backend jar is deployed separately; it is not embedded in env_viewer.
 ./scripts/build_release.sh macos    # also: windows, linux
-./scripts/build_sidecar.sh          # current platform
-./scripts/build_sidecar.sh all      # cross-compile all platforms
+
+# Publish a tagged env_viewer release to the backend's client-updates directory
+# (after CI finishes; see docs/client-update.md).
+UPDATE_SSH_TARGET=user@backend-host UPDATE_REMOTE_DIR=/opt/env-dashboard/client-updates \
+  scripts/publish_update.sh v1.2.0
 ```
 
 ## Key Files
 
-- `apps/env_viewer/lib/sidecar/sidecar_manager.dart` — spawns Go process, port discovery, lifecycle
-- `apps/env_viewer/lib/sidecar/sidecar_client.dart` — HTTP client to sidecar API
-- `apps/env_viewer/lib/services/env_service.dart` — environment CRUD, pagination, search state
-- `apps/env_viewer/lib/widgets/app_scaffold.dart` — env_viewer's nav definition (groups/items), delegates to shared_ui scaffold
+- `apps/env_viewer/lib/api/backend_client.dart` — the thin client's HTTP boundary
+- `apps/env_viewer/lib/catalog/environment_store.dart` — catalog/read-model state and refresh flows
+- `apps/env_viewer/lib/inventory/inventory_store.dart` — canonical Server/Database presentation state
+- `apps/env_viewer/lib/catalog/catalog_acl.dart` — DTO-to-view anti-corruption mapping
+- `apps/env_viewer/lib/config/config_store.dart` — backend URL and local tool preferences
+- `apps/env_viewer/lib/services/access/access_launcher.dart` — brokers credentials and launches tools
+- `apps/env_viewer/lib/services/update/app_update_store.dart` — self-update check/download/handoff
+- `apps/env_viewer/updater/` — pure-Dart swap-and-rollback helper (`dart compile exe`, bundled)
+- `apps/env_viewer/lib/services/remote_file/remote_file_session.dart` — in-app SSH tail/SFTP view of remote logs/files (docs/remote-file-viewer.md)
+- `apps/env_viewer/lib/remote_files/remote_file_store.dart` — 日志文件 tab state and brokered open flow
+- `apps/env_viewer/lib/pages/catalog/catalog_page.dart` — main environment catalog UI
+- `apps/env_viewer/lib/pages/inventory/inventory_page.dart` — shared resource management and reverse references
+- `backend/src/main/java/com/flyaif/envdashboard/catalog/` — Environment/Component domain and API
+- `backend/src/main/java/com/flyaif/envdashboard/inventory/` — shared Server/Database inventory
+- `backend/src/main/java/com/flyaif/envdashboard/collection/` — scheduler, probes, machine access
+- `backend/src/main/java/com/flyaif/envdashboard/access/` — encrypted secrets and credential broker
+- `backend/src/main/java/com/flyaif/envdashboard/legacyimport/` — one-time `TENVINFO` importer
+- `backend/src/main/java/com/flyaif/envdashboard/clientupdate/` — client self-update distribution
+- `scripts/publish_update.sh` — copies a tagged release into the backend's client-updates dir
+- `backend/src/main/resources/db/migration/` — normalized schema migrations
 - `apps/zipr_tool/lib/services/zipr_service.dart` — Rust FFI wrapper for archive operations
-- `apps/zipr_tool/rust/Cargo.toml` — Rust crate compiled into the app; depends on the repo-root `zipr` crate
+- `apps/zipr_tool/rust/Cargo.toml` — FFI crate; depends on the repo-root `zipr` submodule
 - `packages/shared_ui/lib/src/app_scaffold.dart` — generic NavGroup/NavItem-driven scaffold
-- `go_sidecar/main.go` — server startup, IPC protocol, graceful shutdown
-- `go_sidecar/db/oracle.go` — connection pool setup
-- `go_sidecar/db/queries.go` — SQL for TENVINFO table
-- `go_sidecar/handler/env.go` — REST endpoint handlers
-- `zipr/src/lib.rs` — core archive diff and patching logic (consumed by zipr_tool via FFI)
+- `zipr/src/lib.rs` — core archive diff and patching logic
+- `go_sidecar/` and `scripts/build_sidecar.sh` — legacy-only implementation/reference tooling; do not
+  reintroduce them into the active client delivery path
 
 ## Gotchas
 
-- **Proxy breaks Flutter tests**: If HTTP proxy env vars are set, `flutter test` fails with "Invalid WebSocket upgrade request". Unset them first:
+- **Proxy breaks Flutter tests**: if HTTP proxy env vars are set, `flutter test` fails with “Invalid
+  WebSocket upgrade request”. Unset them first:
   ```bash
   unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
   ```
-- **Oracle DATE timezone**: Oracle `DATE` columns have no timezone. `go-ora` reads them as Go local time, which gets serialized to UTC in JSON. Flutter must call `.toLocal()` before formatting with `DateFormat`, otherwise times will be off by the local UTC offset.
-- **Per-app `assets/` is gitignored, but required at build time**: Each app's `pubspec.yaml` references fonts via the local path `assets/fonts/...`. Flutter's bundler does not reliably resolve `..` paths on Windows, so we keep a single canonical copy of the fonts at repo-root `assets/fonts/` and use `scripts/sync_assets.sh` to populate each app's local `assets/fonts/` before any build. Run the script after a fresh clone or when font files change. Build scripts and CI call it automatically.
+- **The backend is a separate process**: `scripts/dev_env_viewer.sh` only prepares/runs Flutter. Start
+  `scripts/dev_backend.sh run` in another terminal or set `ENV_DASHBOARD_BACKEND_URL`. A Settings URL
+  change takes effect after restart.
+- **Production backend secrets/config**: the `prod` profile needs `ORACLE_JDBC_URL`,
+  `ORACLE_USERNAME`, `ORACLE_PASSWORD`, and a high-entropy `ACCESS_SECRET_KEY`.
+- **Oracle DATE timezone**: Oracle `DATE` has no timezone. The backend reads version update time in the
+  backend JVM's zone and serializes an instant; Flutter must call `.toLocal()` before display.
+- **Per-app `assets/` is gitignored but required at build time**: fonts live once at root
+  `assets/fonts/`. Run `scripts/sync_assets.sh`; build scripts and CI do this automatically.
+- **Only zipr_tool needs the submodule**: `env_viewer` and backend CI checkouts deliberately skip it.
+  Initialize `zipr/` before building `zipr_tool` locally.
 
 ## Conventions
 
-- Go model uses `*string` for nullable fields; Dart uses `String?`
-- Platform binary resolution: `SidecarManager._resolveBinaryPath()` checks app bundle first, then `build/sidecar/` for dev
-- CI builds universal macOS binary via `lipo` (arm64 + amd64)
-- Fonts live once at repo root `assets/fonts/`; `scripts/sync_assets.sh` copies them into each app's local `assets/fonts/` (gitignored) so Flutter's bundler picks them up reliably on all platforms
+- Java entities/API DTOs use normalized fields (`versionUpdatedAt`, never the obsolete
+  `deployTime`); Dart DTOs mirror the API and the catalog ACL maps them to display models.
+- Java uses nullable references where the domain permits missing data; Dart uses nullable types.
+- Backend URL precedence is `ENV_DASHBOARD_BACKEND_URL` → persisted Settings value →
+  `http://localhost:8080`.
+- Release backend jars must activate `-Pprobe-drivers`; desktop packages contain no sidecar/JDBC
+  helper artifacts.
+- CI checks out the public `zipr` submodule only for `zipr_tool` jobs.
+- Fonts live once at root `assets/fonts/`; `scripts/sync_assets.sh` populates each app's gitignored
+  `assets/fonts/` directory for reliable Flutter bundling on every platform.
+- `apps/env_viewer/pubspec.yaml` is the release-version source of truth: tag `v<version>` must match
+  it (CI fails otherwise), and release zips are named `env_viewer-<version>-<platform>.zip` — the
+  exact filenames the backend's client-updates directory scan expects. Optional Chinese release
+  notes live at `docs/releases/<version>.md`.

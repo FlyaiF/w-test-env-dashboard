@@ -1,0 +1,42 @@
+# Shared configuration. Profile-specific datasource lives in application-<profile>.yml.
+spring:
+  application:
+    name: env-dashboard-backend
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  jpa:
+    open-in-view: false
+    hibernate:
+      # Flyway owns the schema; never let Hibernate touch DDL.
+      ddl-auto: none
+
+# Version Collection (slice 05): the scheduled sweep cadence and on/off switch. Interval and delays
+# are ISO-8601 durations. Disabled in the local/test profiles (they drive Collection manually).
+envdashboard:
+  # Desktop-client self-update (docs/client-update.md): the directory the
+  # operator drops env_viewer release zips into (scripts/publish_update.sh).
+  # Blank (the default) disables the feature — clients get 204 and stay quiet.
+  client-updates:
+    dir: ${CLIENT_UPDATES_DIR:}
+  collection:
+    scheduler-enabled: true
+    interval: PT5M
+    initial-delay: PT30S
+    jdbc:
+      # Bounds for live DB version probes. Driver-specific connect/socket properties are supplied in
+      # addition to JDBC's standard login/query/network timeouts for Oracle/OceanBase compatibility.
+      login-timeout: PT5S
+      query-timeout: PT10S
+      read-timeout: PT15S
+
+# Liveness/readiness for the walking-skeleton health-check AC.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true

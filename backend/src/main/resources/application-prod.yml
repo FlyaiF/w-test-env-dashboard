@@ -1,0 +1,14 @@
+# Production: Oracle 11g. Credentials supplied via environment variables; never committed.
+# Driver ojdbc8:19.21.0.0 (declared in pom.xml) connects to 11g.
+spring:
+  datasource:
+    url: ${ORACLE_JDBC_URL}
+    username: ${ORACLE_USERNAME}
+    password: ${ORACLE_PASSWORD}
+    driver-class-name: oracle.jdbc.OracleDriver
+
+# Master passphrase for encrypting Server/Database secrets at rest (ADR-0005). High-entropy value,
+# supplied via the environment; never committed. The backend refuses to start if it is unset.
+envdashboard:
+  access:
+    secret-key: ${ACCESS_SECRET_KEY}

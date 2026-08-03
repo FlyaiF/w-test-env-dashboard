@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.3.5</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.flyaif</groupId>
+    <artifactId>env-dashboard-backend</artifactId>
+    <!-- CI-friendly version: tagged release builds pass -Drevision=<tag version>
+         so the jar carries the release number (docs/client-update.md). -->
+    <version>${revision}</version>
+    <name>env-dashboard-backend</name>
+    <description>Test Environment Dashboard backend (Environment Catalog)</description>
+
+    <properties>
+        <revision>0.1.0-SNAPSHOT</revision>
+        <java.version>21</java.version>
+        <!-- 19.x driver connects to Oracle 11g; pinned per PRD/ADR-0002 -->
+        <ojdbc8.version>19.21.0.0</ojdbc8.version>
+        <testcontainers.version>1.20.3</testcontainers.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!-- Migrations: versioned SQL that runs on H2 (dev/test) and Oracle (prod) -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-oracle</artifactId>
+        </dependency>
+
+        <!-- Local/test database: H2 in Oracle compatibility mode -->
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- Production database: Oracle 11g (19.x driver). Also a version-probe target driver. -->
+        <dependency>
+            <groupId>com.oracle.database.jdbc</groupId>
+            <artifactId>ojdbc8</artifactId>
+            <version>${ojdbc8.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <!-- Required when legacy/production Oracle databases use non-UTF character sets
+             such as ZHS16GBK. Keep it aligned with the JDBC driver version. -->
+        <dependency>
+            <groupId>com.oracle.database.nls</groupId>
+            <artifactId>orai18n</artifactId>
+            <version>${ojdbc8.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Optional Oracle-dialect validation against a real Oracle 11g.
+             Gated behind the "oracle-it" surefire group so it is skippable in dev. -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>oracle-xe</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- Skip the Oracle Testcontainers test by default;
+                         enable in CI with -DexcludedGroups= or -Dgroups=oracle-it -->
+                    <excludedGroups>oracle-it</excludedGroups>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+    <profiles>
+        <!-- Version-probe target drivers (slice 05), settled coordinates per PRD §9. Off by default so
+             the build stays green where Maven cannot reach Maven Central; activate with
+             `-Pprobe-drivers` (or in prod packaging) to ship the Dameng/OceanBase JDBC drivers. The
+             MachineAccess code depends only on java.sql, so the probe extension point compiles and is
+             fully tested (against a fake MachineAccess) without these on the classpath. -->
+        <profile>
+            <id>probe-drivers</id>
+            <dependencies>
+                <dependency>
+                    <groupId>com.dameng</groupId>
+                    <artifactId>DmJdbcDriver18</artifactId>
+                    <version>8.1.3.140</version>
+                    <scope>runtime</scope>
+                </dependency>
+                <dependency>
+                    <groupId>com.oceanbase</groupId>
+                    <artifactId>oceanbase-client</artifactId>
+                    <version>2.4.7.1</version>
+                    <scope>runtime</scope>
+                </dependency>
+            </dependencies>
+        </profile>
+    </profiles>
+</project>

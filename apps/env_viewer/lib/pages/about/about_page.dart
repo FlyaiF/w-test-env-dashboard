@@ -6,8 +6,8 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_ui/shared_ui.dart';
 
-import '../../sidecar/sidecar_client.dart';
-import '../../sidecar/sidecar_manager.dart';
+import '../../api/backend_client.dart';
+import '../../catalog/environment_store.dart';
 
 const String _appCommit = String.fromEnvironment('COMMIT', defaultValue: 'dev');
 const String _appBuildTime =
@@ -22,10 +22,6 @@ class AboutPage extends StatefulWidget {
 
 class _AboutPageState extends State<AboutPage> {
   PackageInfo? _packageInfo;
-  Map<String, dynamic>? _sidecarVersion;
-  String? _sidecarError;
-  bool _fetchedForBaseUrl = false;
-  String? _lastBaseUrl;
 
   @override
   void initState() {
@@ -39,26 +35,13 @@ class _AboutPageState extends State<AboutPage> {
     setState(() => _packageInfo = info);
   }
 
-  Future<void> _fetchSidecarVersion(SidecarManager sidecar) async {
-    if (!sidecar.connected || sidecar.port == null) return;
-    final baseUrl = sidecar.baseUrl;
-    if (_fetchedForBaseUrl && _lastBaseUrl == baseUrl) return;
-    _fetchedForBaseUrl = true;
-    _lastBaseUrl = baseUrl;
-    try {
-      final data = await SidecarClient(baseUrl).getVersion();
-      if (!mounted) return;
-      setState(() {
-        _sidecarVersion = data;
-        _sidecarError = null;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _sidecarError = e.toString());
-    }
+  String _backendStatus(EnvironmentStore store) {
+    if (store.connected) return '已连接';
+    if (store.loading) return '连接中...';
+    return '未连接';
   }
 
-  String _buildPlainText(SidecarManager sidecar) {
+  String _buildPlainText(EnvironmentStore store, String baseUrl) {
     final buf = StringBuffer();
     buf.writeln('=== 应用版本 ===');
     buf.writeln('version: ${_packageInfo?.version ?? '-'}+'
@@ -67,14 +50,10 @@ class _AboutPageState extends State<AboutPage> {
     buf.writeln('buildTime: $_appBuildTime');
     buf.writeln();
     buf.writeln('=== 后端服务 ===');
-    if (!sidecar.connected) {
-      buf.writeln('status: 未连接');
-    } else if (_sidecarVersion != null) {
-      _sidecarVersion!.forEach((k, v) => buf.writeln('$k: $v'));
-    } else if (_sidecarError != null) {
-      buf.writeln('error: $_sidecarError');
-    } else {
-      buf.writeln('status: 加载中');
+    buf.writeln('status: ${_backendStatus(store)}');
+    buf.writeln('baseUrl: $baseUrl');
+    if (store.error != null) {
+      buf.writeln('error: ${store.error}');
     }
     buf.writeln();
     buf.writeln('=== 运行环境 ===');
@@ -87,12 +66,12 @@ class _AboutPageState extends State<AboutPage> {
 
   @override
   Widget build(BuildContext context) {
-    final sidecar = context.watch<SidecarManager>();
-    _fetchSidecarVersion(sidecar);
+    final store = context.watch<EnvironmentStore>();
+    final baseUrl = context.read<BackendClient>().baseUrl;
 
     final theme = Theme.of(context);
     final info = _packageInfo;
-    final flutterVersion = info == null
+    final appVersion = info == null
         ? '加载中...'
         : '${info.version}+${info.buildNumber}';
 
@@ -109,7 +88,7 @@ class _AboutPageState extends State<AboutPage> {
                 icon: const Icon(Icons.copy, size: 16),
                 label: const Text('复制全部信息'),
                 onPressed: () async {
-                  final text = _buildPlainText(sidecar);
+                  final text = _buildPlainText(store, baseUrl);
                   await Clipboard.setData(ClipboardData(text: text));
                   if (!context.mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -131,7 +110,7 @@ class _AboutPageState extends State<AboutPage> {
                   Section(
                     title: '应用版本',
                     rows: [
-                      LabelValueRow('版本号', flutterVersion),
+                      LabelValueRow('版本号', appVersion),
                       const LabelValueRow('Commit', _appCommit),
                       const LabelValueRow('构建时间', _appBuildTime),
                       if (info != null) LabelValueRow('包名', info.packageName),
@@ -140,7 +119,12 @@ class _AboutPageState extends State<AboutPage> {
                   const SizedBox(height: 12),
                   Section(
                     title: '后端服务',
-                    rows: _sidecarRows(sidecar),
+                    rows: [
+                      LabelValueRow('状态', _backendStatus(store)),
+                      LabelValueRow('服务地址', baseUrl),
+                      if (store.error != null)
+                        LabelValueRow('错误', store.error!),
+                    ],
                   ),
                   const SizedBox(height: 12),
                   Section(
@@ -159,26 +143,5 @@ class _AboutPageState extends State<AboutPage> {
         ],
       ),
     );
-  }
-
-  List<LabelValueRow> _sidecarRows(SidecarManager sidecar) {
-    if (!sidecar.connected) {
-      return [const LabelValueRow('状态', '未连接')];
-    }
-    final v = _sidecarVersion;
-    if (v == null) {
-      if (_sidecarError != null) {
-        return [LabelValueRow('错误', _sidecarError!)];
-      }
-      return [const LabelValueRow('状态', '加载中...')];
-    }
-    return [
-      LabelValueRow('版本号', v['version']?.toString() ?? '-'),
-      LabelValueRow('Commit', v['commit']?.toString() ?? '-'),
-      LabelValueRow('构建时间', v['buildTime']?.toString() ?? '-'),
-      LabelValueRow('Go 版本', v['goVersion']?.toString() ?? '-'),
-      LabelValueRow('平台', v['platform']?.toString() ?? '-'),
-      LabelValueRow('监听地址', sidecar.baseUrl),
-    ];
   }
 }

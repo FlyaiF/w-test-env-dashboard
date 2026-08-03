@@ -1,97 +1,47 @@
 import 'dart:convert';
 import 'dart:io';
 
+/// Thin-client persisted config. The backend now owns all environment data and
+/// database access, so this holds only what Local Desktop Integration needs:
+/// defaults and per-tool preferences for launching the user's own SSH/DB tools.
+/// Credentials are brokered on demand (slice 06) and never stored here.
 class AppConfig {
-  OracleConfig oracle;
-  SshConfig ssh;
   SshToolsConfig sshTools;
+  DbToolsConfig dbTools;
+
+  /// User-set backend base URL (Settings → 后端地址). Null when unset, in which
+  /// case the env var / localhost default applies. The env var, if present, wins
+  /// over this at startup (see main.dart) — this is the durable fallback.
+  String? backendBaseUrl;
 
   AppConfig({
-    required this.oracle,
-    required this.ssh,
     required this.sshTools,
+    required this.dbTools,
+    this.backendBaseUrl,
   });
 
   factory AppConfig.empty() => AppConfig(
-    oracle: OracleConfig(
-      host: '',
-      port: 1521,
-      service: '',
-      username: '',
-      password: '',
-    ),
-    ssh: SshConfig(defaultUsername: '', defaultPassword: ''),
     sshTools: SshToolsConfig.empty(),
+    dbTools: DbToolsConfig.empty(),
   );
 
   factory AppConfig.fromJson(Map<String, dynamic> json) => AppConfig(
-    oracle: OracleConfig.fromJson(json['oracle'] ?? {}),
-    ssh: SshConfig.fromJson(json['ssh'] ?? {}),
     sshTools: SshToolsConfig.fromJson(json['ssh_tools'] ?? {}),
+    dbTools: DbToolsConfig.fromJson(json['db_tools'] ?? {}),
+    backendBaseUrl: _nullableString((json['backend'] ?? {})['base_url']),
   );
 
   Map<String, dynamic> toJson() => {
-    'oracle': oracle.toJson(),
-    'ssh': ssh.toJson(),
     'ssh_tools': sshTools.toJson(),
+    'db_tools': dbTools.toJson(),
+    if (backendBaseUrl != null && backendBaseUrl!.isNotEmpty)
+      'backend': {'base_url': backendBaseUrl},
   };
 
-  String get dsn =>
-      'oracle://${oracle.username}:${oracle.password}@${oracle.host}:${oracle.port}/${oracle.service}';
-
-  bool get isOracleConfigured =>
-      oracle.host.isNotEmpty &&
-      oracle.service.isNotEmpty &&
-      oracle.username.isNotEmpty;
-}
-
-class OracleConfig {
-  String host;
-  int port;
-  String service;
-  String username;
-  String password;
-
-  OracleConfig({
-    required this.host,
-    required this.port,
-    required this.service,
-    required this.username,
-    required this.password,
-  });
-
-  factory OracleConfig.fromJson(Map<String, dynamic> json) => OracleConfig(
-    host: json['host'] ?? '',
-    port: json['port'] ?? 1521,
-    service: json['service'] ?? '',
-    username: json['username'] ?? '',
-    password: json['password'] ?? '',
-  );
-
-  Map<String, dynamic> toJson() => {
-    'host': host,
-    'port': port,
-    'service': service,
-    'username': username,
-    'password': password,
-  };
-}
-
-class SshConfig {
-  String defaultUsername;
-  String defaultPassword;
-
-  SshConfig({required this.defaultUsername, required this.defaultPassword});
-
-  factory SshConfig.fromJson(Map<String, dynamic> json) => SshConfig(
-    defaultUsername: json['default_username'] ?? '',
-    defaultPassword: json['default_password'] ?? '',
-  );
-
-  Map<String, dynamic> toJson() => {
-    'default_username': defaultUsername,
-    'default_password': defaultPassword,
-  };
+  static String? _nullableString(dynamic v) {
+    if (v is String && v.trim().isNotEmpty) return v.trim();
+    return null;
+  }
 }
 
 class SshToolsConfig {
@@ -142,6 +92,41 @@ class SshToolsConfig {
   }
 }
 
+/// Per-tool preferences for launching the user's own DB tools. Mirrors
+/// [SshToolsConfig] and the `DbToolRegistry`; kept in its own `db_tools` section
+/// rather than overloading `ssh_tools` so the persisted schema stays symmetric.
+class DbToolsConfig {
+  String? defaultToolId;
+  Map<String, String> executablePaths;
+
+  DbToolsConfig({this.defaultToolId, Map<String, String>? executablePaths})
+    : executablePaths = executablePaths ?? {};
+
+  factory DbToolsConfig.empty() => DbToolsConfig();
+
+  factory DbToolsConfig.fromJson(Map<String, dynamic> json) {
+    final raw = json['executable_paths'];
+    final paths = <String, String>{};
+    if (raw is Map) {
+      for (final entry in raw.entries) {
+        final v = entry.value;
+        if (v is String && v.isNotEmpty) {
+          paths[entry.key.toString()] = v;
+        }
+      }
+    }
+    return DbToolsConfig(
+      defaultToolId: SshToolsConfig._nullableString(json['default_tool_id']),
+      executablePaths: paths,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    if (defaultToolId != null) 'default_tool_id': defaultToolId,
+    'executable_paths': executablePaths,
+  };
+}
+
 class ConfigService {
   static const _dirName = '.test-env-dashboard';
   static const _fileName = 'config.json';
@@ -160,18 +145,44 @@ class ConfigService {
 
   static Future<AppConfig> load() async {
     try {
-      final file = await _configFile();
-      if (await file.exists()) {
-        final content = await file.readAsString();
-        return AppConfig.fromJson(jsonDecode(content));
-      }
+      return loadFromFile(await _configFile());
     } catch (_) {}
     return AppConfig.empty();
   }
 
+  /// Loads one config file and migrates obsolete credential-bearing sections
+  /// away immediately. Public so migration behavior can be verified against an
+  /// isolated temporary file without reading a developer's real home directory.
+  static Future<AppConfig> loadFromFile(File file) async {
+    try {
+      if (!await file.exists()) return AppConfig.empty();
+      final decoded = jsonDecode(await file.readAsString());
+      if (decoded is! Map<String, dynamic>) return AppConfig.empty();
+
+      final config = AppConfig.fromJson(decoded);
+      if (decoded.containsKey('ssh') || decoded.containsKey('oracle')) {
+        final sanitized = Map<String, dynamic>.from(decoded)
+          ..remove('ssh')
+          ..remove('oracle');
+        try {
+          await _writeJson(file, sanitized);
+        } catch (_) {
+          // Loading useful non-secret settings is still preferable when a
+          // read-only file prevents the best-effort scrub.
+        }
+      }
+      return config;
+    } catch (_) {
+      return AppConfig.empty();
+    }
+  }
+
   static Future<void> save(AppConfig config) async {
-    final file = await _configFile();
+    await _writeJson(await _configFile(), config.toJson());
+  }
+
+  static Future<void> _writeJson(File file, Map<String, dynamic> json) async {
     final encoder = const JsonEncoder.withIndent('  ');
-    await file.writeAsString(encoder.convert(config.toJson()));
+    await file.writeAsString(encoder.convert(json));
   }
 }
