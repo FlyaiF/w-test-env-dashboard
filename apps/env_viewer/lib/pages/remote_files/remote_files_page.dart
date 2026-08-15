@@ -242,7 +242,11 @@ class _RemoteFilesPageState extends State<RemoteFilesPage> {
                   _pathSuggestions(store, effectiveServerId, value.text),
               onSelected: (_) => _scrollPathToEnd(),
               optionsViewBuilder: (context, onSelected, options) =>
-                  _SuggestionOverlay(options: options, onSelected: onSelected),
+                  _SuggestionOverlay(
+                    options: options,
+                    onSelected: onSelected,
+                    onDirectoryPicked: _continueWalkInto,
+                  ),
               fieldViewBuilder: (context, controller, focusNode, _) {
                 // Enter always opens the typed path; suggestions are picked by
                 // click so completion can never hijack a deliberate open.
@@ -297,6 +301,19 @@ class _RemoteFilesPageState extends State<RemoteFilesPage> {
     return servers.first.id;
   }
 
+  /// A picked directory continues the walk instead of ending it. Filling the
+  /// field directly — rather than through RawAutocomplete's onSelected, which
+  /// records a selection and hides the overlay until the next keystroke —
+  /// makes the text change re-query suggestions, so the overlay immediately
+  /// lists the chosen directory's contents. Only picking a file completes.
+  void _continueWalkInto(String dirPath) {
+    _pathController.value = TextEditingValue(
+      text: dirPath,
+      selection: TextSelection.collapsed(offset: dirPath.length),
+    );
+    _scrollPathToEnd();
+  }
+
   Future<void> _openFreePath(RemoteFileStore store, int? serverId) async {
     final path = _pathController.text.trim();
     if (serverId == null || path.isEmpty) return;
@@ -319,12 +336,19 @@ class _RemoteFilesPageState extends State<RemoteFilesPage> {
 }
 
 /// The autocomplete dropdown for the free-path bar: a compact mono list of
-/// completed paths (directories end in `/` — picking one continues the walk).
+/// completed paths. Directories end in `/` and route through
+/// [onDirectoryPicked] so the overlay stays open on that directory's
+/// contents; only picking a file ([onSelected]) ends the completion.
 class _SuggestionOverlay extends StatelessWidget {
   final Iterable<String> options;
   final ValueChanged<String> onSelected;
+  final ValueChanged<String> onDirectoryPicked;
 
-  const _SuggestionOverlay({required this.options, required this.onSelected});
+  const _SuggestionOverlay({
+    required this.options,
+    required this.onSelected,
+    required this.onDirectoryPicked,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -354,7 +378,8 @@ class _SuggestionOverlay extends StatelessWidget {
                   cut < 0 ? option : '${stem.substring(cut + 1)}${isDir ? '/' : ''}';
               final dir = cut < 0 ? '' : stem.substring(0, cut + 1);
               return InkWell(
-                onTap: () => onSelected(option),
+                onTap: () =>
+                    isDir ? onDirectoryPicked(option) : onSelected(option),
                 child: Padding(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 7),

@@ -28,6 +28,26 @@ class _FakeSession extends RemoteFileSession {
   Future<void> connect() async {}
 }
 
+/// Session that reports connected and serves canned directory listings, so
+/// the free-path bar borrows a live lister without dialing SSH.
+class _ListingSession extends _FakeSession {
+  _ListingSession(super.spec);
+
+  static const listings = {
+    '/logs/': ['app/', 'gw.log'],
+    '/logs/app/': ['archive/', 'today.log'],
+  };
+
+  @override
+  Future<void> connect() async {
+    status = RemoteFileStatus.connected;
+  }
+
+  @override
+  Future<List<String>> listDirectory(String dirPath) async =>
+      listings[dirPath] ?? const [];
+}
+
 void main() {
   BackendClient client() {
     return BackendClient(
@@ -192,6 +212,49 @@ void main() {
     expect(find.text('gw.log'), findsOneWidget);
     expect(find.text('app.log'), findsOneWidget);
     expect(find.text('/home/ta66/SDZG/dtl-web-starter/logs/'), findsNWidgets(2));
+  });
+
+  testWidgets('picking a directory continues the walk; a file ends it', (
+    tester,
+  ) async {
+    final store = RemoteFileStore(client(), sessionFactory: _ListingSession.new);
+    await store.open(
+      serverId: 7,
+      title: 'A · 网关',
+      path: '/logs/gw.log',
+      mode: RemoteFileMode.view,
+    );
+
+    await tester.pumpWidget(wrap(store));
+    await tester.pump();
+    await tester.pump();
+
+    final field = find.byWidgetPredicate(
+      (w) => w is TextField && w.decoration?.hintText != null,
+    );
+    await tester.enterText(field, '/logs/');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // The live session lists /logs/: one directory, one file.
+    expect(find.text('app/'), findsOneWidget);
+    expect(find.text('gw.log'), findsOneWidget);
+
+    // A directory pick fills the field and keeps the overlay open on the
+    // directory's own contents instead of ending the completion.
+    await tester.tap(find.text('app/'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(pathFieldText(tester), '/logs/app/');
+    expect(find.text('archive/'), findsOneWidget);
+    expect(find.text('today.log'), findsOneWidget);
+
+    // A file pick completes: field filled, overlay gone.
+    await tester.tap(find.text('today.log'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(pathFieldText(tester), '/logs/app/today.log');
+    expect(find.text('archive/'), findsNothing);
   });
 
   testWidgets('a hand-edited path is not clobbered by tab switches', (
