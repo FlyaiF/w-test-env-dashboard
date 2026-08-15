@@ -26,14 +26,23 @@ information.
    complete file to a user-chosen location instead.
    Lines render as 64-line paragraphs (not one Text per line) so a drag-selection copies with its
    line breaks — `SelectionArea` joins per-widget selections without `\n`; a 复制全部 action copies
-   the whole buffer with the platform's EOL (`\r\n` on Windows).
-7. **Free path opens**: server dropdown (from the Resource Inventory) + path field + mode toggle on
+   the visible buffer with the platform's EOL (`\r\n` on Windows).
+   Paragraphs are anchored to absolute line numbers and the ring evicts in whole 64-line chunks, so
+   a filled paragraph's text never changes and selections survive the streaming rebuilds; during a
+   selection drag the rendered tail freezes and eviction is held (docs/log-viewer-research.md has
+   the full rationale). Known limits, accepted for now: a selection scrolled far out of the
+   viewport's cache is dropped (item disposal), and native select-all only covers laid-out items —
+   复制全部 is the bulk-copy path.
+7. **清空 (follow mode)**: a toolbar action hides everything currently shown — a view marker, not a
+   buffer wipe; the remote file and 下载 are untouched. Typical flow: 清空 → trigger the operation →
+   the view (and 复制全部) now holds exactly the fresh output.
+8. **Free path opens**: server dropdown (from the Resource Inventory) + path field + mode toggle on
    the page; presets stay one `logLocation` per component — no extra schema fields. The path field
    tracks the active tab's path (without clobbering hand edits) and autocompletes from two sources:
    keyword matches over known paths (open tabs + component 日志位置), and live SFTP directory
    listings borrowed from a connected session on the selected server (per-directory cached;
    best-effort — no session, no remote suggestions, never a new connection just to complete).
-8. Tabs keep streaming while the user navigates elsewhere but do not survive app restart; dropped
+9. Tabs keep streaming while the user navigates elsewhere but do not survive app restart; dropped
    connections offer manual 重连.
 
 ## Key code

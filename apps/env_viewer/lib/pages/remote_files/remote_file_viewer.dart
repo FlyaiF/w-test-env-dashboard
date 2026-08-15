@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_ui/shared_ui.dart';
@@ -43,12 +44,14 @@ class RemoteFileViewer extends StatelessWidget {
               Expanded(
                 child: ColoredBox(
                   color: tokens.cardBodyBg,
-                  child: session.buffer.isEmpty
+                  child: session.visibleLineCount == 0
                       ? Center(
                           child: session.status == RemoteFileStatus.connecting
                               ? const CircularProgressIndicator()
                               : Text(
-                                  '（空文件）',
+                                  session.viewClearedAt > 0
+                                      ? '已清空，等待新输出'
+                                      : '（空文件）',
                                   style: TextStyle(
                                     color: tokens.textSecondary,
                                   ),
@@ -122,6 +125,14 @@ class _Toolbar extends StatelessWidget {
               },
             ),
           ),
+          if (follow)
+            IconButton(
+              icon: const Icon(Icons.clear_all, size: 16),
+              tooltip: '清空显示',
+              visualDensity: VisualDensity.compact,
+              onPressed:
+                  session.visibleLineCount == 0 ? null : session.clearView,
+            ),
           if (follow && session.status == RemoteFileStatus.connected)
             IconButton(
               icon: Icon(session.paused ? Icons.play_arrow : Icons.pause,
@@ -151,8 +162,9 @@ class _Toolbar extends StatelessWidget {
             icon: const Icon(Icons.copy_all, size: 16),
             tooltip: '复制全部',
             visualDensity: VisualDensity.compact,
-            onPressed:
-                session.buffer.isEmpty ? null : () => _copyAll(context, session),
+            onPressed: session.visibleLineCount == 0
+                ? null
+                : () => _copyVisible(context, session),
           ),
           IconButton(
             icon: const Icon(Icons.download, size: 16),
@@ -165,24 +177,6 @@ class _Toolbar extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-
-  /// Copy the whole buffer (what the viewer holds — the ring may have dropped
-  /// older lines) with the platform's line ending, so pastes keep their lines
-  /// even in EOL-picky Windows editors.
-  Future<void> _copyAll(BuildContext context, RemoteFileSession session) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final buffer = session.buffer;
-    final eol = Platform.isWindows ? '\r\n' : '\n';
-    final text = StringBuffer();
-    for (var i = 0; i < buffer.length; i++) {
-      if (i > 0) text.write(eol);
-      text.write(buffer.lineAt(i));
-    }
-    await Clipboard.setData(ClipboardData(text: text.toString()));
-    messenger.showSnackBar(
-      SnackBar(content: Text('已复制 ${buffer.length} 行')),
     );
   }
 
@@ -253,6 +247,28 @@ class _Toolbar extends StatelessWidget {
   }
 }
 
+/// Copy every visible line — from the 清空 marker onward; the ring may have
+/// dropped older lines — with the platform's line ending, so pastes keep
+/// their lines even in EOL-picky Windows editors.
+Future<void> _copyVisible(
+  BuildContext context,
+  RemoteFileSession session,
+) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final buffer = session.buffer;
+  final eol = Platform.isWindows ? '\r\n' : '\n';
+  final text = StringBuffer();
+  var lines = 0;
+  for (var i = session.visibleStart; i < buffer.length; i++) {
+    if (lines++ > 0) text.write(eol);
+    text.write(buffer.lineAt(i));
+  }
+  await Clipboard.setData(ClipboardData(text: text.toString()));
+  messenger.showSnackBar(
+    SnackBar(content: Text('已复制 $lines 行')),
+  );
+}
+
 class _FailureBody extends StatelessWidget {
   final RemoteFileSession session;
 
@@ -288,64 +304,144 @@ class _FailureBody extends StatelessWidget {
 }
 
 class _LineList extends StatelessWidget {
-  /// Lines per rendered paragraph. One `Text` per line would break multi-line
-  /// copy: `SelectionArea` concatenates per-widget selections with no `\n`
-  /// between them, so a selection spanning widgets pastes as a single line.
-  /// Chunking keeps real newlines inside each paragraph while the ListView
-  /// still virtualizes (by chunk) over the 10k-line ring buffer.
-  static const int chunkSize = 64;
-
   final RemoteFileSession session;
 
   const _LineList({required this.session});
 
   @override
   Widget build(BuildContext context) {
-    final tokens = AppTokens.of(context);
-    final buffer = session.buffer;
-    final follow = session.mode == RemoteFileMode.follow;
-    final chunkCount = (buffer.length + chunkSize - 1) ~/ chunkSize;
-    return SelectionArea(
-      child: ListView.builder(
-        // 跟随: reversed so the newest line hugs the bottom and the view
-        // sticks there as lines stream in.
-        reverse: follow,
-        padding: const EdgeInsets.all(10),
-        itemCount: chunkCount,
-        itemBuilder: (context, i) {
-          final chunk = follow ? chunkCount - 1 - i : i;
-          final start = chunk * chunkSize;
-          var end = start + chunkSize;
-          if (end > buffer.length) end = buffer.length;
+    return SelectionArea(child: _ChunkedLines(session: session));
+  }
+}
 
-          final spans = <TextSpan>[];
-          for (var l = start; l < end; l++) {
-            final line = buffer.lineAt(l);
-            final isErr = line.contains('ERROR');
-            final isWarn = !isErr && line.contains('WARN');
-            spans.add(
-              TextSpan(
-                text: l == start ? line : '\n$line',
-                style: isErr
-                    ? TextStyle(color: tokens.err)
-                    : isWarn
-                        ? TextStyle(color: tokens.warn)
-                        : null,
-              ),
-            );
-          }
-          if (end < buffer.length) {
-            // Chunk-boundary newline: copied as a line break, rendered at
-            // near-zero height so no visible blank line appears every chunk.
-            spans.add(
-              const TextSpan(text: '\n', style: TextStyle(fontSize: 0.1)),
-            );
-          }
-          return Text.rich(
-            TextSpan(style: tokens.mono(fontSize: 12), children: spans),
+/// The line paragraphs. One `Text` per line would break multi-line copy
+/// (`SelectionArea` concatenates per-widget selections with no `\n` between
+/// them), so lines render in fixed-size chunks that the ListView virtualizes.
+///
+/// Chunks are anchored to *absolute* line numbers — chunk k always holds
+/// lines [k·size, (k+1)·size) of everything ever appended — and keyed by that
+/// index. Because the ring evicts in whole chunks, a filled chunk's text
+/// never changes again, and `RenderParagraph` only preserves a selection
+/// across rebuilds when its text is identical: anchoring is what keeps a
+/// selection alive while the tail streams. While a selection drag is in
+/// progress the rendered tail is additionally frozen and ring eviction held,
+/// so not even the newest, still-filling chunk mutates mid-gesture.
+class _ChunkedLines extends StatefulWidget {
+  final RemoteFileSession session;
+
+  const _ChunkedLines({required this.session});
+
+  @override
+  State<_ChunkedLines> createState() => _ChunkedLinesState();
+}
+
+class _ChunkedLinesState extends State<_ChunkedLines> {
+  ValueListenable<SelectableRegionSelectionStatus>? _selectionStatus;
+
+  /// Absolute committed-line count when the in-progress drag started, or
+  /// null when no drag is active. Rendering is capped here while set.
+  int? _frozenEnd;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final status = SelectableRegionSelectionStatusScope.maybeOf(context);
+    if (identical(status, _selectionStatus)) return;
+    _selectionStatus?.removeListener(_onSelectionStatus);
+    _selectionStatus = status;
+    status?.addListener(_onSelectionStatus);
+  }
+
+  @override
+  void dispose() {
+    _selectionStatus?.removeListener(_onSelectionStatus);
+    if (_frozenEnd != null) widget.session.buffer.holdEviction = false;
+    super.dispose();
+  }
+
+  void _onSelectionStatus() {
+    final changing =
+        _selectionStatus?.value == SelectableRegionSelectionStatus.changing;
+    if (changing && _frozenEnd == null) {
+      // No setState: freezing at the current edge changes nothing on screen.
+      _frozenEnd = widget.session.buffer.totalAppended;
+      widget.session.buffer.holdEviction = true;
+    } else if (!changing && _frozenEnd != null) {
+      setState(() {
+        _frozenEnd = null;
+        widget.session.buffer.holdEviction = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.of(context);
+    final session = widget.session;
+    final buffer = session.buffer;
+    final chunkSize = buffer.evictionChunk;
+    final follow = session.mode == RemoteFileMode.follow;
+
+    final firstAbs = buffer.firstRetained;
+    final startAbs = firstAbs + session.visibleStart;
+    var endAbs = buffer.totalAppended;
+    final frozen = _frozenEnd;
+    if (frozen != null && frozen < endAbs) endAbs = frozen;
+    if (endAbs <= startAbs) return const SizedBox.shrink();
+
+    final firstChunk = startAbs ~/ chunkSize;
+    final chunkCount = (endAbs - 1) ~/ chunkSize - firstChunk + 1;
+
+    return ListView.builder(
+      // 跟随: reversed so the newest line hugs the bottom and the view
+      // sticks there as lines stream in.
+      reverse: follow,
+      padding: const EdgeInsets.all(10),
+      itemCount: chunkCount,
+      // With keys, index shifts (new chunks in follow mode, whole-chunk
+      // eviction) reuse the existing elements instead of rebuilding
+      // paragraphs with foreign text — which would kill their selections.
+      findChildIndexCallback: (key) {
+        final chunk = (key as ValueKey<int>).value - firstChunk;
+        if (chunk < 0 || chunk >= chunkCount) return null;
+        return follow ? chunkCount - 1 - chunk : chunk;
+      },
+      itemBuilder: (context, i) {
+        final chunk = firstChunk + (follow ? chunkCount - 1 - i : i);
+        var start = chunk * chunkSize;
+        if (start < startAbs) start = startAbs;
+        var end = (chunk + 1) * chunkSize;
+        if (end > endAbs) end = endAbs;
+
+        final spans = <TextSpan>[];
+        for (var l = start; l < end; l++) {
+          final line = buffer.lineAt(l - firstAbs);
+          final isErr = line.contains('ERROR');
+          final isWarn = !isErr && line.contains('WARN');
+          spans.add(
+            TextSpan(
+              text: l == start ? line : '\n$line',
+              style: isErr
+                  ? TextStyle(color: tokens.err)
+                  : isWarn
+                      ? TextStyle(color: tokens.warn)
+                      : null,
+            ),
           );
-        },
-      ),
+        }
+        // Chunk-boundary newline: copied as a line break, rendered at
+        // near-zero height so no visible blank line appears every chunk.
+        // Unconditional, so a chunk's text is final the moment it fills.
+        spans.add(
+          const TextSpan(text: '\n', style: TextStyle(fontSize: 0.1)),
+        );
+        return KeyedSubtree(
+          key: ValueKey<int>(chunk),
+          child: Text.rich(
+            TextSpan(style: tokens.mono(fontSize: 12), children: spans),
+          ),
+        );
+      },
     );
   }
 }

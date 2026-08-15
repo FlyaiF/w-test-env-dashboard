@@ -63,13 +63,43 @@ void main() {
   });
 
   test('drops oldest lines beyond capacity but keeps the total count', () {
-    final buffer = LineBuffer(capacity: 3);
+    final buffer = LineBuffer(capacity: 3, evictionChunk: 1);
     for (var i = 1; i <= 5; i++) {
       buffer.append(bytes(utf8.encode('line$i\n')));
     }
 
     expect(allLines(buffer), ['line3', 'line4', 'line5']);
     expect(buffer.totalAppended, 5);
+  });
+
+  test('evicts in whole chunk multiples, keeping firstRetained aligned', () {
+    final buffer = LineBuffer(capacity: 6, evictionChunk: 4);
+    for (var i = 1; i <= 7; i++) {
+      buffer.append(bytes(utf8.encode('line$i\n')));
+    }
+    // Crossing capacity drops a whole chunk of 4, not just the excess 1.
+    expect(allLines(buffer), ['line5', 'line6', 'line7']);
+    expect(buffer.firstRetained, 4);
+    expect(buffer.totalAppended, 7);
+
+    for (var i = 8; i <= 11; i++) {
+      buffer.append(bytes(utf8.encode('line$i\n')));
+    }
+    expect(allLines(buffer), ['line9', 'line10', 'line11']);
+    expect(buffer.firstRetained, 8);
+  });
+
+  test('holdEviction lets the ring grow, releasing evicts back down', () {
+    final buffer = LineBuffer(capacity: 4, evictionChunk: 2);
+    buffer.holdEviction = true;
+    for (var i = 1; i <= 8; i++) {
+      buffer.append(bytes(utf8.encode('line$i\n')));
+    }
+    expect(buffer.length, 8);
+
+    buffer.holdEviction = false;
+    expect(allLines(buffer), ['line5', 'line6', 'line7', 'line8']);
+    expect(buffer.firstRetained, 4);
   });
 
   test('shellQuote survives spaces and single quotes', () {

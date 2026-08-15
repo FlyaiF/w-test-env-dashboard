@@ -23,24 +23,50 @@ class _Line {
 /// Bounded line store for a streamed remote file. Bytes are split into lines
 /// here (LF, tolerating CRLF) and kept raw so the encoding can be switched
 /// after the fact — decoding happens lazily per line and is cached until the
-/// encoding changes. Oldest lines fall off beyond [capacity].
+/// encoding changes. Oldest lines fall off beyond [capacity], in whole
+/// multiples of [evictionChunk].
 class LineBuffer {
   final int capacity;
+
+  /// Eviction granularity: oldest lines are dropped in whole multiples of
+  /// this, so [firstRetained] is always a multiple. The viewer paragraphs
+  /// lines in chunks of this same size anchored to absolute line numbers;
+  /// whole-chunk eviction means a filled paragraph's text never changes —
+  /// and Flutter only preserves a selection across rebuilds when the
+  /// paragraph text is identical.
+  final int evictionChunk;
+
   final List<_Line> _lines = [];
   final BytesBuilder _partial = BytesBuilder(copy: true);
   RemoteFileEncoding _encoding;
+  bool _holdEviction = false;
 
   /// Total lines ever appended, including ones that fell off the ring.
   int totalAppended = 0;
 
   LineBuffer({
     this.capacity = 10000,
+    this.evictionChunk = 64,
     RemoteFileEncoding encoding = RemoteFileEncoding.utf8,
-  }) : _encoding = encoding;
+  })  : assert(capacity >= evictionChunk),
+        _encoding = encoding;
 
   int get length => _lines.length;
   bool get isEmpty => _lines.isEmpty;
   RemoteFileEncoding get encoding => _encoding;
+
+  /// Absolute line number of `lineAt(0)` — always a multiple of
+  /// [evictionChunk].
+  int get firstRetained => totalAppended - _lines.length;
+
+  /// While true the ring may grow beyond [capacity] instead of evicting —
+  /// held during a selection drag so no rendered line shifts or disappears
+  /// mid-gesture. Releasing evicts back down to [capacity].
+  bool get holdEviction => _holdEviction;
+  set holdEviction(bool value) {
+    _holdEviction = value;
+    if (!value) _evict();
+  }
 
   set encoding(RemoteFileEncoding value) {
     if (value == _encoding) return;
@@ -84,9 +110,14 @@ class LineBuffer {
     }
     _lines.add(_Line(bytes));
     totalAppended++;
-    if (_lines.length > capacity) {
-      _lines.removeRange(0, _lines.length - capacity);
-    }
+    if (!_holdEviction) _evict();
+  }
+
+  void _evict() {
+    if (_lines.length <= capacity) return;
+    final excess = _lines.length - capacity;
+    final remove = (excess + evictionChunk - 1) ~/ evictionChunk * evictionChunk;
+    _lines.removeRange(0, remove);
   }
 
   /// Decoded line at [index] (0 = oldest retained), cached per encoding.

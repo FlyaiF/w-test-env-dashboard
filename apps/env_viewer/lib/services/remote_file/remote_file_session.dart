@@ -46,6 +46,12 @@ class RemoteFileSession extends ChangeNotifier {
   /// buffering so nothing is missed.
   bool paused = false;
 
+  /// 清空: absolute line number before which lines are hidden from the view
+  /// and from 复制全部. A view marker, DevTools-style — the buffer keeps
+  /// rotating underneath and the remote file is untouched, so after a clear
+  /// the visible/copyable content is exactly the output that arrived since.
+  int viewClearedAt = 0;
+
   SSHClient? _client;
   SSHSession? _tail;
   bool _disposed = false;
@@ -75,10 +81,26 @@ class RemoteFileSession extends ChangeNotifier {
     notifyListeners();
   }
 
+  void clearView() {
+    viewClearedAt = buffer.totalAppended;
+    notifyListeners();
+  }
+
+  /// First buffer index the viewer should render — the 清空 marker, clamped
+  /// to what the ring still retains.
+  int get visibleStart {
+    final start = viewClearedAt - buffer.firstRetained;
+    if (start < 0) return 0;
+    return start > buffer.length ? buffer.length : start;
+  }
+
+  int get visibleLineCount => buffer.length - visibleStart;
+
   Future<void> connect() async {
     final generation = ++_generation;
     _closeTransport();
     buffer.clear();
+    viewClearedAt = 0;
     truncated = false;
     _setStatus(RemoteFileStatus.connecting, detail: null);
     try {
@@ -201,6 +223,7 @@ class RemoteFileSession extends ChangeNotifier {
     }
     final generation = ++_generation;
     buffer.clear();
+    viewClearedAt = 0;
     truncated = false;
     _setStatus(RemoteFileStatus.connecting);
     try {
