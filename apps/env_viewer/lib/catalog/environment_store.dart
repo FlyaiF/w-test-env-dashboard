@@ -33,6 +33,11 @@ class EnvironmentStore extends ChangeNotifier {
 
   int get totalCount => _all.length;
 
+  /// All environments regardless of the active search filter, in backend
+  /// order. Used to compute resource-usage annotations that must not shrink
+  /// with the catalog search.
+  List<EnvironmentView> get allEnvironments => List.unmodifiable(_all);
+
   /// Environments matching the current search, in backend order.
   List<EnvironmentView> get environments {
     if (_search.isEmpty) return List.unmodifiable(_all);

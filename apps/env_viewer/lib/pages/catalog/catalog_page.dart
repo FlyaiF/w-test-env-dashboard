@@ -316,11 +316,30 @@ class _CatalogPageState extends State<CatalogPage> {
     }
     if (!mounted) return;
     final store = context.read<EnvironmentStore>();
+    // Annotate each resource with the environments already referencing it, so
+    // same-address entries in the picker are distinguishable.
+    final serverUsage = <int, List<String>>{};
+    final databaseUsage = <int, List<String>>{};
+    void record(Map<int, List<String>> usage, int id, String name) {
+      final names = usage.putIfAbsent(id, () => <String>[]);
+      if (!names.contains(name)) names.add(name);
+    }
+
+    for (final env in store.allEnvironments) {
+      for (final c in env.components) {
+        if (c.serverId != null) record(serverUsage, c.serverId!, env.name);
+        for (final databaseId in c.databaseIds) {
+          record(databaseUsage, databaseId, env.name);
+        }
+      }
+    }
     final saved = await showComponentLinksEditor(
       context,
       component: component,
       servers: inventory.servers,
       databases: inventory.databases,
+      serverUsage: serverUsage,
+      databaseUsage: databaseUsage,
       onSave: (input) async {
         final ok = await store.setComponentLinks(component.id, input);
         return ok ? null : (store.error ?? '操作失败');

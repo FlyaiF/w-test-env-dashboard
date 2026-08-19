@@ -8,6 +8,7 @@ import 'package:env_viewer/catalog/environment_view.dart';
 import 'package:env_viewer/config/config_service.dart';
 import 'package:env_viewer/config/config_store.dart';
 import 'package:env_viewer/inventory/inventory_store.dart';
+import 'package:env_viewer/inventory/inventory_view.dart';
 import 'package:env_viewer/pages/catalog/catalog_link_editor.dart';
 import 'package:env_viewer/pages/catalog/catalog_page.dart';
 import 'package:env_viewer/services/access/access_launcher.dart';
@@ -44,6 +45,10 @@ void main() {
   testWidgets('links a Component to one Server and selected Databases', (
     tester,
   ) async {
+    // Desktop-sized surface so both dialog list panes show several rows.
+    tester.view.physicalSize = const Size(1400, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
     Map<String, dynamic>? submitted;
     final client = BackendClient(
       baseUrl: 'http://test',
@@ -127,9 +132,10 @@ void main() {
     await tester.tap(find.byTooltip('关联资源'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const ValueKey('component-links-server')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('srv-b').last);
+    // Rows are annotated with the environments already using each resource.
+    expect(find.text('用于：Alpha'), findsNWidgets(2));
+
+    await tester.tap(find.byKey(const ValueKey('component-links-server-2')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('component-links-database-3')));
     await tester.tap(find.byKey(const ValueKey('component-links-database-4')));
@@ -258,9 +264,7 @@ void main() {
     expect(find.text('#99（资源不存在）'), findsOneWidget);
     expect(find.text('#88（资源不存在）'), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('component-links-server')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('未关联').last);
+    await tester.tap(find.byKey(const ValueKey('component-links-server-none')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('component-links-database-88')));
     await tester.tap(find.byKey(const ValueKey('component-links-save')));
@@ -270,6 +274,131 @@ void main() {
     expect(submitted?.databaseIds, isEmpty);
     expect(find.byType(AlertDialog), findsNothing);
   });
+
+  testWidgets(
+    'disambiguates same-address resources and filters through search',
+    (tester) async {
+      // Desktop-sized surface so both dialog list panes show several rows.
+      tester.view.physicalSize = const Size(1400, 2000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      const servers = [
+        ServerView(id: 1, host: '10.20.162.81', sshUsername: 'root'),
+        ServerView(id: 2, host: '10.20.162.81-ta66', sshUsername: 'ta66'),
+      ];
+      const databases = [
+        DatabaseView(
+          id: 41,
+          roleLabel: '业务库',
+          typeLabel: 'Oracle',
+          host: '10.20.154.151',
+          port: 1521,
+          serviceName: 'orcl',
+          username: 'trade1',
+        ),
+        DatabaseView(
+          id: 42,
+          roleLabel: '业务库',
+          typeLabel: 'Oracle',
+          host: '10.20.154.151',
+          port: 1521,
+          serviceName: 'orcl',
+          username: 'trade2',
+        ),
+      ];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => FilledButton(
+                onPressed: () => showComponentLinksEditor(
+                  context,
+                  component: const ComponentView(
+                    id: 10,
+                    roleLabel: '应用服务',
+                    serverId: 1,
+                    databaseIds: [41],
+                    versionProbeLabel: '未配置',
+                    collectionState: CollectionState.notCollected,
+                    collectionStatusLabel: '未采集',
+                  ),
+                  servers: servers,
+                  databases: databases,
+                  serverUsage: const {
+                    1: ['山东主干'],
+                    2: ['天津主干'],
+                  },
+                  databaseUsage: const {
+                    41: ['山东主干'],
+                    42: ['天津主干'],
+                  },
+                  onSave: (_) async => null,
+                ),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      // Servers show their SSH account inline: user@host.
+      expect(find.text('root@10.20.162.81'), findsOneWidget);
+      expect(find.text('ta66@10.20.162.81-ta66'), findsOneWidget);
+
+      // Same-address databases are told apart by login user and usage.
+      expect(
+        find.text('业务库 · Oracle · trade1@10.20.154.151:1521/orcl'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('业务库 · Oracle · trade2@10.20.154.151:1521/orcl'),
+        findsOneWidget,
+      );
+      expect(find.text('用于：山东主干'), findsNWidgets(2));
+      expect(find.text('用于：天津主干'), findsNWidgets(2));
+
+      // Search hides non-matching rows but keeps the current selections.
+      await tester.enterText(
+        find.byKey(const ValueKey('component-links-search')),
+        'ta66',
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('component-links-server-2')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('component-links-server-1')),
+        findsOneWidget, // selected server stays visible
+      );
+      expect(
+        find.byKey(const ValueKey('component-links-database-41')),
+        findsOneWidget, // selected database stays visible
+      );
+      expect(
+        find.byKey(const ValueKey('component-links-database-42')),
+        findsNothing,
+      );
+
+      // Environment names are searchable too.
+      await tester.enterText(
+        find.byKey(const ValueKey('component-links-search')),
+        '天津',
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('component-links-database-42')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('component-links-server-2')),
+        findsOneWidget,
+      );
+    },
+  );
 
   testWidgets('waits for the in-flight inventory load before opening', (
     tester,
@@ -331,8 +460,6 @@ void main() {
 
     expect(find.byType(AlertDialog), findsOneWidget);
     expect(find.textContaining('业务库 · Oracle · db-a'), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('component-links-server')));
-    await tester.pumpAndSettle();
     expect(find.text('srv-a'), findsOneWidget);
     expect(inventoryRequestCount, 2);
   });
