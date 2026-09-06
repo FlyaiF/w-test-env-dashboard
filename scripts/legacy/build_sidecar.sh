@@ -1,8 +1,8 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 SIDECAR_DIR="$PROJECT_DIR/go_sidecar"
 BUILD_DIR="$PROJECT_DIR/build/sidecar"
 JDBC_HELPER_DIR="$SIDECAR_DIR/jdbc_helper"
@@ -20,7 +20,7 @@ LDFLAGS="-s -w -X $PKG.Version=$VERSION -X $PKG.Commit=$COMMIT -X $PKG.BuildTime
 
 # Build for current platform only by default
 # Pass "all" as argument to cross-compile
-if [ "$1" = "all" ]; then
+if [ "${1:-}" = "all" ]; then
     echo "Cross-compiling for all platforms..."
 
     GOOS=darwin GOARCH=amd64 go build -ldflags="$LDFLAGS" -o "$BUILD_DIR/darwin-amd64/go_sidecar" .

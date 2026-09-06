@@ -57,7 +57,8 @@ See the [documentation index](../README.md) for other capabilities.
 
 ## Verification entry points
 
-Automated behavior checks live in [remote file state/viewer tests](../../apps/env_viewer/test/remote_files/)
+Automated behavior checks live in [page/viewer tests](../../apps/env_viewer/test/pages/remote_files/),
+[state/path logic tests](../../apps/env_viewer/test/remote_files/)
 and [session/buffer tests](../../apps/env_viewer/test/services/remote_file/). Run the client checks
 listed in the [development guide](development.md). For transport changes, also exercise a reachable
 SSH Server: brokered open, missing-secret fallback, follow/view, reconnect, clear/copy and download.

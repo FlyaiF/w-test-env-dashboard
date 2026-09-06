@@ -106,6 +106,43 @@ jobs:
           dart analyze
           dart test
 
+  zipr-tool-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.41.6'
+          cache: true
+
+      - name: Cache Flutter pub packages
+        uses: actions/cache@v5
+        with:
+          path: .pub-cache
+          key: ${{ runner.os }}-flutter-pub-${{ hashFiles('apps/**/pubspec.lock', 'packages/**/pubspec.yaml') }}
+          restore-keys: ${{ runner.os }}-flutter-pub-
+
+      - name: Prepare zipr_tool
+        working-directory: apps/zipr_tool
+        run: |
+          bash ../../scripts/sync_assets.sh
+          flutter pub get
+
+      - name: Analyze zipr_tool
+        working-directory: apps/zipr_tool
+        run: flutter analyze
+
+      - name: Test zipr_tool
+        working-directory: apps/zipr_tool
+        run: |
+          unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
+          flutter test
+
   env-viewer-macos:
     runs-on: macos-latest
     steps:
@@ -417,7 +454,7 @@ jobs:
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [backend, env-viewer-checks, env-viewer-macos, zipr-tool-macos, env-viewer-windows, zipr-tool-windows]
+    needs: [backend, env-viewer-checks, zipr-tool-checks, env-viewer-macos, zipr-tool-macos, env-viewer-windows, zipr-tool-windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write

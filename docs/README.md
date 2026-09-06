@@ -13,6 +13,7 @@
 | 术语定义 | [CONTEXT.md](../CONTEXT.md) |
 | 当前领域与代码归属 | [CONTEXT-MAP.md](../CONTEXT-MAP.md) |
 | 开发与验证范围 | [development.md](guides/development.md) |
+| 开发、发布、独立工具与遗留脚本 | [脚本索引](../scripts/README.md) |
 | 当前 UI 规则与修改入口 | [ui.md](guides/ui.md) |
 | 只读远程文件与日志 | [remote-file-viewer.md](guides/remote-file-viewer.md) |
 | 客户端更新、首次安装与发布 | [client-update.md](guides/client-update.md) |

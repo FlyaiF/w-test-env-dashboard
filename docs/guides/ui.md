@@ -28,7 +28,7 @@
 | 环境目录 | `apps/env_viewer/lib/pages/catalog/`、`lib/catalog/environment_store.dart` | `lib/catalog/catalog_acl.dart`、`lib/api/backend_client.dart` | `apps/env_viewer/test/catalog/`、`test/pages/catalog_page_test.dart` |
 | 资源清单 | `apps/env_viewer/lib/pages/inventory/`、`lib/inventory/inventory_store.dart` | `lib/inventory/inventory_acl.dart`、后端 inventory | `apps/env_viewer/test/inventory/`、`test/pages/inventory/` |
 | 工具启动 | `apps/env_viewer/lib/pages/catalog/component_access.dart` | `lib/services/access/`、`lib/services/ssh_tools/`、`lib/services/db_tools/` | `apps/env_viewer/test/access/`、`test/ssh_tools/`、`test/db_tools/` |
-| 日志文件 | `apps/env_viewer/lib/pages/remote_files/`、`lib/remote_files/` | `lib/services/remote_file/` | `apps/env_viewer/test/remote_files/`、`test/services/remote_file/` |
+| 日志文件 | `apps/env_viewer/lib/pages/remote_files/`、`lib/remote_files/` | `lib/services/remote_file/` | `apps/env_viewer/test/pages/remote_files/`、`test/remote_files/`、`test/services/remote_file/` |
 | 主题与导航 | `apps/env_viewer/lib/widgets/app_scaffold.dart` | `packages/shared_ui/lib/src/` | `apps/env_viewer/test/main_navigation_test.dart`，以及两个应用的页面用例 |
 
 表中缩写 `lib/`、`test/` 均相对于该行的应用根目录。操作和展示规则应沿现有模块修改，

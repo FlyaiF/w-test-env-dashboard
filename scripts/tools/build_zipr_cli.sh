@@ -1,15 +1,15 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 ZIPR_DIR="$PROJECT_DIR/zipr"
 BUILD_DIR="$PROJECT_DIR/build/zipr"
 
 echo "=== Building zipr CLI ==="
 cd "$ZIPR_DIR"
 
-if [ "$1" = "all" ]; then
+if [ "${1:-}" = "all" ]; then
     echo "Cross-compiling for all platforms..."
 
     cargo build --release --target x86_64-apple-darwin

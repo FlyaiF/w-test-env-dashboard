@@ -52,11 +52,13 @@ What you should see on a healthy launch:
 unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
 
 cd apps/zipr_tool
-flutter test                  # ~36 widget + service tests, FFI-mocked
+flutter test                  # widget + service tests, FFI-mocked
 flutter analyze               # must be clean before pushing
 ```
 
 `zipr_service_test.dart` uses a mock `ZiprBridgeInterface` so tests don't depend on the Rust toolchain.
+The `zipr-tool-checks` CI job runs analyze/test; tagged releases require it to pass.
+The independent CLI build is an optional developer tool documented in [scripts](../../scripts/README.md).
 
 ## Regenerating Rust→Dart bindings
 

@@ -132,6 +132,6 @@ ORACLE_JDBC_URL=... ORACLE_USERNAME=... ORACLE_PASSWORD=... ACCESS_SECRET_KEY=..
 
 ## Legacy note
 
-`go_sidecar/` and `scripts/build_sidecar.sh` remain in the repository only as the pre-redesign
+`go_sidecar/` and `scripts/legacy/build_sidecar.sh` remain in the repository only as the pre-redesign
 implementation and migration reference. Current `env_viewer` development, CI, and release paths do
 not build, copy, or package the sidecar or its former JDBC helper.

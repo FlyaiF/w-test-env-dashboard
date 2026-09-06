@@ -74,6 +74,9 @@ Principal HTTP routes are `/api/environments`, `/api/servers`, `/api/databases`,
 
 ## Common Commands
 
+See [scripts/README.md](scripts/README.md) for current entry points, standalone CLI tooling and
+legacy scripts. Only current entry points belong in the desktop delivery path.
+
 ```bash
 # One-time per checkout / after pulling new font files
 ./scripts/sync_assets.sh
@@ -138,7 +141,7 @@ UPDATE_SSH_TARGET=user@backend-host UPDATE_REMOTE_DIR=/opt/env-dashboard/client-
 - `apps/zipr_tool/rust/Cargo.toml` — FFI crate; depends on the repo-root `zipr` submodule
 - `packages/shared_ui/lib/src/app_scaffold.dart` — generic NavGroup/NavItem-driven scaffold
 - `zipr/src/lib.rs` — core archive diff and patching logic
-- `go_sidecar/` and `scripts/build_sidecar.sh` — legacy-only implementation/reference tooling; do not
+- `go_sidecar/` and `scripts/legacy/build_sidecar.sh` — legacy-only implementation/reference tooling; do not
   reintroduce them into the active client delivery path
 
 ## Gotchas

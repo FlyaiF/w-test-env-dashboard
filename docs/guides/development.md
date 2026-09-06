@@ -4,7 +4,7 @@
 > Scope: repository change and verification entry points
 > Reviewed: 2026-09-06 (against CI configuration; commands not executed by this documentation change)
 
-先读各模块 README 获取环境前提。本页记录按修改范围选择检查的规则，
+先读各模块 README 获取环境前提；脚本用途见[脚本索引](../../scripts/README.md)。本页记录按修改范围选择检查的规则，
 CI 实际执行内容以[工作流](../../.github/workflows/build.yml)为准。
 
 ## 验证矩阵
@@ -14,7 +14,7 @@ CI 实际执行内容以[工作流](../../.github/workflows/build.yml)为准。
 | backend | Maven verify；发布相关用 probe-drivers profile | probe-drivers clean verify，加驱动打包检查 |
 | env_viewer | flutter analyze、flutter test | analyze、test，加 macOS/Windows 构建 |
 | updater | 独立 Dart analyze、test | 独立 analyze、test，按平台打包 |
-| zipr_tool | flutter analyze、flutter test；FFI 修改需验证真实 Rust 构建 | macOS/Windows 构建；未单独执行 Flutter analyze/test |
+| zipr_tool | flutter analyze、flutter test；FFI 修改需验证真实 Rust 构建 | 独立 analyze/test，加 macOS/Windows 构建；发布等待检查通过 |
 | shared_ui | 两个应用的 analyze/test；视觉修改检查两应用的亮暗主题 | 通过应用作业间接覆盖，没有独立测试作业 |
 | 纯文档 | diff、仓库链接、状态与当前代码的一致性 | 没有独立文档检查作业 |
 
@@ -68,6 +68,6 @@ mvn -f backend/pom.xml test -Dgroups=oracle-it -DexcludedGroups=
 - `zipr/` 是独立子模块，修改时遵循其中的说明；env_viewer/backend 开发无需初始化它。
 - `apps/zipr_tool/lib/src/rust/` 为 FFI 生成代码，修改 Rust interface 后按
   [zipr_tool README](../../apps/zipr_tool/README.md)重新生成并一同提交。
-- `go_sidecar/`、`scripts/build_sidecar.sh` 仅供历史参考。
+- `go_sidecar/`、`scripts/legacy/build_sidecar.sh` 仅供历史参考。
 - `apps/*/assets/` 是同步产物；字体源文件在根 `assets/fonts/`。
 - 发布涉及独立后端 jar、桌面包和 updater；具体契约见[更新与发布指南](client-update.md)。

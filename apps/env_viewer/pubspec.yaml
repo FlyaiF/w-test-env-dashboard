@@ -10,7 +10,6 @@ dependencies:
   flutter:
     sdk: flutter
   crypto: ^3.0.6
-  cupertino_icons: ^1.0.8
   dartssh2: ^2.9.0
   fast_gbk: ^1.0.0
   file_selector: ^1.0.3
@@ -27,9 +26,6 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
-  test: ^1.30.0
-  integration_test:
-    sdk: flutter
 
 flutter:
   uses-material-design: true
