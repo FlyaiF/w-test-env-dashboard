@@ -1,5 +1,7 @@
 # Build the backend in Spring Boot (Java) and retire the Go sidecar
 
+> Status: accepted
+
 The monitored applications are themselves Spring Boot, the team lives in Java, and JDBC has the
 richest driver ecosystem for the databases we must reach (Oracle, Dameng, OceanBase). The clearest
 signal: the existing Go sidecar already shells out to a **Java helper** for OceanBase — the Go design

@@ -1,5 +1,11 @@
 # env_viewer 自动更新（client self-update）
 
+> Status: current
+> Scope: env_viewer、更新助手与后端发布分发
+> Reviewed: 2026-09-06 (文档整理；不代表平台端到端验收)
+
+[文档索引](../README.md) · [发布说明约定](../releases/README.md)
+
 env_viewer 从后端检查并下载新版本，由随包分发的更新助手完成替换与回滚。仅覆盖
 env_viewer（不含 zipr_tool 与后端）；支持 Windows 与 macOS；更新永远由用户主动触发，
 没有强制升级机制。
@@ -83,3 +89,17 @@ zip。15 秒内没有 marker 视为坏版本：杀掉新进程、恢复 `.backup
    `/latest` 打印客户端将看到的内容。
 
 回滚一个已发布版本：把它的 zip 从目录里删掉即可，客户端会看到上一个最高版本。
+
+这会影响后续版本发现与下载，已经安装该版本的客户端不会自动降级；安装时失败的自动回滚
+由更新助手完成，两者是不同的操作。
+
+## 修改与验证入口
+
+| 范围 | 代码 | 测试 |
+| --- | --- | --- |
+| 版本发现和下载 | [后端 clientupdate](../../backend/src/main/java/com/flyaif/envdashboard/clientupdate/) | [更新接口集成测试](../../backend/src/test/java/com/flyaif/envdashboard/clientupdate/ClientUpdateApiIntegrationTest.java) |
+| 客户端检查与交接 | [AppUpdateStore](../../apps/env_viewer/lib/services/update/app_update_store.dart) | [客户端更新测试](../../apps/env_viewer/test/app_update_store_test.dart) |
+| 替换与失败回滚 | [更新助手](../../apps/env_viewer/updater/) | [助手测试](../../apps/env_viewer/updater/test/updater_test.dart) |
+
+执行命令见[开发验证指南](development.md)。涉及安装目录替换或打包变化时，还需要在对应
+桌面平台验证更新成功与失败回滚路径；本页的文档整理不代表这些场景已完成验收。

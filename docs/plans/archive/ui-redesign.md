@@ -1,14 +1,22 @@
 # env_viewer UI/Internal Rework — Handoff Plan
 
-Status: **decisions locked, ready to implement** (2026-07-29).
-Decided interactively with the user via design grilling + visual prototypes; do not re-litigate the
-locked decisions below. The approved visual prototype is
-[`docs/prototypes/ui-redesign-visual-directions.html`](prototypes/ui-redesign-visual-directions.html)
+> Status: archived
+> Scope: 2026-07-29 UI redesign handoff
+> Archived: 2026-09-06
+
+The main UI changes are present in code: shared theme/primitives, sidebar persistence, resource
+reference counts, collection detail, catalog health, inventory tables and settings feedback.
+The original phases below preserve design intent; they are not a fresh implementation checklist.
+Historical manual acceptance and production-data checks have not been re-run by this documentation
+cleanup. Current behavior and code navigation live in the [UI guide](../../guides/ui.md).
+
+The approved visual prototype is
+[`docs/prototypes/ui-redesign-visual-directions.html`](../../prototypes/ui-redesign-visual-directions.html)
 (open in a browser; **方向 D 组合方案 is the approved design**, A/B/C are rejected references; ←/→
 switches variants, 🌓 toggles light/dark). Published copy:
 https://claude.ai/code/artifact/2d42b168-cc8a-4cf2-8b2c-813bed58b053
 
-## Locked decisions
+## Original design decisions
 
 1. **Core job**: ops glance-and-launch — find an environment fast, read health/staleness at a
    glance, launch SSH/DB tools in 1–2 clicks. Curation/CRUD stays but is secondary.
@@ -133,7 +141,7 @@ row actions slightly smaller — exact Flutter sizes may adapt, uniformity is th
   `~/.test-env-dashboard/h2/envdashboard` (run backend with `SPRING_DATASOURCE_URL` override) for a
   realistic visual check in both light and dark.
 
-## Notes
+## Historical handoff notes (not current setup instructions)
 - Work happens on branch `design/env-dashboard-redesign`.
 - Oracle `DATE` gotcha: keep calling `.toLocal()` before display.
 - The prototype HTML is throwaway design source, not production code; do not port its CSS literally

@@ -1,10 +1,17 @@
 # 04 — Resource Inventory: shared Server / Database aggregates + linking
 
-Status: done — backend and client management/linking UI implemented
+> Status: archived
+> Scope: original redesign implementation slice
+> Archived: 2026-09-06
+
+Historical handoff evidence only. Status and test results below describe the original work,
+not verification performed during documentation cleanup. Current sources: [documentation index](../../../../README.md).
+
+Historical status: done — backend and client management/linking UI implemented
 
 ## Parent
 
-[docs/PRD-redesign.md](../../../docs/PRD-redesign.md) — Test Environment Dashboard Redesign.
+[docs/plans/archive/env-dashboard-redesign.md](../../env-dashboard-redesign.md) — Test Environment Dashboard Redesign.
 
 ## What to build
 

@@ -1,8 +1,17 @@
 # PRD — Test Environment Dashboard Redesign
 
-> Status: implementation / cutover stabilization · Scope: `env_viewer` client + Spring backend · Out of scope: `zipr_tool`
-> Companion docs: [CONTEXT.md](../CONTEXT.md) (glossary), [CONTEXT-MAP.md](../CONTEXT-MAP.md)
-> (bounded contexts), [docs/adr/](./adr) (decisions 0001–0008).
+> Status: archived
+> Scope: original env_viewer / Spring backend redesign plan
+> Archived: 2026-09-06
+
+This is the original scope and delivery snapshot, not the current product contract or an active
+checklist. In-app SSH file access was subsequently accepted in
+[ADR-0009](../../adr/0009-client-side-read-only-remote-files.md), replacing the log-viewer exclusion
+in sections 2 and 7. References to reserved future seams describe intent, not implemented endpoints.
+Production cutover acceptance is not established by this archived document.
+
+Current sources: [context map](../../../CONTEXT-MAP.md), [glossary](../../../CONTEXT.md),
+[guides and decisions](../../README.md).
 
 ## 1. Problem & goals
 
@@ -35,7 +44,7 @@ A web client (future; we only reserve seams for it).
 
 ## 3. Domain model
 
-See [CONTEXT.md](../CONTEXT.md) for definitions. Aggregates:
+See [CONTEXT.md](../../../CONTEXT.md) for definitions. Aggregates:
 
 ```
 Environment (aggregate root) ── owns ──► Component (1..N)
@@ -61,7 +70,7 @@ Component has one version or blank.
 
 ## 4. Bounded contexts
 
-Full map in [CONTEXT-MAP.md](../CONTEXT-MAP.md). Summary:
+Full map in [CONTEXT-MAP.md](../../../CONTEXT-MAP.md). Summary:
 
 | Context | Type | Side | Responsibility |
 |---|---|---|---|
@@ -139,10 +148,10 @@ Backend cutover is necessarily **big-bang** (Go→Java, new schema). Approach (A
 - **OceanBase via JDBC** — confirm a clean JDBC path replaces the current Go→Java-helper shellout.
   _Resolved:_ `com.oceanbase:oceanbase-client:2.4.7.1` (Maven Central) provides the JDBC path.
 
-## 10. Current delivery status
+## 10. Delivery status at handoff (historical)
 
 The redesign was split into implementation slices 01–08 under
-`.scratch/env-dashboard-redesign/issues/`. The walking skeleton, thin-client catalog, catalog writes,
+[archived implementation slices](redesign-slices/README.md). The walking skeleton, thin-client catalog, catalog writes,
 backend Resource Inventory, collection/probes, access brokering/tool launching, one-time import, and
 manual “collect now” path are implemented. The `env_viewer` Resource Inventory UI now manages shared
 Servers and Databases, links them from Components, and surfaces reverse Environment references.

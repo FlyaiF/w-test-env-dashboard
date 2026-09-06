@@ -1,6 +1,22 @@
-# CLAUDE.md
+# Agent collaboration guide
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Shared instructions for AI collaborators working in this repository. `CLAUDE.md` references this
+file so agent-specific entry points do not duplicate these rules.
+
+## Documentation workflow
+
+- Start at [README.md](README.md) and the [documentation index](docs/README.md); read the relevant
+  module README and current guide before editing a capability.
+- Follow [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) when adding, moving or updating documentation.
+- Current relationships live in [CONTEXT-MAP.md](CONTEXT-MAP.md); `CONTEXT.md` is a glossary only.
+  Record significant trade-offs in ADRs with status and explicit replacement links.
+- `docs/plans/archive/` and `docs/research/` preserve historical context, not active instructions.
+  In particular, ADR-0009 replaces ADR-0005’s in-app log-viewer prohibition; the no-durable-secrets
+  rule remains valid.
+- Update current guides with behavior changes, archive finished plans, and fix all references when
+  moving documents. Do not infer successful runtime/production acceptance from code presence.
+- Select verification using [development.md](docs/guides/development.md); shared UI changes affect
+  both apps and the updater has its own Dart checks.
 
 ## Project Overview
 
@@ -22,7 +38,8 @@ shared UI package. The UI of both apps is in Chinese.
 
 ## Architecture
 
-`env_viewer` is a thin HTTP client. `BackendClient` talks to one separately deployed Spring backend;
+`env_viewer` uses HTTP for canonical backend data and credential brokering, and direct client-side
+SSH/SFTP for read-only remote files (ADR-0009). `BackendClient` talks to one separately deployed Spring backend;
 the URL defaults to `http://localhost:8080` and can be changed in Settings or locked with
 `ENV_DASHBOARD_BACKEND_URL`. The app does not spawn a local backend and ships no database drivers.
 
@@ -36,7 +53,8 @@ the URL defaults to `http://localhost:8080` and can be changed in Settings or lo
 - **Version collection**: scheduled/manual backend probes update component version,
   `versionUpdatedAt`, `lastCollectedAt`, and per-component status.
 - **Credentials**: encrypted and stored by the backend, returned only by explicit broker calls. The
-  desktop passes them to a user-selected SSH/DB tool and must not persist brokered secrets.
+  desktop uses them for explicit reveal/copy, user-selected SSH/DB tools or read-only SSH file
+  sessions; sessions may retain them in memory for reconnect, never durably.
 - **Client config**: JSON at `~/.test-env-dashboard/config.json`, limited to backend URL and local
   tool preferences. UI preferences (theme mode, sidebar expanded state) persist separately in
   `~/.test-env-dashboard/ui.json` via `AppThemeController`.
@@ -47,7 +65,7 @@ Principal HTTP routes are `/api/environments`, `/api/servers`, `/api/databases`,
 `PUT /api/components/{id}/links`, `POST /api/environments/{id}/refresh`, and the on-demand
 `/credentials` plus `/secret` routes under Servers/Databases. Health is at `/actuator/health`.
 
-- **Client self-update** (docs/client-update.md): the backend serves `env_viewer` release zips
+- **Client self-update** (docs/guides/client-update.md): the backend serves `env_viewer` release zips
   dropped into `envdashboard.client-updates.dir` (`CLIENT_UPDATES_DIR`; blank = disabled) via
   `/api/client-updates/env_viewer/{latest,download}`. The client shows a non-intrusive download
   icon, verifies SHA-256, and hands off to the bundled `env_viewer_updater` helper, which swaps the
@@ -89,7 +107,7 @@ LEGACY_JDBC_URL=... LEGACY_DB_USERNAME=... LEGACY_DB_PASSWORD=... scripts/import
 ./scripts/build_release.sh macos    # also: windows, linux
 
 # Publish a tagged env_viewer release to the backend's client-updates directory
-# (after CI finishes; see docs/client-update.md).
+# (after CI finishes; see docs/guides/client-update.md).
 UPDATE_SSH_TARGET=user@backend-host UPDATE_REMOTE_DIR=/opt/env-dashboard/client-updates \
   scripts/publish_update.sh v1.2.0
 ```
@@ -104,7 +122,7 @@ UPDATE_SSH_TARGET=user@backend-host UPDATE_REMOTE_DIR=/opt/env-dashboard/client-
 - `apps/env_viewer/lib/services/access/access_launcher.dart` — brokers credentials and launches tools
 - `apps/env_viewer/lib/services/update/app_update_store.dart` — self-update check/download/handoff
 - `apps/env_viewer/updater/` — pure-Dart swap-and-rollback helper (`dart compile exe`, bundled)
-- `apps/env_viewer/lib/services/remote_file/remote_file_session.dart` — in-app SSH tail/SFTP view of remote logs/files (docs/remote-file-viewer.md)
+- `apps/env_viewer/lib/services/remote_file/remote_file_session.dart` — in-app SSH tail/SFTP view of remote logs/files (docs/guides/remote-file-viewer.md)
 - `apps/env_viewer/lib/remote_files/remote_file_store.dart` — 日志文件 tab state and brokered open flow
 - `apps/env_viewer/lib/pages/catalog/catalog_page.dart` — main environment catalog UI
 - `apps/env_viewer/lib/pages/inventory/inventory_page.dart` — shared resource management and reverse references

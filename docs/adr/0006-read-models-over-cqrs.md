@@ -1,5 +1,7 @@
 # API DTOs are read models; cross-aggregate display joins happen client-side for now — no CQRS
 
+> Status: accepted
+
 The dashboard needs to show a Component's referenced Server and Databases as human labels (host,
 `业务库 · Oracle · host:port/service`) rather than the bare IDs that ADR-0003 stores. We considered
 full **CQRS** (separate read store + projections) and rejected it: there is no event log

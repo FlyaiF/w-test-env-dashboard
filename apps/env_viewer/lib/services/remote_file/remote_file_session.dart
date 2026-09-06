@@ -23,7 +23,7 @@ const int kViewModeByteCap = 2 * 1024 * 1024;
 ///
 /// The brokered secret is held in memory only for this object's lifetime — it
 /// enables 重连 without re-brokering — and is never written anywhere
-/// (ADR-0005).
+/// (ADR-0009).
 class RemoteFileSession extends ChangeNotifier {
   final String host;
   final int port;

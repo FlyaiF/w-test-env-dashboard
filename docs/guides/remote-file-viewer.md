@@ -1,12 +1,14 @@
 # Remote log/file viewer (日志文件)
 
-Status: **decisions locked, implemented** (2026-07-31).
+> Status: current
+> Scope: env_viewer remote file access
+> Reviewed: 2026-09-06 (code and documentation; no runtime acceptance test)
 
-Port of the pre-redesign in-app log follower, generalized to arbitrary remote files. Decisions were
-settled in a design interview + a placement prototype; do not re-litigate them without new
-information.
+Implemented from the 2026-07-31 design. The transport decision is recorded in
+[ADR-0009](../adr/0009-client-side-read-only-remote-files.md); this guide describes current behavior.
+See the [documentation index](../README.md) for other capabilities.
 
-## Locked decisions
+## Behavior and constraints
 
 1. **Transport is client-side SSH** (`dartssh2` in `env_viewer`). No backend changes: the backend
    already owns `Component.logLocation`, Server links, and credential brokering. Backend-relayed
@@ -19,7 +21,7 @@ information.
    catalog-bottom pane was prototyped and rejected.
 4. **Credentials**: silent broker via the component's linked Server; a session-only credential
    dialog appears only when the broker holds no secret; the row action is disabled when no Server is
-   linked. Nothing typed or brokered is ever persisted (ADR-0005 applies).
+   linked. Nothing typed or brokered is ever persisted ([ADR-0009](../adr/0009-client-side-read-only-remote-files.md); ADR-0005’s no-durable-secrets constraint remains in force).
 5. **Encoding**: UTF-8 default (matches the fleet), per-tab GBK switch; raw bytes stay buffered so
    switching re-decodes in place (`fast_gbk`).
 6. **History**: ~10,000-line in-memory ring buffer per tab, no disk spill; a 下载 action SFTPs the
@@ -29,8 +31,7 @@ information.
    the visible buffer with the platform's EOL (`\r\n` on Windows).
    Paragraphs are anchored to absolute line numbers and the ring evicts in whole 64-line chunks, so
    a filled paragraph's text never changes and selections survive the streaming rebuilds; during a
-   selection drag the rendered tail freezes and eviction is held (docs/log-viewer-research.md has
-   the full rationale). Known limits, accepted for now: a selection scrolled far out of the
+   selection drag the rendered tail freezes and eviction is held ([selection research](../research/log-viewer-selection.md) records the original analysis). Known limits, accepted for now: a selection scrolled far out of the
    viewport's cache is dropped (item disposal), and native select-all only covers laid-out items —
    复制全部 is the bulk-copy path.
 7. **清空 (follow mode)**: a toolbar action hides everything currently shown — a view marker, not a
@@ -53,3 +54,11 @@ information.
   (`RemoteOpenNeedsSecret` drives the fallback dialog).
 - `apps/env_viewer/lib/pages/remote_files/` — the 日志文件 page, viewer widget, and the shared
   `openRemoteFile` flow used by the catalog row action.
+
+## Verification entry points
+
+Automated behavior checks live in [remote file state/viewer tests](../../apps/env_viewer/test/remote_files/)
+and [session/buffer tests](../../apps/env_viewer/test/services/remote_file/). Run the client checks
+listed in the [development guide](development.md). For transport changes, also exercise a reachable
+SSH Server: brokered open, missing-secret fallback, follow/view, reconnect, clear/copy and download.
+These are verification instructions, not a record that live SSH acceptance was run during this cleanup.

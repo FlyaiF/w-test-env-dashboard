@@ -14,7 +14,7 @@
     <groupId>com.flyaif</groupId>
     <artifactId>env-dashboard-backend</artifactId>
     <!-- CI-friendly version: tagged release builds pass -Drevision=<tag version>
-         so the jar carries the release number (docs/client-update.md). -->
+         so the jar carries the release number (docs/guides/client-update.md). -->
     <version>${revision}</version>
     <name>env-dashboard-backend</name>
     <description>Test Environment Dashboard backend (Environment Catalog)</description>

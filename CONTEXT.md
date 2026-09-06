@@ -16,8 +16,8 @@ _Avoid_: env record, TENVINFO row, instance
 One deployable part of an Environment (e.g. nginx gateway, UI, main service, private-protocol
 service). Has a role, a single version (or blank), a version update time, a log location, a reachability
 (port/protocol/URL); runs on a Server and uses Databases, both by reference. The role is one of the
-four kinds above or **unspecified** (未指定) — "not yet classified", e.g. for a component imported from
-legacy data that carried no role; a human assigns the real role later.
+four kinds above or **unspecified** (未指定) — "not yet classified", e.g. a manually added component
+whose role has not been assigned.
 _Avoid_: service, subsystem, app, web server
 
 **Server**:
@@ -65,13 +65,14 @@ Component/Server (query a Database, read a file or run a command over SSH, hit a
 none). New Component types bring new probes.
 
 **Machine Access**:
-The single server-side capability for "obtain something from a machine, by a method that depends on
-the machine's OS." Today it backs Version probes; later it will back server-held log sessions. One
-concept, two uses.
+The capability to obtain live data from a remote system for Version Collection, using the access
+method supported by that system.
 
 **Credential brokering**:
-The server holding Server/Database secrets encrypted at rest and delivering them to a client on
-demand — to launch the user's own SSH or DB tool, or to reveal/copy a credential the user explicitly
-asks for. The client fetches each secret just-in-time and never stores it durably. The TENVINFO
-migration populates the broker from the legacy plaintext, so brokered credentials exist from day one
-(see ADR-0008).
+On-demand delivery of resource credentials for an explicitly requested access action: tool launch,
+credential reveal/copy, or a read-only remote file session. Brokered credentials are never retained
+as durable client data.
+
+**Remote file session**:
+A temporary read-only connection to one file on a Server, opened to follow appended content or view
+its contents. It may remain open while the user navigates elsewhere, but ends with the application.

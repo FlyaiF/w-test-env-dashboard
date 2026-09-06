@@ -1,10 +1,17 @@
 # 08 — Real db-query probe (legacy version source) + client "refresh now"
 
-Status: implemented 2026-07-07 — backend verified (107 tests); client tests written, CI is the gate (no local Flutter SDK)
+> Status: archived
+> Scope: original redesign implementation slice
+> Archived: 2026-09-06
+
+Historical handoff evidence only. Status and test results below describe the original work,
+not verification performed during documentation cleanup. Current sources: [documentation index](../../../../README.md).
+
+Historical status: implemented 2026-07-07 — backend verified (107 tests); client tests written, CI is the gate (no local Flutter SDK)
 
 ## Parent
 
-[docs/PRD-redesign.md](../../../docs/PRD-redesign.md) — completes slice 05's outstanding client AC and
+[docs/plans/archive/env-dashboard-redesign.md](../../env-dashboard-redesign.md) — completes slice 05's outstanding client AC and
 replaces its placeholder db-query probe with the real legacy mechanism.
 
 ## Why

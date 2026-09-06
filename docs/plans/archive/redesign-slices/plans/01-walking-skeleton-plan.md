@@ -1,5 +1,12 @@
 # Plan — Slice 01: Walking skeleton, read Environments (backend)
 
+> Status: archived
+> Scope: original redesign implementation slice
+> Archived: 2026-09-06
+
+Historical handoff evidence only. Status and test results below describe the original work,
+not verification performed during documentation cleanup. Current sources: [documentation index](../../../../README.md).
+
 Implements [issues/01-walking-skeleton-read-environments.md](../issues/01-walking-skeleton-read-environments.md).
 Scope: a Spring Boot backend in this monorepo that boots, owns a greenfield normalized schema for the
 `Environment` + `Component` aggregate, and serves the read path. No `Server`/`Database` refs (slice 04),

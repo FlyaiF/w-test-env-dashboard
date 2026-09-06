@@ -1,5 +1,8 @@
 # zipr_tool
 
+> Status: current
+> Scope: zipr_tool desktop archive application
+
 归档差异与补丁工具 — a Flutter desktop app for inspecting, diffing, and patching zip / jar / war / ear archives. The archive engine is the Rust crate at `zipr/`, statically linked into the app via [flutter_rust_bridge](https://pub.dev/packages/flutter_rust_bridge). No subprocess, no separate CLI binary.
 
 All paths below are relative to the repository root unless otherwise noted.

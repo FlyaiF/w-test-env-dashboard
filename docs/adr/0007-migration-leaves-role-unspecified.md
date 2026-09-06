@@ -1,5 +1,7 @@
 # The TENVINFO migration leaves a migrated Component's role UNSPECIFIED, never guessed
 
+> Status: superseded
+
 > **Superseded 2026-07-29.** The missing domain knowledge arrived: the system owner confirmed that
 > every legacy `TENVINFO` "web server" entry is the environment's main service (主服务). The role is
 > therefore no longer a guess — the migration now assigns `ComponentRole.APP`. `UNSPECIFIED` keeps

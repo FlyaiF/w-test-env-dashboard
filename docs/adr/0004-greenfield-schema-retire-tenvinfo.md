@@ -1,5 +1,7 @@
 # Discard the TENVINFO schema; build a greenfield normalized schema with a one-time import
 
+> Status: accepted
+
 The legacy `TENVINFO` table is too weak for the new model: it crams composite concepts into single
 columns (`E_WEBSERVERADDR` = `"host:port&user/password"`), hard-codes cardinality (exactly two DB
 slots, one log path, one version), and even contradicts itself (one version column, but per-subsystem

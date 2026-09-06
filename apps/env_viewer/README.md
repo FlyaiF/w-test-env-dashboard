@@ -1,11 +1,17 @@
 # env_viewer
 
+> Status: current
+> Scope: env_viewer desktop client
+
 测试环境速查工具 — a thin Flutter desktop client for the central Test Environment Dashboard
 backend. It browses and curates Environments/Components, triggers live version collection, and
 launches the user's SSH/DB tools for linked resources with credentials brokered on demand.
 
-The client talks only to the Spring Boot HTTP API. It does not connect to Oracle directly, spawn a
-Go sidecar, or ship JDBC drivers.
+Catalog, inventory, collection and credential brokering use the Spring Boot HTTP API. The 日志文件
+page connects directly to a Server over SSH/SFTP for read-only file access, using credentials held
+only in memory. The app does not connect to Oracle directly, spawn a Go sidecar, or ship JDBC drivers.
+See the [remote file guide](../../docs/guides/remote-file-viewer.md) and
+[ADR-0009](../../docs/adr/0009-client-side-read-only-remote-files.md).
 
 All paths below are relative to the repository root unless otherwise noted.
 
@@ -57,12 +63,12 @@ ENV_DASHBOARD_BACKEND_URL=http://backend.example.test:8080 \
   ./scripts/dev_env_viewer.sh run
 ```
 
-On a healthy launch, the window is titled 测试环境速查工具, the navigation contains 环境目录 / 资源清单 /
+On a healthy launch, the window is titled 测试环境速查工具, the navigation contains 环境目录 / 资源清单 / 日志文件 /
 设置 / 关于, the cloud indicator is green, and the local profile's seeded environments appear in 环境目录.
 资源清单 manages shared Servers/Databases, shows their reverse Environment references, and links them
 from Components without exposing stored secrets. A
 red cloud means the configured backend could not be reached. Catalog data is canonical on the
-backend; the desktop persists only its backend URL and local tool preferences.
+backend; the desktop persists local configuration and UI preferences, never brokered credentials.
 
 ## Run checks
 

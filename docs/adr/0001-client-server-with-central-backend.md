@@ -1,5 +1,7 @@
 # Move from a local desktop tool to a client-server system with a single central backend
 
+> Status: accepted
+
 The dashboard must be usable by all of dev/QA with **shared** data, which the old per-desktop model
 (each app spawns its own Go sidecar, holds its own local JSON cache, no sharing) cannot provide. We
 are introducing a single central backend that owns the canonical data, runs Collection, and serves

@@ -54,7 +54,7 @@ void main() async {
 
   // If the updater helper launched us it is waiting for proof this build works
   // before deleting the previous version; the first rendered frame is that
-  // proof (docs/client-update.md).
+  // proof (docs/guides/client-update.md).
   WidgetsBinding.instance.addPostFrameCallback(
     (_) => AppUpdateStore.signalStartedOkIfRequested(),
   );

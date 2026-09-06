@@ -162,7 +162,7 @@ jobs:
             --dart-define=COMMIT="$COMMIT" \
             --dart-define=BUILD_TIME="$BUILD_TIME"
 
-      # Self-update swap/rollback helper (docs/client-update.md), compiled as a
+      # Self-update swap/rollback helper (docs/guides/client-update.md), compiled as a
       # standalone binary because the app cannot replace itself while running.
       - name: Bundle updater helper
         working-directory: apps/env_viewer/updater
@@ -317,7 +317,7 @@ jobs:
             --dart-define=COMMIT="$COMMIT" \
             --dart-define=BUILD_TIME="$BUILD_TIME"
 
-      # Self-update swap/rollback helper (docs/client-update.md), compiled as a
+      # Self-update swap/rollback helper (docs/guides/client-update.md), compiled as a
       # standalone binary because the app cannot replace itself while running.
       - name: Bundle updater helper
         working-directory: apps/env_viewer/updater

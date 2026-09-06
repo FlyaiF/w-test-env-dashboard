@@ -1,6 +1,6 @@
 #!/bin/bash
 # Publish an env_viewer release to the backend's client-updates directory
-# (docs/client-update.md). Run after the tagged CI build has finished:
+# (docs/guides/client-update.md). Run after the tagged CI build has finished:
 #
 #   UPDATE_SSH_TARGET=user@backend-host \
 #   UPDATE_REMOTE_DIR=/opt/env-dashboard/client-updates \

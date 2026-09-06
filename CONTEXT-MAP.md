@@ -1,45 +1,47 @@
 # Context Map
 
-Bounded contexts for the test-environment dashboard product. Shared vocabulary lives in
-[CONTEXT.md](./CONTEXT.md). Per-context `CONTEXT.md` files will be added under each context's code
-directory as the redesign is laid out; this map records the intended boundaries first.
+> Status: current
+> Scope: env_viewer and backend
+> Reviewed: 2026-09-06 (code structure)
 
-`zipr_tool` is a **separate product** (archive viewer) and an unrelated bounded context — out of
-scope for this map.
+Shared vocabulary lives in [CONTEXT.md](CONTEXT.md). This map describes current responsibilities;
+`zipr_tool` is a separate product, described in its [README](apps/zipr_tool/README.md).
+No per-context glossary is required until a distinct vocabulary needs one.
 
-## Contexts
+## Contexts and code locations
 
-Server-side (the new Spring Boot backend):
+| Context | Responsibility | Code |
+| --- | --- | --- |
+| Environment Catalog | Owns Environments and their Components; curation and resource links | [backend catalog](backend/src/main/java/com/flyaif/envdashboard/catalog) |
+| Resource Inventory | Shared Server / Database lifecycle, connection metadata and usage checks | [backend inventory](backend/src/main/java/com/flyaif/envdashboard/inventory) |
+| Version Collection | Scheduled/manual collection, probes, Version update time and collection status | [backend collection](backend/src/main/java/com/flyaif/envdashboard/collection) |
+| Access Brokering | Encrypted secret storage and on-demand credential delivery | [backend access](backend/src/main/java/com/flyaif/envdashboard/access) |
+| Local Desktop Integration | External tool launch and direct read-only SSH/SFTP file sessions | [access](apps/env_viewer/lib/services/access), [remote file sessions](apps/env_viewer/lib/services/remote_file) |
+| Presentation | DTO-to-view mappings, UI state and navigation | [catalog](apps/env_viewer/lib/catalog), [inventory](apps/env_viewer/lib/inventory), [remote files](apps/env_viewer/lib/remote_files), [pages](apps/env_viewer/lib/pages) |
 
-- **Environment Catalog** — *Core.* Owns the `Environment` aggregate and its `Component`s; CRUD and
-  curation. The reason the product exists.
-- **Version Collection** — *Core capability.* The scheduled/manual Collector, the Version probes, and
-  the live Version / deploy-time / status data it produces.
-- **Resource Inventory** — *Supporting.* Owns the shared `Server` and `Database` aggregates that
-  Components reference by ID.
-- **Access Brokering** — *Supporting.* Encrypted secret storage and on-demand credential delivery;
-  connection descriptors for client tool launches.
-
-Client-side (the thin `env_viewer` Flutter app):
-
-- **Local Desktop Integration** — *Supporting.* The one genuinely client-side domain: launch the
-  user's own SSH and DB tools, fed by brokered credentials.
-- **Presentation** — the thin UI over the backend API, with an anti-corruption layer translating API
-  DTOs into view models.
-
-Generic / plumbing (server): persistence, scheduling, the auth seam, API transport, and a reserved
-seam for future server-held log sessions.
+Supporting technical modules: [legacy import](backend/src/main/java/com/flyaif/envdashboard/legacyimport),
+[client update distribution](backend/src/main/java/com/flyaif/envdashboard/clientupdate),
+[desktop update flow](apps/env_viewer/lib/services/update), and the independent
+[updater helper](apps/env_viewer/updater). These are code responsibilities, not additional business glossaries.
 
 ## Relationships
 
-- **Environment Catalog → Resource Inventory**: Components reference `Server`s and `Database`s by ID
-  only; the Catalog never owns them.
-- **Version Collection → Environment Catalog**: Collection writes live Version / deploy-time / status
-  back onto Components; it reads Components to know what to probe.
-- **Version Collection → Machine Access**: probes obtain live data via the shared Machine Access
-  capability.
-- **Access Brokering → Resource Inventory**: secrets attach to the `Server`/`Database` resources.
-- **Presentation / Local Desktop Integration → backend**: the client is a downstream consumer of a
-  published API; an anti-corruption layer keeps backend DTOs from leaking into the UI model.
-- **Access Brokering → Local Desktop Integration**: the backend brokers credentials to the client on
-  demand so the user can launch their own tools; the client holds no durable secrets.
+- **Environment Catalog → Resource Inventory**: Components reference Server / Database IDs;
+  the Catalog never owns those resources. Inventory checks usage through its `ResourceUsage`
+  interface, implemented by Catalog's `CatalogResourceUsage` adapter.
+- **Version Collection → Environment Catalog**: reads what to probe and writes Version,
+  Version update time, last-collected time, status and failure detail back to Components.
+- **Version Collection → Machine Access**: probes obtain remote data through the backend's
+  machine-access module; this is separate from the desktop's interactive file sessions.
+- **Access Brokering → Resource Inventory**: secrets attach to Server / Database resources.
+- **Presentation → backend**: catalog and inventory data are canonical on the backend;
+  client ACL mappings resolve references into display models ([ADR-0006](docs/adr/0006-read-models-over-cqrs.md)).
+- **Access Brokering → Local Desktop Integration**: on-demand credentials support tool launching,
+  explicit reveal/copy and SSH/SFTP sessions; the desktop never stores secrets durably.
+- **Local Desktop Integration → Server**: read-only file sessions connect directly from the desktop;
+  the backend does not relay log streams ([ADR-0009](docs/adr/0009-client-side-read-only-remote-files.md)).
+
+## Deferred scope
+
+A future web client, RBAC and server-held log streaming are not current capabilities. Earlier plans
+mention possible integration seams; this map does not claim those endpoints are implemented.

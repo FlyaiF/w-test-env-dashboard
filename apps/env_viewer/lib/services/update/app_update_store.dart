@@ -7,7 +7,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../../api/backend_client.dart';
 import '../../api/dto/client_update_dto.dart';
 
-/// Client half of self-update (docs/client-update.md): a quiet startup check
+/// Client half of self-update (docs/guides/client-update.md): a quiet startup check
 /// against the backend, then — only when the user clicks 立即更新 — download,
 /// SHA-256 verification, and handoff to the bundled updater helper, which swaps
 /// the install after this process exits. The store never interrupts: an

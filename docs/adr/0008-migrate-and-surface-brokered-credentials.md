@@ -1,5 +1,11 @@
 # Brokered credentials are populated by the TENVINFO migration and surfaced on demand in the client
 
+> Status: accepted
+
+The problem description below records the pre-decision behavior, not the current importer.
+The reveal/copy constraints apply to those interactions; SSH file sessions may retain credentials
+in memory for reconnect under [ADR-0009](0009-client-side-read-only-remote-files.md).
+
 Slice 06 built Access Brokering (ADR-0005): Server/Database secrets live encrypted at rest and are
 delivered to the client just-in-time, the client persisting nothing. Two gaps surfaced once the
 redesign ran against real migrated data, and both pull against the original posture:

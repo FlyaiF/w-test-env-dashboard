@@ -1,5 +1,7 @@
 # Servers and Databases are shared aggregates, referenced by ID — not owned by an Environment
 
+> Status: accepted
+
 In our test setup a single machine often hosts Components from several Environments, and a database is
 not necessarily dedicated to one Environment ("not strict"). Because they are shared across
 aggregates, `Server` and `Database` cannot live *inside* the `Environment` aggregate — that would let

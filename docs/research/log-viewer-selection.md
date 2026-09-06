@@ -1,14 +1,22 @@
 # Log viewer selection research (日志文件)
 
-Status: **research notes, no decisions** (2026-08-15). Research only — no code changed.
+> Status: snapshot
+> Scope: log viewer selection research
+> Recorded: 2026-08-15
+
+This is the research-time snapshot, including its baseline code, local SDK, package statistics and
+external issue statuses; these were not revalidated during the 2026-09-06 documentation cleanup.
+The current implementation uses absolute chunk identities, selection-drag freezing, and a clear
+view marker. See the [current guide](../guides/remote-file-viewer.md); recommendations below are
+not an outstanding implementation checklist.
 
 Question: how well does the current `SelectionArea` + `ListView.builder` rendering of the remote
 log viewer actually behave under a rotating ring buffer, what do primary sources (Flutter API docs,
 framework source, flutter/flutter issues) say, and what existing implementations could we adopt or
-learn from. Companion to [remote-file-viewer.md](remote-file-viewer.md) (locked decision 6 covers
+learn from. Companion to [remote file guide](../guides/remote-file-viewer.md) (constraint 6 covers
 the current 64-line-chunk rendering).
 
-## Current implementation (baseline)
+## Implementation at research time (historical baseline)
 
 - `apps/env_viewer/lib/pages/remote_files/remote_file_viewer.dart` — `_LineList`: `SelectionArea`
   wrapping a `ListView.builder` (`reverse: true` in 跟随 mode). Items are 64-line chunks, each one

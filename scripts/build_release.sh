@@ -52,7 +52,7 @@ cd "$PROJECT_DIR/apps/env_viewer"
 flutter clean
 flutter pub get
 
-# Self-update swap/rollback helper (docs/client-update.md): a standalone Dart
+# Self-update swap/rollback helper (docs/guides/client-update.md): a standalone Dart
 # binary bundled with the app, because a running app cannot replace itself.
 build_updater() {
     local out="$1"
