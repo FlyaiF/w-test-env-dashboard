@@ -1,6 +1,10 @@
 package com.flyaif.envdashboard.access;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.flyaif.envdashboard.catalog.EnvironmentRepository;
+import com.flyaif.envdashboard.catalog.domain.Component;
+import com.flyaif.envdashboard.catalog.domain.ComponentRole;
+import com.flyaif.envdashboard.catalog.domain.Environment;
 import com.flyaif.envdashboard.inventory.DatabaseRepository;
 import com.flyaif.envdashboard.inventory.ServerRepository;
 import com.flyaif.envdashboard.inventory.domain.ConnectionDescriptor;
@@ -11,6 +15,8 @@ import com.flyaif.envdashboard.inventory.domain.ServerOs;
 import com.flyaif.envdashboard.inventory.domain.SshAccess;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -19,6 +25,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -54,12 +61,39 @@ class AccessApiIntegrationTest {
     @Autowired
     private DatabaseSecretRepository databaseSecrets;
 
+    @Autowired
+    private EnvironmentRepository environments;
+
     @BeforeEach
     void clean() {
+        // Other test classes share H2: remove catalog references before inventory rows.
+        environments.deleteAll();
         serverSecrets.deleteAll();
         databaseSecrets.deleteAll();
         servers.deleteAll();
         databases.deleteAll();
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void cleanupRemovesCatalogLinksBeforeSharedResources(boolean linkServer) {
+        Server server = servers.save(new Server("linked-host", ServerOs.LINUX, null));
+        Database database = databases.save(new Database("linked-db", DatabaseType.ORACLE, null));
+        Environment environment = new Environment("leftover catalog fixture", null);
+        Component component = new Component(ComponentRole.APP);
+        if (linkServer) {
+            component.setServerId(server.getId());
+        }
+        component.setDatabaseIds(Set.of(database.getId()));
+        environment.addComponent(component);
+        environments.save(environment);
+
+        // Simulate catalog fixtures left in the shared H2 database by an earlier test class.
+        clean();
+
+        assertThat(environments.count()).isZero();
+        assertThat(servers.count()).isZero();
+        assertThat(databases.count()).isZero();
     }
 
     @Test
