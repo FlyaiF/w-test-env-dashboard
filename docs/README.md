@@ -41,6 +41,7 @@
 | 材料 | 状态 | 当前承接文档 |
 | --- | --- | --- |
 | [日志选择行为研究](research/log-viewer-selection.md) | snapshot | [远程文件指南](guides/remote-file-viewer.md) |
+| [测试环境形态调研与登记方向](research/environment-shape-survey.md) | snapshot | [上下文地图](../CONTEXT-MAP.md) |
 | [后端与客户端重设计 PRD](plans/archive/env-dashboard-redesign.md) | archived | [上下文地图](../CONTEXT-MAP.md) |
 | [重设计实施切片](plans/archive/redesign-slices/README.md) | archived | [开发验证指南](guides/development.md) |
 | [UI 重设计交接计划](plans/archive/ui-redesign.md) | archived | [UI 指南](guides/ui.md) |
