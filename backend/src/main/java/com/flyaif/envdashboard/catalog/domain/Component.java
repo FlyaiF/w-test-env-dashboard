@@ -14,6 +14,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.SequenceGenerator;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.DynamicUpdate;
 
 import java.time.Instant;
 import java.util.Collections;
@@ -24,9 +25,15 @@ import java.util.Set;
  * One deployable part of an {@link Environment} (gateway, UI, app, private-protocol service).
  * Carries a role, a single live {@link #version} (or blank) with its Version update time, a log location,
  * reachability (listen port / protocol / URL), and Collection bookkeeping that stays null until
- * the collector lands (slice 05). Not an aggregate root — only ever reached through its Environment.
+ * the collector lands (slice 05), plus its running state (liveness). Not an aggregate root — only ever
+ * reached through its Environment.
+ *
+ * <p>Dynamic updates: the Version Collection sweep, the liveness sweep and catalog edits each write
+ * their own columns of the same row concurrently, so an UPDATE carries only the columns that changed
+ * and never writes back a stale copy of another writer's fields.
  */
 @Entity
+@DynamicUpdate
 @Table(name = "component")
 public class Component {
 
@@ -86,6 +93,21 @@ public class Component {
 
     @Column(name = "last_collected_at")
     private Instant lastCollectedAt;
+
+    /** Running state from the last liveness check; null if never checked or no URL to check. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "liveness", length = 20)
+    private LivenessStatus liveness;
+
+    @Column(name = "liveness_detail", length = 500)
+    private String livenessDetail;
+
+    @Column(name = "liveness_checked_at")
+    private Instant livenessCheckedAt;
+
+    /** When {@link #liveness} last moved (or was first observed). */
+    @Column(name = "liveness_changed_at")
+    private Instant livenessChangedAt;
 
     protected Component() {
         // for JPA
@@ -212,5 +234,39 @@ public class Component {
 
     public void setLastCollectedAt(Instant lastCollectedAt) {
         this.lastCollectedAt = lastCollectedAt;
+    }
+
+    public LivenessStatus getLiveness() {
+        return liveness;
+    }
+
+    public String getLivenessDetail() {
+        return livenessDetail;
+    }
+
+    public Instant getLivenessCheckedAt() {
+        return livenessCheckedAt;
+    }
+
+    public Instant getLivenessChangedAt() {
+        return livenessChangedAt;
+    }
+
+    /** Record one liveness check; {@code livenessChangedAt} moves only when the status does. */
+    public void recordLiveness(LivenessStatus status, String detail, Instant checkedAt) {
+        if (status != liveness || livenessChangedAt == null) {
+            livenessChangedAt = checkedAt;
+        }
+        liveness = status;
+        livenessDetail = detail;
+        livenessCheckedAt = checkedAt;
+    }
+
+    /** Forget the running state, e.g. once the Component no longer has a URL to check. */
+    public void clearLiveness() {
+        liveness = null;
+        livenessDetail = null;
+        livenessCheckedAt = null;
+        livenessChangedAt = null;
     }
 }

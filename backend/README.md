@@ -34,6 +34,10 @@ java -jar backend/target/env-dashboard-backend-<version>.jar --spring.profiles.a
 ## 维护入口
 
 - 通用配置：[application.yml](src/main/resources/application.yml)、[本地配置](src/main/resources/application-local.yml)。
+- 定时任务：版本采集（`envdashboard.collection.*`，默认 5 分钟）与运行状态检测
+  （`envdashboard.liveness.*`，默认每分钟对组件 URL 发 GET，不跟随重定向；<500 运行中，
+  5xx/拒绝/无响应为已停止，连接超时/无路由为不可达）。两者共用调度线程池，
+  `spring.task.scheduling.pool.size` 需大于 1；`local` 与测试 profile 关闭两者，手动“采集”时同时检测。
 - Schema：[Flyway migrations](src/main/resources/db/migration)；已应用的迁移保留，新变化添加后续迁移。
 - 旧数据导入：[脚本](../scripts/import_tenvinfo.sh)，默认 dry-run，`--apply` 才写入；规则见
   [ADR-0004](../docs/adr/0004-greenfield-schema-retire-tenvinfo.md)、[ADR-0007 修订](../docs/adr/0007-migration-leaves-role-unspecified.md)、[ADR-0008](../docs/adr/0008-migrate-and-surface-brokered-credentials.md)。

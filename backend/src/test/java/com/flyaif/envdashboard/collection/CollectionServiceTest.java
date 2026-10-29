@@ -7,6 +7,8 @@ import com.flyaif.envdashboard.catalog.domain.Environment;
 import com.flyaif.envdashboard.catalog.domain.VersionProbeKind;
 import com.flyaif.envdashboard.catalog.web.dto.ComponentDto;
 import com.flyaif.envdashboard.catalog.web.dto.EnvironmentDto;
+import com.flyaif.envdashboard.collection.liveness.LivenessCheck;
+import com.flyaif.envdashboard.collection.liveness.LivenessProbe;
 import com.flyaif.envdashboard.collection.machine.MachineAccess;
 import com.flyaif.envdashboard.collection.machine.MachineAccessException;
 import com.flyaif.envdashboard.inventory.DatabaseRepository;
@@ -54,8 +56,12 @@ class CollectionServiceTest {
     @MockBean
     private MachineAccess machineAccess;
 
+    @MockBean
+    private LivenessProbe livenessProbe;
+
     @BeforeEach
     void clean() {
+        given(livenessProbe.check(anyString())).willReturn(LivenessCheck.up("HTTP 200"));
         environments.deleteAll();
         servers.deleteAll();
         databases.deleteAll();
@@ -125,6 +131,11 @@ class CollectionServiceTest {
         ComponentDto unsupportedComp = byRole(refreshed, ComponentRole.PRIVATE_PROTO);
         assertThat(unsupportedComp.collectionStatus()).isEqualTo("UNSUPPORTED");
         assertThat(unsupportedComp.collectionDetail()).isNotNull();
+
+        // Refresh now also checks running state: Components with a URL get one, the rest stay null.
+        assertThat(okComp.liveness()).isEqualTo("UP");
+        assertThat(okComp.livenessCheckedAt()).isNotNull();
+        assertThat(dbComp.liveness()).isNull();
     }
 
     @Test

@@ -268,4 +268,65 @@ void main() {
       );
     });
   });
+
+  group('Running state (liveness)', () {
+    ComponentDto comp(int id, {String? liveness, String? url = 'http://x/'}) {
+      return ComponentDto(id: id, role: 'APP', url: url, liveness: liveness);
+    }
+
+    EnvironmentView view(List<ComponentDto> components) => CatalogAcl.toView(
+      EnvironmentDto(id: 1, name: 'E', components: components),
+    );
+
+    test('parses the liveness fields from the wire', () {
+      final dto = ComponentDto.fromJson({
+        'id': 1,
+        'liveness': 'DOWN',
+        'livenessDetail': 'HTTP 502',
+        'livenessCheckedAt': '2026-10-29T12:01:00Z',
+        'livenessChangedAt': '2026-10-29T11:40:00Z',
+      });
+      expect(dto.liveness, 'DOWN');
+      expect(dto.livenessDetail, 'HTTP 502');
+      expect(dto.livenessCheckedAt, DateTime.utc(2026, 10, 29, 12, 1));
+      expect(dto.livenessChangedAt, DateTime.utc(2026, 10, 29, 11, 40));
+    });
+
+    test('maps each status to its state and label', () {
+      final c = view([
+        comp(1, liveness: 'UP'),
+        comp(2, liveness: 'DOWN'),
+        comp(3, liveness: 'UNREACHABLE'),
+        comp(4),
+      ]).components;
+      expect(c.map((x) => x.livenessState), [
+        LivenessState.up,
+        LivenessState.down,
+        LivenessState.unreachable,
+        LivenessState.unchecked,
+      ]);
+      expect(c.map((x) => x.livenessLabel), ['运行中', '已停止', '不可达', '未检测']);
+    });
+
+    test('rollup: any down or unreachable component marks the env down', () {
+      expect(
+        view([comp(1, liveness: 'UP'), comp(2, liveness: 'UNREACHABLE')])
+            .liveness,
+        EnvironmentLivenessState.down,
+      );
+      expect(
+        view([comp(1, liveness: 'DOWN'), comp(2, liveness: 'UP')]).liveness,
+        EnvironmentLivenessState.down,
+      );
+    });
+
+    test('rollup ignores unchecked components', () {
+      expect(
+        view([comp(1, liveness: 'UP'), comp(2, url: null)]).liveness,
+        EnvironmentLivenessState.up,
+      );
+      expect(view([comp(1)]).liveness, EnvironmentLivenessState.unchecked);
+      expect(view([]).liveness, EnvironmentLivenessState.unchecked);
+    });
+  });
 }

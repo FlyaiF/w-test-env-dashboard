@@ -4,6 +4,7 @@ import com.flyaif.envdashboard.catalog.domain.CollectionStatus;
 import com.flyaif.envdashboard.catalog.domain.Component;
 import com.flyaif.envdashboard.catalog.domain.ComponentRole;
 import com.flyaif.envdashboard.catalog.domain.Environment;
+import com.flyaif.envdashboard.catalog.domain.LivenessStatus;
 import com.flyaif.envdashboard.catalog.domain.VersionProbeKind;
 import com.flyaif.envdashboard.catalog.web.dto.ComponentDto;
 import com.flyaif.envdashboard.catalog.web.dto.ComponentRequest;
@@ -72,7 +73,11 @@ public final class EnvironmentMapper {
                 name(component.getVersionProbe()),
                 name(component.getCollectionStatus()),
                 component.getCollectionDetail(),
-                component.getLastCollectedAt());
+                component.getLastCollectedAt(),
+                name(component.getLiveness()),
+                component.getLivenessDetail(),
+                component.getLivenessCheckedAt(),
+                component.getLivenessChangedAt());
     }
 
     private static String name(ComponentRole role) {
@@ -84,6 +89,10 @@ public final class EnvironmentMapper {
     }
 
     private static String name(CollectionStatus status) {
+        return status == null ? null : status.name();
+    }
+
+    private static String name(LivenessStatus status) {
         return status == null ? null : status.name();
     }
 }

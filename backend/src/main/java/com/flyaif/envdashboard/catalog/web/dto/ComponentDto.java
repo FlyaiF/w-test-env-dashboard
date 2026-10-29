@@ -7,7 +7,8 @@ import java.util.List;
  * The server's published representation of a Component. Field names follow the glossary
  * ({@code version}, {@code versionUpdatedAt}) — no legacy {@code e_*}/{@code webserver} terms.
  * {@code serverId} (runs-on) and {@code databaseIds} (uses) are references by ID into the Resource
- * Inventory (ADR-0003). Collection fields are present but null until slice 05.
+ * Inventory (ADR-0003). Collection fields are present but null until slice 05; the liveness fields
+ * ({@code liveness} = UP | DOWN | UNREACHABLE) are null until the first check or without a URL.
  */
 public record ComponentDto(
         Long id,
@@ -23,6 +24,10 @@ public record ComponentDto(
         String versionProbe,
         String collectionStatus,
         String collectionDetail,
-        Instant lastCollectedAt
+        Instant lastCollectedAt,
+        String liveness,
+        String livenessDetail,
+        Instant livenessCheckedAt,
+        Instant livenessChangedAt
 ) {
 }

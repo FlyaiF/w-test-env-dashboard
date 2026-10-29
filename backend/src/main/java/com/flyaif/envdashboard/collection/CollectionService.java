@@ -7,6 +7,7 @@ import com.flyaif.envdashboard.catalog.domain.Component;
 import com.flyaif.envdashboard.catalog.domain.Environment;
 import com.flyaif.envdashboard.catalog.web.EnvironmentMapper;
 import com.flyaif.envdashboard.catalog.web.dto.EnvironmentDto;
+import com.flyaif.envdashboard.collection.liveness.LivenessService;
 import com.flyaif.envdashboard.collection.probe.ProbeContext;
 import com.flyaif.envdashboard.collection.probe.ProbeResult;
 import com.flyaif.envdashboard.collection.probe.VersionProbe;
@@ -44,6 +45,7 @@ public class CollectionService {
     private final ServerRepository servers;
     private final DatabaseRepository databases;
     private final VersionProbeRegistry probes;
+    private final LivenessService liveness;
     private final Clock clock;
     private final TransactionTemplate transactions;
 
@@ -52,6 +54,7 @@ public class CollectionService {
                              ServerRepository servers,
                              DatabaseRepository databases,
                              VersionProbeRegistry probes,
+                             LivenessService liveness,
                              Clock clock,
                              PlatformTransactionManager transactionManager) {
         this.environments = environments;
@@ -59,15 +62,20 @@ public class CollectionService {
         this.servers = servers;
         this.databases = databases;
         this.probes = probes;
+        this.liveness = liveness;
         this.clock = clock;
         this.transactions = new TransactionTemplate(transactionManager);
     }
 
-    /** Manual "refresh now" for one Environment; returns its freshly-collected published view. */
+    /**
+     * Manual "refresh now" for one Environment: checks its running state, then collects versions;
+     * returns its freshly-collected published view.
+     */
     @Transactional
     public EnvironmentDto refresh(Long environmentId) {
         Environment environment = environments.findById(environmentId)
                 .orElseThrow(() -> new EnvironmentNotFoundException(environmentId));
+        liveness.check(environment.getComponents());
         environment.getComponents().forEach(this::collect);
         return EnvironmentMapper.toDto(environment);
     }

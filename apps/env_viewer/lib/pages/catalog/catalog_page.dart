@@ -429,7 +429,17 @@ class _RosterRow extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    _HealthDot(state: env.health.state),
+                    Tooltip(
+                      message: environmentLivenessTooltip(env.liveness),
+                      child: _LivenessDot(
+                        state: switch (env.liveness) {
+                          EnvironmentLivenessState.up => LivenessState.up,
+                          EnvironmentLivenessState.down => LivenessState.down,
+                          EnvironmentLivenessState.unchecked =>
+                            LivenessState.unchecked,
+                        },
+                      ),
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -441,6 +451,15 @@ class _RosterRow extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
+                    if (env.health.state == EnvironmentHealthState.failed)
+                      Tooltip(
+                        message: '版本采集失败',
+                        child: Icon(
+                          Icons.sync_problem,
+                          size: 15,
+                          color: tokens.err,
+                        ),
+                      ),
                     if (env.health.isStale)
                       Tooltip(
                         message: '数据超过 24 小时未更新',
@@ -474,36 +493,61 @@ class _RosterRow extends StatelessWidget {
   }
 }
 
-/// Health dot for a roster row: filled green OK, hollow neutral pending,
-/// filled red failed. Shape + color双编码 so state reads without color alone.
-class _HealthDot extends StatelessWidget {
-  final EnvironmentHealthState state;
+/// Roster tooltip for an Environment's running-state rollup.
+String environmentLivenessTooltip(EnvironmentLivenessState state) {
+  return switch (state) {
+    EnvironmentLivenessState.up => '运行中',
+    EnvironmentLivenessState.down => '有组件未运行或不可达',
+    EnvironmentLivenessState.unchecked => '未检测运行状态',
+  };
+}
 
-  const _HealthDot({required this.state});
+/// Running-state dot shared by roster rows and component rows: filled green
+/// up, filled red down, filled amber unreachable, hollow unchecked. Shape +
+/// color double-encode the state so it reads without color alone.
+class _LivenessDot extends StatelessWidget {
+  final LivenessState state;
+
+  const _LivenessDot({required this.state});
 
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.of(context);
-    return switch (state) {
-      EnvironmentHealthState.ok => _dot(fill: tokens.ok),
-      EnvironmentHealthState.pending => _dot(borderOnly: tokens.textSecondary),
-      EnvironmentHealthState.failed => _dot(fill: tokens.err),
+    final (Color? fill, Color? border) = switch (state) {
+      LivenessState.up => (tokens.ok, null),
+      LivenessState.down => (tokens.err, null),
+      LivenessState.unreachable => (tokens.warn, null),
+      LivenessState.unchecked => (null, tokens.textSecondary),
     };
-  }
-
-  Widget _dot({Color? fill, Color? borderOnly}) {
     return Container(
       width: 8,
       height: 8,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: fill,
-        border: borderOnly == null
-            ? null
-            : Border.all(color: borderOnly, width: 1.4),
+        border: border == null ? null : Border.all(color: border, width: 1.4),
       ),
     );
   }
+}
+
+/// Tooltip text for a component's running state: outcome detail plus when it
+/// was last checked and since when the state has held.
+String livenessTooltip(ComponentView c) {
+  if (c.livenessState == LivenessState.unchecked) {
+    return c.url == null ? '未配置访问地址，无法检测' : '尚未检测';
+  }
+  final fmt = DateFormat('MM-dd HH:mm');
+  final lines = <String>[
+    c.livenessDetail == null
+        ? c.livenessLabel
+        : '${c.livenessLabel}（${c.livenessDetail}）',
+    if (c.livenessChangedAt != null)
+      '状态自 ${fmt.format(c.livenessChangedAt!.toLocal())} 起',
+    if (c.livenessCheckedAt != null)
+      '检测于 ${relativeTimeLabel(c.livenessCheckedAt!.toLocal())}',
+  ];
+  return lines.join('\n');
 }
 
 class _EnvironmentDetail extends StatelessWidget {
@@ -765,7 +809,7 @@ class _ComponentGridHeader extends StatelessWidget {
           Expanded(child: Text('主机', style: style)),
           SizedBox(
             width: _Cols.chip,
-            child: Text('状态', style: style),
+            child: Text('运行', style: style),
           ),
           const SizedBox(width: _Cols.actions + _Cols.chevron),
         ],
@@ -847,7 +891,10 @@ class _ComponentRowState extends State<_ComponentRow> {
                   children: [
                     SizedBox(
                       width: _Cols.dot,
-                      child: _CollectionDot(state: c.collectionState),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: _LivenessDot(state: c.livenessState),
+                      ),
                     ),
                     SizedBox(
                       width: _Cols.role,
@@ -896,14 +943,17 @@ class _ComponentRowState extends State<_ComponentRow> {
                       width: _Cols.chip,
                       child: Align(
                         alignment: Alignment.centerLeft,
-                        child: StatusChip(
-                          kind: switch (c.collectionState) {
-                            CollectionState.ok => StatusChipKind.ok,
-                            CollectionState.failed => StatusChipKind.err,
-                            CollectionState.unsupported => StatusChipKind.na,
-                            CollectionState.notCollected => StatusChipKind.none,
-                          },
-                          label: c.collectionStatusLabel,
+                        child: Tooltip(
+                          message: livenessTooltip(c),
+                          child: StatusChip(
+                            kind: switch (c.livenessState) {
+                              LivenessState.up => StatusChipKind.ok,
+                              LivenessState.down => StatusChipKind.err,
+                              LivenessState.unreachable => StatusChipKind.err,
+                              LivenessState.unchecked => StatusChipKind.none,
+                            },
+                            label: c.livenessLabel,
+                          ),
                         ),
                       ),
                     ),
@@ -950,36 +1000,6 @@ class _ComponentRowState extends State<_ComponentRow> {
                 onDelete: widget.onDelete,
               ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Collection dot for a component row, mirroring the roster's health language.
-class _CollectionDot extends StatelessWidget {
-  final CollectionState state;
-
-  const _CollectionDot({required this.state});
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = AppTokens.of(context);
-    final (Color? fill, Color? border) = switch (state) {
-      CollectionState.ok => (tokens.ok, null),
-      CollectionState.failed => (tokens.err, null),
-      CollectionState.unsupported => (tokens.neutralChipBg, tokens.border),
-      CollectionState.notCollected => (null, tokens.textSecondary),
-    };
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Container(
-        width: 8,
-        height: 8,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: fill,
-          border: border == null ? null : Border.all(color: border, width: 1.4),
         ),
       ),
     );
@@ -1287,6 +1307,19 @@ class _ComponentExpandedBody extends StatelessWidget {
               ),
             ],
           ),
+          if ((c.livenessState == LivenessState.down ||
+                  c.livenessState == LivenessState.unreachable) &&
+              c.livenessDetail != null) ...[
+            const SizedBox(height: 2),
+            SelectableText(
+              c.livenessChangedAt == null
+                  ? '${c.livenessLabel}：${c.livenessDetail}'
+                  : '${c.livenessLabel}：${c.livenessDetail}'
+                        '（自 ${dateFmt.format(c.livenessChangedAt!.toLocal())} 起）',
+              style: TextStyle(fontSize: 12, color: tokens.err),
+            ),
+            const SizedBox(height: 6),
+          ],
           if (c.collectionState == CollectionState.failed &&
               c.collectionDetail != null) ...[
             const SizedBox(height: 2),
@@ -1306,7 +1339,20 @@ class _ComponentExpandedBody extends StatelessWidget {
                     ? null
                     : dateFmt.format(c.versionUpdatedAt!.toLocal()),
               ),
+              _Field(
+                '运行状态',
+                c.livenessDetail == null
+                    ? c.livenessLabel
+                    : '${c.livenessLabel}（${c.livenessDetail}）',
+              ),
+              _Field(
+                '状态检测',
+                c.livenessCheckedAt == null
+                    ? null
+                    : dateFmt.format(c.livenessCheckedAt!.toLocal()),
+              ),
               _Field('版本探测', c.versionProbeLabel),
+              _Field('采集状态', c.collectionStatusLabel),
               _Field(
                 '最近采集',
                 c.lastCollectedAt == null
