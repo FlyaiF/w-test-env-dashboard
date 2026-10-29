@@ -5,6 +5,8 @@ import com.flyaif.envdashboard.inventory.JdbcUrlBuilder;
 import com.flyaif.envdashboard.inventory.domain.ConnectionDescriptor;
 import com.flyaif.envdashboard.inventory.domain.Database;
 import com.flyaif.envdashboard.inventory.domain.DatabaseType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -24,10 +26,16 @@ import java.time.Instant;
 import java.util.Properties;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Real {@link MachineAccess}: HTTP over {@link HttpClient}, databases over JDBC with the driver chosen
- * by {@link DatabaseType}. Bounded timeouts keep one unreachable host from stalling a Collection sweep.
+ * by {@link DatabaseType}. Bounded timeouts keep one unreachable host from stalling a Collection sweep;
+ * a watchdog aborts any connected probe (including its close) that outlives the operation timeout,
+ * because driver timeouts do not cover every phase.
  *
  * <p>Drivers are loaded at runtime by coordinate (ojdbc8 / Dameng / OceanBase, PRD §9); there is no
  * compile-time dependency on driver classes here — only {@code java.sql}. The connection password is
@@ -38,7 +46,9 @@ import java.util.concurrent.ForkJoinPool;
 public class JdbcHttpMachineAccess implements MachineAccess {
 
     private static final Object DRIVER_MANAGER_LOGIN_TIMEOUT_LOCK = new Object();
+    private static final Logger log = LoggerFactory.getLogger(JdbcHttpMachineAccess.class);
     private static final Executor NETWORK_TIMEOUT_EXECUTOR = ForkJoinPool.commonPool();
+    private static final ScheduledThreadPoolExecutor ABORT_WATCHDOG = newAbortWatchdog();
 
     private final HttpClient http = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5))
@@ -49,6 +59,7 @@ public class JdbcHttpMachineAccess implements MachineAccess {
     private final int queryTimeoutSeconds;
     private final int loginTimeoutMillis;
     private final int readTimeoutMillis;
+    private final long operationTimeoutMillis;
     private final JdbcConnector connector;
 
     @Autowired
@@ -64,6 +75,7 @@ public class JdbcHttpMachineAccess implements MachineAccess {
         this.queryTimeoutSeconds = timeoutSeconds(properties.getQueryTimeout(), "query-timeout");
         this.loginTimeoutMillis = timeoutMillis(properties.getLoginTimeout(), "login-timeout");
         this.readTimeoutMillis = timeoutMillis(properties.getReadTimeout(), "read-timeout");
+        this.operationTimeoutMillis = timeoutMillis(properties.getOperationTimeout(), "operation-timeout");
         this.connector = connector;
     }
 
@@ -114,7 +126,12 @@ public class JdbcHttpMachineAccess implements MachineAccess {
         String username = conn == null ? null : conn.getUsername();
         String password = secrets.databaseSecret(database.getId()).orElse("");
         Properties connectionProperties = connectionProperties(username, password);
+        AtomicBoolean aborted = new AtomicBoolean();
+        ScheduledFuture<?> watchdog = null;
         try (Connection connection = connector.connect(url, connectionProperties, loginTimeoutSeconds)) {
+            // The watchdog stays armed through try-with-resources close(), which runs before finally.
+            watchdog = ABORT_WATCHDOG.schedule(() -> abort(connection, database, aborted),
+                    operationTimeoutMillis, TimeUnit.MILLISECONDS);
             applyReadTimeout(connection);
             try (Statement statement = connection.createStatement()) {
                 statement.setQueryTimeout(queryTimeoutSeconds);
@@ -126,9 +143,39 @@ public class JdbcHttpMachineAccess implements MachineAccess {
                 }
             }
         } catch (Exception e) {
+            if (aborted.get()) {
+                throw new MachineAccessException("Timed out querying database " + database.getId()
+                        + " after " + operationTimeoutMillis + " ms; connection aborted", e);
+            }
             throw new MachineAccessException(
                     "Failed querying database " + database.getId() + ": " + e.getMessage(), e);
+        } finally {
+            if (watchdog != null) {
+                watchdog.cancel(false);
+            }
         }
+    }
+
+    /** Forcibly closes a probe connection that outlived its deadline, unblocking the probing thread. */
+    private static void abort(Connection connection, Database database, AtomicBoolean aborted) {
+        aborted.set(true);
+        log.warn("Aborting JDBC probe connection to database {} after exceeding operation timeout",
+                database.getId());
+        try {
+            connection.abort(NETWORK_TIMEOUT_EXECUTOR);
+        } catch (SQLException | RuntimeException | AbstractMethodError e) {
+            log.warn("Aborting JDBC probe connection to database {} failed: {}", database.getId(), e.toString());
+        }
+    }
+
+    private static ScheduledThreadPoolExecutor newAbortWatchdog() {
+        ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(1, task -> {
+            Thread thread = new Thread(task, "jdbc-probe-watchdog");
+            thread.setDaemon(true);
+            return thread;
+        });
+        executor.setRemoveOnCancelPolicy(true);
+        return executor;
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.flyaif.envdashboard.collection;
 
+import com.flyaif.envdashboard.catalog.ComponentRepository;
 import com.flyaif.envdashboard.catalog.EnvironmentNotFoundException;
 import com.flyaif.envdashboard.catalog.EnvironmentRepository;
 import com.flyaif.envdashboard.catalog.domain.Component;
@@ -16,7 +17,9 @@ import com.flyaif.envdashboard.inventory.domain.Server;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
 import java.util.ArrayList;
@@ -27,7 +30,9 @@ import java.util.Objects;
  * The Version Collection core capability. Refreshes each Component's live version, Version update time (版本更新时间), status,
  * and last-collected time by dispatching it to the {@link VersionProbe} for its kind. Each Component is
  * collected independently and defensively: a probe that throws or fails turns into a {@code FAILED}
- * status for that one Component, never blanking its siblings (PRD §6 graceful degradation).
+ * status for that one Component, never blanking its siblings (PRD §6 graceful degradation). The
+ * scheduled sweep commits each Component in its own transaction, so one slow or failing Component never
+ * holds back or rolls back the results already collected for the others.
  */
 @Service
 public class CollectionService {
@@ -35,21 +40,27 @@ public class CollectionService {
     private static final Logger log = LoggerFactory.getLogger(CollectionService.class);
 
     private final EnvironmentRepository environments;
+    private final ComponentRepository components;
     private final ServerRepository servers;
     private final DatabaseRepository databases;
     private final VersionProbeRegistry probes;
     private final Clock clock;
+    private final TransactionTemplate transactions;
 
     public CollectionService(EnvironmentRepository environments,
+                             ComponentRepository components,
                              ServerRepository servers,
                              DatabaseRepository databases,
                              VersionProbeRegistry probes,
-                             Clock clock) {
+                             Clock clock,
+                             PlatformTransactionManager transactionManager) {
         this.environments = environments;
+        this.components = components;
         this.servers = servers;
         this.databases = databases;
         this.probes = probes;
         this.clock = clock;
+        this.transactions = new TransactionTemplate(transactionManager);
     }
 
     /** Manual "refresh now" for one Environment; returns its freshly-collected published view. */
@@ -61,14 +72,30 @@ public class CollectionService {
         return EnvironmentMapper.toDto(environment);
     }
 
-    /** Scheduled sweep across every Environment; returns the number of Components collected. */
-    @Transactional
+    /**
+     * Scheduled sweep across every Environment; returns the number of Components collected. Not
+     * transactional itself: each Component is loaded, probed and committed in its own transaction.
+     */
     public int refreshAll() {
+        List<Long> componentIds = components.findAll().stream()
+                .map(Component::getId)
+                .sorted()
+                .toList();
         int collected = 0;
-        for (Environment environment : environments.findAll()) {
-            for (Component component : environment.getComponents()) {
-                collect(component);
-                collected++;
+        for (Long componentId : componentIds) {
+            try {
+                Boolean found = transactions.execute(status -> components.findById(componentId)
+                        .map(component -> {
+                            collect(component);
+                            return true;
+                        })
+                        .orElse(false)); // deleted since the sweep started
+                if (Boolean.TRUE.equals(found)) {
+                    collected++;
+                }
+            } catch (RuntimeException ex) {
+                // Persisting one Component failed; keep sweeping the rest.
+                log.warn("Collection failed to save component {}: {}", componentId, ex.getMessage());
             }
         }
         return collected;
