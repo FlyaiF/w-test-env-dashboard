@@ -24,8 +24,10 @@ import java.util.List;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 
 /**
@@ -150,5 +152,37 @@ class CollectionServiceTest {
                 .flatMap(Environment::getComponents)
                 .allMatch(c -> "5.0.0".equals(c.getVersion()))
                 .allMatch(c -> c.getLastCollectedAt() != null);
+    }
+
+    @Test
+    void refreshAllCommitsEachComponentSoALaterFailureKeepsEarlierResults() {
+        // An Error escapes the per-probe RuntimeException guard and aborts the sweep, standing in for
+        // a sweep that never finishes. Components collected before it must already be committed.
+        given(machineAccess.httpGet(eq("http://first/version"))).willReturn("2.0.0");
+        given(machineAccess.httpGet(eq("http://second/version"))).willThrow(new StackOverflowError("boom"));
+
+        Environment first = new Environment("ENV-FIRST", null);
+        Component c1 = new Component(ComponentRole.APP);
+        c1.setVersionProbe(VersionProbeKind.HTTP);
+        c1.setUrl("http://first/version");
+        first.addComponent(c1);
+        environments.save(first);
+
+        Environment second = new Environment("ENV-SECOND", null);
+        Component c2 = new Component(ComponentRole.APP);
+        c2.setVersionProbe(VersionProbeKind.HTTP);
+        c2.setUrl("http://second/version");
+        second.addComponent(c2);
+        environments.save(second);
+
+        assertThatThrownBy(() -> collection.refreshAll()).isInstanceOf(StackOverflowError.class);
+
+        Component saved = environments.findAll().stream()
+                .flatMap(e -> e.getComponents().stream())
+                .filter(c -> "http://first/version".equals(c.getUrl()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(saved.getVersion()).isEqualTo("2.0.0");
+        assertThat(saved.getLastCollectedAt()).isNotNull();
     }
 }

@@ -29,6 +29,8 @@ envdashboard:
       login-timeout: PT5S
       query-timeout: PT10S
       read-timeout: PT15S
+      # Hard deadline for a whole connected probe including close(); the connection is aborted past it.
+      operation-timeout: PT60S
 
 # Liveness/readiness for the walking-skeleton health-check AC.
 management:

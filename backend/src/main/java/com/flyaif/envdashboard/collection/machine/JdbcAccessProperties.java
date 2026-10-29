@@ -20,6 +20,13 @@ public class JdbcAccessProperties {
     /** Maximum time a connected driver may block waiting for network data. */
     private Duration readTimeout = Duration.ofSeconds(15);
 
+    /**
+     * Hard wall-clock bound on a whole connected probe, including {@code Connection.close()}. Driver
+     * timeouts do not cover every phase (Oracle's logoff on close can block forever on a half-dead
+     * socket), so past this deadline the connection is aborted to release the Collection thread.
+     */
+    private Duration operationTimeout = Duration.ofSeconds(60);
+
     public Duration getLoginTimeout() {
         return loginTimeout;
     }
@@ -42,5 +49,13 @@ public class JdbcAccessProperties {
 
     public void setReadTimeout(Duration readTimeout) {
         this.readTimeout = readTimeout;
+    }
+
+    public Duration getOperationTimeout() {
+        return operationTimeout;
+    }
+
+    public void setOperationTimeout(Duration operationTimeout) {
+        this.operationTimeout = operationTimeout;
     }
 }
