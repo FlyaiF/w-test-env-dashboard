@@ -30,7 +30,8 @@ import java.util.Set;
  *
  * <p>Dynamic updates: the Version Collection sweep, the liveness sweep and catalog edits each write
  * their own columns of the same row concurrently, so an UPDATE carries only the columns that changed
- * and never writes back a stale copy of another writer's fields.
+ * and never writes back a stale copy of another writer's fields. The liveness columns are read-only
+ * here: they are written only by the conditional updates in {@code ComponentRepository}.
  */
 @Entity
 @DynamicUpdate
@@ -250,23 +251,5 @@ public class Component {
 
     public Instant getLivenessChangedAt() {
         return livenessChangedAt;
-    }
-
-    /** Record one liveness check; {@code livenessChangedAt} moves only when the status does. */
-    public void recordLiveness(LivenessStatus status, String detail, Instant checkedAt) {
-        if (status != liveness || livenessChangedAt == null) {
-            livenessChangedAt = checkedAt;
-        }
-        liveness = status;
-        livenessDetail = detail;
-        livenessCheckedAt = checkedAt;
-    }
-
-    /** Forget the running state, e.g. once the Component no longer has a URL to check. */
-    public void clearLiveness() {
-        liveness = null;
-        livenessDetail = null;
-        livenessCheckedAt = null;
-        livenessChangedAt = null;
     }
 }

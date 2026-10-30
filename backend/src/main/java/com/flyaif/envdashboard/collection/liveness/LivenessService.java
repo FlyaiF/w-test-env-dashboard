@@ -6,16 +6,17 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -27,7 +28,8 @@ import java.util.concurrent.TimeUnit;
  * Records each Component's running state (UP / DOWN / UNREACHABLE) by checking its URL through the
  * {@link LivenessProbe}. Every URL is checked in parallel on virtual threads, so a sweep takes about
  * as long as its slowest check rather than the sum of them. A Component without a URL has its state
- * cleared — there is nothing to judge it by.
+ * cleared — there is nothing to judge it by. Results are ordered by when their check started: the
+ * newest observation wins regardless of which check finishes last.
  *
  * <p>Independent of Version Collection on purpose: it is cheap, runs far more often, and answers a
  * different question ("is it serving?" rather than "which version is live?").
@@ -56,51 +58,51 @@ public class LivenessService {
         this.components = components;
         this.probe = probe;
         this.clock = clock;
+        // Own transactions even when called from inside one, so results commit as soon as they exist.
         this.transactions = new TransactionTemplate(transactionManager);
+        this.transactions.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         this.batchTimeout = properties.getConnectTimeout()
                 .plus(properties.getRequestTimeout())
                 .plusSeconds(5);
     }
 
-    /**
-     * Scheduled sweep across every Component; returns the number recorded. Probing happens outside
-     * any transaction, then each Component is saved in its own short one. A Component whose URL was
-     * edited while its check ran is skipped — the next sweep checks the new URL.
-     */
+    /** Scheduled sweep across every Component; returns the number of results recorded. */
     public int checkAll() {
-        Map<Long, String> urls = transactions.execute(status -> {
-            Map<Long, String> byId = new HashMap<>();
-            components.findAll().forEach(c -> byId.put(c.getId(), c.getUrl()));
-            return byId;
-        });
+        return checkAndRecord(transactions.execute(status -> snapshot(components.findAll())));
+    }
+
+    /** Checks the given Components now (manual refresh); returns the number of results recorded. */
+    public int check(Collection<Long> componentIds) {
+        return checkAndRecord(transactions.execute(status -> snapshot(components.findAllById(componentIds))));
+    }
+
+    private static Map<Long, Component> snapshot(List<Component> loaded) {
+        Map<Long, Component> byId = new HashMap<>();
+        loaded.forEach(c -> byId.put(c.getId(), c));
+        return byId;
+    }
+
+    /**
+     * Probes outside any transaction, then commits each result promptly in its own short one. Each
+     * write is conditional (see {@link ComponentRepository#recordLiveness}): it is dropped if the URL
+     * was edited while the check ran, or if a check that started later has already been recorded —
+     * so a slow manual refresh and the scheduled sweep can never put an older observation back.
+     */
+    private int checkAndRecord(Map<Long, Component> snapshot) {
+        Instant observedAt = clock.instant();
+        Map<Long, String> urls = new HashMap<>();
+        snapshot.forEach((id, c) -> urls.put(id, c.getUrl()));
         Map<Long, LivenessCheck> results = probeAll(urls);
         int recorded = 0;
-        for (Map.Entry<Long, String> entry : urls.entrySet()) {
-            Long id = entry.getKey();
+        for (Component before : snapshot.values()) {
             try {
-                Boolean saved = transactions.execute(status -> components.findById(id)
-                        .filter(c -> Objects.equals(c.getUrl(), entry.getValue()))
-                        .map(c -> {
-                            record(c, results.get(id));
-                            return true;
-                        })
-                        .orElse(false));
-                if (Boolean.TRUE.equals(saved)) {
-                    recorded++;
-                }
+                Integer written = transactions.execute(status -> record(before, results.get(before.getId()), observedAt));
+                recorded += written == null ? 0 : written;
             } catch (RuntimeException ex) {
-                log.warn("Liveness failed to save component {}: {}", id, ex.getMessage());
+                log.warn("Liveness failed to save component {}: {}", before.getId(), ex.getMessage());
             }
         }
         return recorded;
-    }
-
-    /** Check the given managed Components now, within the caller's transaction (manual refresh). */
-    public void check(Collection<Component> managed) {
-        Map<Long, String> urls = new HashMap<>();
-        managed.forEach(c -> urls.put(c.getId(), c.getUrl()));
-        Map<Long, LivenessCheck> results = probeAll(urls);
-        managed.forEach(c -> record(c, results.get(c.getId())));
     }
 
     /** Probes every non-blank URL in parallel; a blank URL maps to no entry (clear the state). */
@@ -144,20 +146,21 @@ public class LivenessService {
         }
     }
 
-    private void record(Component component, LivenessCheck check) {
-        String url = component.getUrl();
+    private int record(Component before, LivenessCheck check, Instant observedAt) {
+        String url = before.getUrl();
         if (url == null || url.isBlank()) {
-            component.clearLiveness();
-            return;
+            return components.clearLiveness(before.getId());
         }
         if (check == null) {
-            return; // interrupted before this Component was probed; keep the previous state
+            return 0; // interrupted before this Component was probed; keep the previous state
         }
-        if (component.getLiveness() != null && component.getLiveness() != check.status()) {
+        int written = components.recordLiveness(
+                before.getId(), url, check.status(), truncate(check.detail()), observedAt);
+        if (written > 0 && before.getLiveness() != null && before.getLiveness() != check.status()) {
             log.info("Component {} liveness {} -> {} ({})",
-                    component.getId(), component.getLiveness(), check.status(), check.detail());
+                    before.getId(), before.getLiveness(), check.status(), check.detail());
         }
-        component.recordLiveness(check.status(), truncate(check.detail()), clock.instant());
+        return written;
     }
 
     private static String truncate(String detail) {

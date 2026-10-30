@@ -19,7 +19,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
@@ -68,16 +67,24 @@ public class CollectionService {
     }
 
     /**
-     * Manual "refresh now" for one Environment: checks its running state, then collects versions;
-     * returns its freshly-collected published view.
+     * Manual "refresh now" for one Environment: checks and commits its running state first, then
+     * collects versions in a separate transaction; returns its freshly-collected published view.
+     * Liveness never rides along in the (possibly slow) collection transaction, so it cannot be held
+     * back and then overwrite a newer result from the scheduled check.
      */
-    @Transactional
     public EnvironmentDto refresh(Long environmentId) {
-        Environment environment = environments.findById(environmentId)
-                .orElseThrow(() -> new EnvironmentNotFoundException(environmentId));
-        liveness.check(environment.getComponents());
-        environment.getComponents().forEach(this::collect);
-        return EnvironmentMapper.toDto(environment);
+        List<Long> componentIds = transactions.execute(status -> environments.findById(environmentId)
+                .orElseThrow(() -> new EnvironmentNotFoundException(environmentId))
+                .getComponents().stream()
+                .map(Component::getId)
+                .toList());
+        liveness.check(componentIds);
+        return transactions.execute(status -> {
+            Environment environment = environments.findById(environmentId)
+                    .orElseThrow(() -> new EnvironmentNotFoundException(environmentId));
+            environment.getComponents().forEach(this::collect);
+            return EnvironmentMapper.toDto(environment);
+        });
     }
 
     /**

@@ -1,14 +1,17 @@
 package com.flyaif.envdashboard.collection;
 
+import com.flyaif.envdashboard.catalog.ComponentRepository;
 import com.flyaif.envdashboard.catalog.EnvironmentRepository;
 import com.flyaif.envdashboard.catalog.domain.Component;
 import com.flyaif.envdashboard.catalog.domain.ComponentRole;
 import com.flyaif.envdashboard.catalog.domain.Environment;
+import com.flyaif.envdashboard.catalog.domain.LivenessStatus;
 import com.flyaif.envdashboard.catalog.domain.VersionProbeKind;
 import com.flyaif.envdashboard.catalog.web.dto.ComponentDto;
 import com.flyaif.envdashboard.catalog.web.dto.EnvironmentDto;
 import com.flyaif.envdashboard.collection.liveness.LivenessCheck;
 import com.flyaif.envdashboard.collection.liveness.LivenessProbe;
+import com.flyaif.envdashboard.collection.liveness.LivenessService;
 import com.flyaif.envdashboard.collection.machine.MachineAccess;
 import com.flyaif.envdashboard.collection.machine.MachineAccessException;
 import com.flyaif.envdashboard.inventory.DatabaseRepository;
@@ -24,6 +27,9 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -52,6 +58,12 @@ class CollectionServiceTest {
 
     @Autowired
     private DatabaseRepository databases;
+
+    @Autowired
+    private ComponentRepository components;
+
+    @Autowired
+    private LivenessService livenessService;
 
     @MockBean
     private MachineAccess machineAccess;
@@ -136,6 +148,38 @@ class CollectionServiceTest {
         assertThat(okComp.liveness()).isEqualTo("UP");
         assertThat(okComp.livenessCheckedAt()).isNotNull();
         assertThat(dbComp.liveness()).isNull();
+    }
+
+    @Test
+    void aSlowManualRefreshKeepsANewerScheduledLivenessResult() throws Exception {
+        // Manual refresh sees UP, then blocks in version collection; meanwhile the scheduled check
+        // records DOWN. Finishing the refresh must not put the older UP back.
+        CountDownLatch collecting = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        given(machineAccess.httpGet("http://slow/version")).willAnswer(invocation -> {
+            collecting.countDown();
+            release.await(5, TimeUnit.SECONDS);
+            return "3.0.0";
+        });
+        Environment env = new Environment("ENV-SLOW", null);
+        Component component = new Component(ComponentRole.APP);
+        component.setVersionProbe(VersionProbeKind.HTTP);
+        component.setUrl("http://slow/version");
+        env.addComponent(component);
+        Long envId = environments.save(env).getId();
+        Long componentId = environments.findById(envId).orElseThrow().getComponents().get(0).getId();
+
+        CompletableFuture<EnvironmentDto> manual = CompletableFuture.supplyAsync(() -> collection.refresh(envId));
+        assertThat(collecting.await(5, TimeUnit.SECONDS)).isTrue();
+        given(livenessProbe.check(anyString())).willReturn(LivenessCheck.down("HTTP 502"));
+        Thread.sleep(5);
+        livenessService.checkAll();
+        release.countDown();
+        manual.get(5, TimeUnit.SECONDS);
+
+        Component saved = components.findById(componentId).orElseThrow();
+        assertThat(saved.getVersion()).isEqualTo("3.0.0");
+        assertThat(saved.getLiveness()).isEqualTo(LivenessStatus.DOWN);
     }
 
     @Test
