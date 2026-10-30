@@ -7,6 +7,7 @@ import com.flyaif.envdashboard.catalog.domain.Component;
 import com.flyaif.envdashboard.catalog.domain.Environment;
 import com.flyaif.envdashboard.catalog.web.EnvironmentMapper;
 import com.flyaif.envdashboard.catalog.web.dto.EnvironmentDto;
+import com.flyaif.envdashboard.collection.liveness.LivenessService;
 import com.flyaif.envdashboard.collection.probe.ProbeContext;
 import com.flyaif.envdashboard.collection.probe.ProbeResult;
 import com.flyaif.envdashboard.collection.probe.VersionProbe;
@@ -18,7 +19,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
@@ -44,6 +44,7 @@ public class CollectionService {
     private final ServerRepository servers;
     private final DatabaseRepository databases;
     private final VersionProbeRegistry probes;
+    private final LivenessService liveness;
     private final Clock clock;
     private final TransactionTemplate transactions;
 
@@ -52,6 +53,7 @@ public class CollectionService {
                              ServerRepository servers,
                              DatabaseRepository databases,
                              VersionProbeRegistry probes,
+                             LivenessService liveness,
                              Clock clock,
                              PlatformTransactionManager transactionManager) {
         this.environments = environments;
@@ -59,17 +61,30 @@ public class CollectionService {
         this.servers = servers;
         this.databases = databases;
         this.probes = probes;
+        this.liveness = liveness;
         this.clock = clock;
         this.transactions = new TransactionTemplate(transactionManager);
     }
 
-    /** Manual "refresh now" for one Environment; returns its freshly-collected published view. */
-    @Transactional
+    /**
+     * Manual "refresh now" for one Environment: checks and commits its running state first, then
+     * collects versions in a separate transaction; returns its freshly-collected published view.
+     * Liveness never rides along in the (possibly slow) collection transaction, so it cannot be held
+     * back and then overwrite a newer result from the scheduled check.
+     */
     public EnvironmentDto refresh(Long environmentId) {
-        Environment environment = environments.findById(environmentId)
-                .orElseThrow(() -> new EnvironmentNotFoundException(environmentId));
-        environment.getComponents().forEach(this::collect);
-        return EnvironmentMapper.toDto(environment);
+        List<Long> componentIds = transactions.execute(status -> environments.findById(environmentId)
+                .orElseThrow(() -> new EnvironmentNotFoundException(environmentId))
+                .getComponents().stream()
+                .map(Component::getId)
+                .toList());
+        liveness.check(componentIds);
+        return transactions.execute(status -> {
+            Environment environment = environments.findById(environmentId)
+                    .orElseThrow(() -> new EnvironmentNotFoundException(environmentId));
+            environment.getComponents().forEach(this::collect);
+            return EnvironmentMapper.toDto(environment);
+        });
     }
 
     /**

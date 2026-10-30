@@ -14,7 +14,7 @@ No per-context glossary is required until a distinct vocabulary needs one.
 | --- | --- | --- |
 | Environment Catalog | Owns Environments and their Components; curation and resource links | [backend catalog](backend/src/main/java/com/flyaif/envdashboard/catalog) |
 | Resource Inventory | Shared Server / Database lifecycle, connection metadata and usage checks | [backend inventory](backend/src/main/java/com/flyaif/envdashboard/inventory) |
-| Version Collection | Scheduled/manual collection, probes, Version update time and collection status | [backend collection](backend/src/main/java/com/flyaif/envdashboard/collection) |
+| Version Collection | Scheduled/manual collection, probes, Version update time and collection status; the per-minute running-state check of Component URLs | [backend collection](backend/src/main/java/com/flyaif/envdashboard/collection) |
 | Access Brokering | Encrypted secret storage and on-demand credential delivery | [backend access](backend/src/main/java/com/flyaif/envdashboard/access) |
 | Local Desktop Integration | External tool launch and direct read-only SSH/SFTP file sessions | [access](apps/env_viewer/lib/services/access), [remote file sessions](apps/env_viewer/lib/services/remote_file) |
 | Presentation | DTO-to-view mappings, UI state and navigation | [catalog](apps/env_viewer/lib/catalog), [inventory](apps/env_viewer/lib/inventory), [remote files](apps/env_viewer/lib/remote_files), [pages](apps/env_viewer/lib/pages) |
@@ -31,6 +31,9 @@ Supporting technical modules: [legacy import](backend/src/main/java/com/flyaif/e
   interface, implemented by Catalog's `CatalogResourceUsage` adapter.
 - **Version Collection → Environment Catalog**: reads what to probe and writes Version,
   Version update time, last-collected time, status and failure detail back to Components.
+- **Version Collection → Environment Catalog (running state)**: a separate, frequent sweep writes
+  running state, its detail and check/change times to Components; the entity's dynamic updates keep
+  it from overwriting concurrent collection or curation writes.
 - **Version Collection → Machine Access**: probes obtain remote data through the backend's
   machine-access module; this is separate from the desktop's interactive file sessions.
 - **Access Brokering → Resource Inventory**: secrets attach to Server / Database resources.

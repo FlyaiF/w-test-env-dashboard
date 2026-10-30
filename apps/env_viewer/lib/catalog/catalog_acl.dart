@@ -31,6 +31,7 @@ class CatalogAcl {
       seeUrl: _blankToNull(dto.seeUrl),
       components: components,
       health: _deriveHealth(components, now ?? DateTime.now()),
+      liveness: _deriveLiveness(components),
     );
   }
 
@@ -68,6 +69,27 @@ class CatalogAcl {
       newestCollectedAt: newest,
       isStale: newest != null && now.difference(newest) > staleAfter,
     );
+  }
+
+  /// Running-state rollup: any checked Component down or unreachable marks the
+  /// Environment down; otherwise up if anything was checked. Unchecked
+  /// Components (no url) never affect it.
+  static EnvironmentLivenessState _deriveLiveness(
+    List<ComponentView> components,
+  ) {
+    var state = EnvironmentLivenessState.unchecked;
+    for (final c in components) {
+      switch (c.livenessState) {
+        case LivenessState.down:
+        case LivenessState.unreachable:
+          return EnvironmentLivenessState.down;
+        case LivenessState.up:
+          state = EnvironmentLivenessState.up;
+        case LivenessState.unchecked:
+          break;
+      }
+    }
+    return state;
   }
 
   /// Selectable Component role enums, in display order, for the edit form. Pair
@@ -109,6 +131,11 @@ class CatalogAcl {
       collectionStatusLabel: collectionStatusLabel(dto.collectionStatus),
       collectionDetail: _blankToNull(dto.collectionDetail),
       lastCollectedAt: dto.lastCollectedAt,
+      livenessState: _livenessState(dto.liveness),
+      livenessLabel: livenessLabel(dto.liveness),
+      livenessDetail: _blankToNull(dto.livenessDetail),
+      livenessCheckedAt: dto.livenessCheckedAt,
+      livenessChangedAt: dto.livenessChangedAt,
     );
   }
 
@@ -206,6 +233,32 @@ class CatalogAcl {
         return CollectionState.unsupported;
       default:
         return CollectionState.notCollected;
+    }
+  }
+
+  static String livenessLabel(String? liveness) {
+    switch (_livenessState(liveness)) {
+      case LivenessState.up:
+        return '运行中';
+      case LivenessState.down:
+        return '已停止';
+      case LivenessState.unreachable:
+        return '不可达';
+      case LivenessState.unchecked:
+        return '未检测';
+    }
+  }
+
+  static LivenessState _livenessState(String? liveness) {
+    switch (liveness) {
+      case 'UP':
+        return LivenessState.up;
+      case 'DOWN':
+        return LivenessState.down;
+      case 'UNREACHABLE':
+        return LivenessState.unreachable;
+      default:
+        return LivenessState.unchecked;
     }
   }
 

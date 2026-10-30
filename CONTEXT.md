@@ -59,6 +59,13 @@ The act of refreshing Components' live data (Version, Version update time) from 
 schedule and on manual "refresh now". Each Component's Collection carries a status (ok / failed /
 unsupported) and a last-collected time.
 
+**Running state** (运行状态):
+Whether a Component is serving right now, judged from its URL: running (运行中), stopped (已停止 —
+the host answered but the service did not), unreachable (不可达 — the host itself did not answer), or
+unchecked (未检测 — no URL, or not checked yet). Checked far more often than Collection and
+independent of it: a Component can be running while its version probe fails.
+_Avoid_: health (the roster's collection rollup), status (ambiguous with collection status)
+
 **Version probe**:
 The pluggable strategy used to obtain a Component's live Version. Which probe applies depends on the
 Component/Server (query a Database, read a file or run a command over SSH, hit an HTTP endpoint, or

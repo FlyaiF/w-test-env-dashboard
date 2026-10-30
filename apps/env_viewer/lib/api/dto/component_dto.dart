@@ -21,6 +21,15 @@ class ComponentDto {
   final String? collectionDetail;
   final DateTime? lastCollectedAt;
 
+  /// Running state from the backend's check of [url]: UP | DOWN | UNREACHABLE,
+  /// or null when never checked / no url.
+  final String? liveness;
+  final String? livenessDetail;
+  final DateTime? livenessCheckedAt;
+
+  /// When [liveness] last changed — "down since …".
+  final DateTime? livenessChangedAt;
+
   const ComponentDto({
     required this.id,
     this.role,
@@ -36,6 +45,10 @@ class ComponentDto {
     this.collectionStatus,
     this.collectionDetail,
     this.lastCollectedAt,
+    this.liveness,
+    this.livenessDetail,
+    this.livenessCheckedAt,
+    this.livenessChangedAt,
   });
 
   factory ComponentDto.fromJson(Map<String, dynamic> json) {
@@ -58,6 +71,10 @@ class ComponentDto {
       collectionStatus: json['collectionStatus'] as String?,
       collectionDetail: json['collectionDetail'] as String?,
       lastCollectedAt: _parseInstant(json['lastCollectedAt']),
+      liveness: json['liveness'] as String?,
+      livenessDetail: json['livenessDetail'] as String?,
+      livenessCheckedAt: _parseInstant(json['livenessCheckedAt']),
+      livenessChangedAt: _parseInstant(json['livenessChangedAt']),
     );
   }
 

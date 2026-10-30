@@ -4,7 +4,8 @@
 > Scope: env_viewer desktop client
 
 测试环境速查工具 — a thin Flutter desktop client for the central Test Environment Dashboard
-backend. It browses and curates Environments/Components, triggers live version collection, and
+backend. It browses and curates Environments/Components, shows each Component's running state (from
+the backend's per-minute URL check), triggers live version collection, and
 launches the user's SSH/DB tools for linked resources with credentials brokered on demand.
 
 Catalog, inventory, collection and credential brokering use the Spring Boot HTTP API. The 日志文件

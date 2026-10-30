@@ -69,6 +69,8 @@ void main() {
             'versionProbe': 'HTTP',
             'collectionStatus': 'OK',
             'url': 'https://alpha.test/gw',
+            'liveness': 'UP',
+            'livenessDetail': 'HTTP 302',
           },
         ],
       },
@@ -88,7 +90,7 @@ void main() {
     // the header link chip (the component has a url) and once in the grid row.
     expect(find.text('网关'), findsNWidgets(2));
     expect(find.text('1.2.3'), findsOneWidget);
-    expect(find.text('正常'), findsOneWidget); // collection status chip
+    expect(find.text('运行中'), findsOneWidget); // running-state chip
     expect(find.byIcon(Icons.save), findsNothing);
 
     // Expanding the row (the grid entry, not the header chip) reveals the
@@ -96,6 +98,40 @@ void main() {
     await tester.tap(find.text('网关').last);
     await tester.pumpAndSettle();
     expect(find.text('HTTP 接口'), findsOneWidget); // version probe label
+    expect(find.text('运行中（HTTP 302）'), findsOneWidget); // 运行状态
+    expect(find.text('正常'), findsOneWidget); // 采集状态 moved into details
+  });
+
+  testWidgets('a down component shows 已停止 with its reason when expanded', (
+    tester,
+  ) async {
+    final store = _storeReturning([
+      {
+        'id': 1,
+        'name': 'Alpha',
+        'memo': null,
+        'components': [
+          {
+            'id': 10,
+            'role': 'APP',
+            'collectionStatus': 'OK',
+            'url': 'http://alpha.test/frame-layout',
+            'liveness': 'DOWN',
+            'livenessDetail': 'HTTP 502',
+            'livenessCheckedAt': '2026-10-29T12:01:00Z',
+          },
+        ],
+      },
+    ]);
+
+    await tester.pumpWidget(_wrap(store));
+    await tester.pumpAndSettle();
+
+    expect(find.text('已停止'), findsOneWidget);
+
+    await tester.tap(find.text('主服务').last);
+    await tester.pumpAndSettle();
+    expect(find.text('已停止：HTTP 502'), findsOneWidget);
   });
 
   testWidgets('header link chips open-and-copy the SEE and component urls', (

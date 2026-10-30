@@ -9,6 +9,35 @@ library;
 /// so the UI can colour/branch on it without matching raw values.
 enum CollectionState { ok, failed, unsupported, notCollected }
 
+/// Running state of a Component, from the backend's periodic check of its URL.
+/// Independent of [CollectionState]: "is it serving?" vs "which version?".
+enum LivenessState {
+  /// 运行中 — answered over HTTP (a redirect to a login page counts).
+  up,
+
+  /// 已停止 — the host answered but the service did not (refused, 5xx, no
+  /// response).
+  down,
+
+  /// 不可达 — the host itself could not be reached.
+  unreachable,
+
+  /// 未检测 — no url to check, or not checked yet.
+  unchecked,
+}
+
+/// Environment-level running-state rollup over its checked Components.
+enum EnvironmentLivenessState {
+  /// Every checked Component is up.
+  up,
+
+  /// At least one checked Component is down or unreachable.
+  down,
+
+  /// No Component has been checked.
+  unchecked,
+}
+
 /// Environment-level health rollup: worst-of the collectable Components'
 /// collection outcomes. UNSUPPORTED Components are excluded — they render a
 /// neutral chip and never drag an Environment's health down.
@@ -87,6 +116,18 @@ class ComponentView {
   final String? collectionDetail;
   final DateTime? lastCollectedAt;
 
+  final LivenessState livenessState;
+
+  /// Localized running-state label (e.g. 运行中 / 已停止).
+  final String livenessLabel;
+
+  /// Short check outcome (e.g. HTTP 502, connection refused), or null.
+  final String? livenessDetail;
+  final DateTime? livenessCheckedAt;
+
+  /// When the running state last changed.
+  final DateTime? livenessChangedAt;
+
   const ComponentView({
     required this.id,
     this.roleCode,
@@ -105,6 +146,11 @@ class ComponentView {
     required this.collectionStatusLabel,
     this.collectionDetail,
     this.lastCollectedAt,
+    this.livenessState = LivenessState.unchecked,
+    this.livenessLabel = '未检测',
+    this.livenessDetail,
+    this.livenessCheckedAt,
+    this.livenessChangedAt,
   });
 }
 
@@ -123,6 +169,9 @@ class EnvironmentView {
   /// Client-derived health rollup + staleness for the roster row.
   final EnvironmentHealth health;
 
+  /// Client-derived running-state rollup for the roster dot.
+  final EnvironmentLivenessState liveness;
+
   const EnvironmentView({
     required this.id,
     required this.name,
@@ -130,6 +179,7 @@ class EnvironmentView {
     this.seeUrl,
     this.components = const [],
     this.health = const EnvironmentHealth(state: EnvironmentHealthState.ok),
+    this.liveness = EnvironmentLivenessState.unchecked,
   });
 
   int get componentCount => components.length;

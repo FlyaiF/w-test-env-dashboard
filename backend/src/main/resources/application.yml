@@ -5,6 +5,12 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+  task:
+    scheduling:
+      pool:
+        # Version Collection and the liveness check are separate @Scheduled sweeps; with Spring's
+        # default single thread a slow collection would hold every liveness check behind it.
+        size: 2
   jpa:
     open-in-view: false
     hibernate:
@@ -31,6 +37,13 @@ envdashboard:
       read-timeout: PT15S
       # Hard deadline for a whole connected probe including close(); the connection is aborted past it.
       operation-timeout: PT60S
+  # Running state (运行状态): a cheap HTTP check of every Component URL, separate from Collection.
+  liveness:
+    scheduler-enabled: true
+    interval: PT1M
+    initial-delay: PT10S
+    connect-timeout: PT3S
+    request-timeout: PT5S
 
 # Liveness/readiness for the walking-skeleton health-check AC.
 management:

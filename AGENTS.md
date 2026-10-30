@@ -52,6 +52,9 @@ the URL defaults to `http://localhost:8080` and can be changed in Settings or lo
   `probe-drivers` profile.
 - **Version collection**: scheduled/manual backend probes update component version,
   `versionUpdatedAt`, `lastCollectedAt`, and per-component status.
+- **Running state**: a separate per-minute backend sweep GETs each Component URL (no redirects) and
+  records `liveness` (UP/DOWN/UNREACHABLE), its detail and checked/changed times; the roster dot and
+  component chip show it, while collection status moves into the component details.
 - **Credentials**: encrypted and stored by the backend, returned only by explicit broker calls. The
   desktop uses them for explicit reveal/copy, user-selected SSH/DB tools or read-only SSH file
   sessions; sessions may retain them in memory for reconnect, never durably.
